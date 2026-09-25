@@ -33,7 +33,8 @@ import pytest
 import requests as _requests
 
 from firestarter import firmware
-from firestarter.constants import FIRESTARTER_RELEASES_URL
+from firestarter.constants import FIRESTARTER_RELEASES_URL, FLAG_FORCE
+from firestarter.exceptions import FirmwareReleaseRefusedError
 from firestarter.firmware import FirmwareManager
 
 # Module-local helpers — NOT in conftest.py (per VALIDATION.md line 60)
@@ -1414,3 +1415,107 @@ class TestManageFirmwareUpdate:
         # install_flag=False + no FLAG_FORCE in flags=0 → returns False
         result = fm.manage_firmware_update(install_flag=False, flags=0)
         assert result is False
+
+
+class TestNewerFirmwareRefusal:
+    """The pre-flash release gate, at its authoritative call site.
+
+    The gate lives in `fw_release_gate`; these tests pin its WIRING into
+    `manage_firmware_update` -- that it sits above the is_up_to_date
+    short-circuit, that FLAG_FORCE does not waive it, and that a refusal stops
+    the flash rather than merely logging.
+
+    Every case passes `app_version=` explicitly, so a release bump cannot
+    redden this class.
+    """
+
+    @staticmethod
+    def _manager(monkeypatch, *, current, latest):
+        """A FirmwareManager whose probe and fetch are pinned to fixed answers."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(
+            fm, "check_current_firmware", lambda **kw: ("/dev/ttyACM0", current, "uno")
+        )
+        monkeypatch.setattr(
+            fm,
+            "fetch_release_info",
+            lambda channel="stable", version=None, board="uno": (
+                latest,
+                "https://example.com/firestarter_uno.hex" if latest else None,
+            ),
+        )
+        download = MagicMock()
+        install = MagicMock(return_value=True)
+        monkeypatch.setattr(fm, "_download_firmware_file", download)
+        monkeypatch.setattr(fm, "_install_firmware", install)
+        return fm, download, install
+
+    def test_too_new_release_refuses_and_flashes_nothing(self, monkeypatch):
+        """The refusal must stop the flash, not just log a complaint."""
+        fm, download, install = self._manager(
+            monkeypatch, current="3.1.0", latest="3.2.0"
+        )
+        with pytest.raises(FirmwareReleaseRefusedError):
+            fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
+        download.assert_not_called()
+        install.assert_not_called()
+
+    def test_override_allows_the_install(self, monkeypatch):
+        fm, _download, install = self._manager(
+            monkeypatch, current="3.1.0", latest="3.2.0"
+        )
+        result = fm.manage_firmware_update(
+            install_flag=True, app_version="3.1.0", allow_newer_firmware=True
+        )
+        assert result is True
+        install.assert_called_once()
+
+    def test_force_flag_does_not_waive_the_refusal(self, monkeypatch):
+        """FLAG_FORCE means "reinstall the same version", never "ignore a mismatch".
+
+        This is the single most likely future regression: --force reads like a
+        general override and is already the escape hatch for the hardware
+        revision gate. It is also a WIRE flag, so overloading it would send the
+        host's compatibility decision to a board whose protocol the host has
+        just declared it cannot speak.
+        """
+        fm, _download, install = self._manager(
+            monkeypatch, current="3.1.0", latest="3.2.0"
+        )
+        with pytest.raises(FirmwareReleaseRefusedError):
+            fm.manage_firmware_update(
+                install_flag=True, flags=FLAG_FORCE, app_version="3.1.0"
+            )
+        install.assert_not_called()
+
+    def test_matching_feature_version_is_unchanged(self, monkeypatch):
+        """The regression twin: the gate must not disturb the ordinary path."""
+        fm, _download, install = self._manager(
+            monkeypatch, current="3.0.0", latest="3.1.5"
+        )
+        result = fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
+        assert result is True
+        install.assert_called_once()
+
+    def test_absent_release_keeps_the_failed_fetch_path(self, monkeypatch):
+        """A fetch that returned nothing is reported as a fetch failure, not a mismatch."""
+        fm, _download, install = self._manager(
+            monkeypatch, current="3.1.0", latest=None
+        )
+        result = fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
+        assert result is False
+        install.assert_not_called()
+
+    def test_too_new_board_refuses_instead_of_reporting_up_to_date(self, monkeypatch):
+        """Deliberate behaviour change: the gate sits ABOVE the is_up_to_date arm.
+
+        A board already running a feature version this host cannot drive is not
+        "up to date" from the host's point of view -- the host cannot talk to
+        it. Reporting success there would be the wrong answer.
+        """
+        fm, _download, install = self._manager(
+            monkeypatch, current="3.2.0", latest="3.2.0"
+        )
+        with pytest.raises(FirmwareReleaseRefusedError):
+            fm.manage_firmware_update(install_flag=False, app_version="3.1.0")
+        install.assert_not_called()

@@ -51,6 +51,10 @@ pairing is refused — some mixed pairs keep working while others fail quietly. 
 [Breaking Changes](https://github.com/henols/firestarter/wiki/Breaking-Changes) for which
 pairings work.
 
+`firestarter fw` refuses to install firmware newer than the CLI, so the CLI is never left unable to
+talk to the board it just flashed. `--allow-newer-firmware` installs anyway; that pairing is not
+tested.
+
 ## Usage
 
 ```bash
@@ -100,7 +104,10 @@ precedence over the shipped database. The field reference is
 
 Everything else is on the **[Firestarter wiki](https://github.com/henols/firestarter/wiki)** —
 supported chips and protocols, pin maps and adapters, shield revisions, and how to test a chip
-against real hardware.
+against real hardware. Chips with an open problem are on
+[Known Issues](https://github.com/henols/firestarter/wiki/Known-Issues).
+
+Per-version changes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
