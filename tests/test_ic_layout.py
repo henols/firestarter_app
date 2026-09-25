@@ -278,10 +278,12 @@ def test_the_rev_2_2_jp5_renderer_is_absent_from_the_class(
     )
 
 
-def test_the_rev_2_jp4_renderer_still_emits_its_jumper_block(
+def test_the_jumper_blocks_are_rev_0_1_rev_2_0_2_1_and_rev_2_2_2_3(
     spec_builder: EpromSpecBuilder,
     db: EpromDatabase,
 ) -> None:
+    """The 2.2/2.3 block is required now (JMP-03). It shows the three-position JP4 header and
+    never a JP5 entry, because JP5 is a bridged solder jumper, not a header."""
     eprom = db.get_eprom("AM27C040")
     assert eprom is not None, "AM27C040 not found in database"
 
@@ -291,12 +293,13 @@ def test_the_rev_2_jp4_renderer_still_emits_its_jumper_block(
     assert result is not None
 
     jumpers = result["jumpers"]
-    assert "2.0 & 2.1" in jumpers, (
-        f"expected surviving '2.0 & 2.1' jp4 block, got keys {list(jumpers)}"
-    )
-    jp4 = jumpers["2.0 & 2.1"]["jp4"]
-    for field in ("config_text", "display", "pin_text", "selected_label"):
-        assert field in jp4, f"jp4 block missing {field!r}: {jp4!r}"
+    assert list(jumpers) == ["0 & 1", "2.0 & 2.1", "2.2 & 2.3"]
+    assert set(jumpers["2.0 & 2.1"]["jumpers"]) == {"jp4"}
+    assert set(jumpers["2.2 & 2.3"]["jumpers"]) == {"jp4"}
+    for block in jumpers.values():
+        assert "jp5" not in block["jumpers"]
+        for jumper in block["jumpers"].values():
+            assert set(jumper) == {"display", "choices", "selected_label"}
 
     def _no_jp5_or_22(node: object) -> None:
         if isinstance(node, dict):

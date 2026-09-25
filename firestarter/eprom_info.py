@@ -13,7 +13,12 @@ import re
 from typing import Dict  # noqa: UP035
 
 from firestarter.database import EpromDatabase, format_mv  # Changed import
-from firestarter.ic_layout import EpromSpecBuilder  # Import renamed class
+from firestarter.ic_layout import (
+    CAN_ERASE_NOT_SUPPORTED,
+    CAN_ERASE_YES,
+    EpromSpecBuilder,
+)
+from firestarter.vpp_display import shows_programming_vpp
 
 logger = logging.getLogger("EpromConsolePresenter")
 
@@ -198,6 +203,10 @@ class EpromConsolePresenter:
                 combined_data["unsupported_reason"] = raw_config_data.get(
                     "unsupported_reason", ""
                 )
+                # `erase` refuses a chip that is not supported, so "Can be erased" must not
+                # say yes.
+                if combined_data.get("can_erase_str") == CAN_ERASE_YES:
+                    combined_data["can_erase_str"] = CAN_ERASE_NOT_SUPPORTED
 
         # Inject the elevated-programming-supply row/warning data into
         # combined_data. Gated on the predicate returning a value, so a part
@@ -365,13 +374,23 @@ class EpromConsolePresenter:
                 )
             logger.info(layout.get("bottom"))
 
-        for key, jumper_data in chip_data.get("jumpers", {}).items():
+        for key, block in chip_data.get("jumpers", {}).items():
             logger.info("")
             logger.info(f"Jumper config (Rev {key}):")
-            for jp, data in jumper_data.items():
-                logger.info(
-                    f"  {jp.upper()}: {data['display']} ({data['config_text']}, {data['pin_text']} = {data['selected_label']})"  # noqa: E501
-                )
+            for jp, data in block["jumpers"].items():
+                if data["display"]:
+                    logger.info(
+                        f"  {jp.upper()}: {data['display']} ({data['choices']} = {data['selected_label']})"  # noqa: E501
+                    )
+                else:
+                    logger.info(
+                        f"  {jp.upper()}: {data['selected_label']} ({data['choices']})"
+                    )
+            for note in block["notes"]:
+                logger.info(f"  Note: {note}")
+        if chip_data.get("jumper_note"):
+            logger.info("")
+            logger.info(f"Jumper config: {chip_data['jumper_note']}")
 
         if chip_data.get("protocol_info"):
             protocol = chip_data["protocol_info"]
@@ -465,21 +484,9 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
     for name, ic in zip(rendered_names, eproms_data):
         chip_id_str = f"0x{ic.get('chip-id', 0):04X}" if ic.get("chip-id") else ""
 
-        # VPP gate mirrors info view — show voltage only when
-        # vpp_mv > 0 AND electrical-type not in {"SRAM", "FRAM"}.
-        # Defensive int() coercion matches build_specifications (user-override entries
-        # may store vpp_mv as a string).
-        # FRAM is gated alongside SRAM (parity gate).
-        try:
-            _vpp_mv = int(ic.get("vpp_mv", 0) or 0)
-        except (TypeError, ValueError):
-            _vpp_mv = 0
-        _etype = ic.get("electrical-type", "")
-        if _etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
-            # Parity with the info view is structural, not two
-            # hand-mirrored 'N/A' fallbacks — both views call format_mv on the
-            # same already-coerced _vpp_mv, so they cannot diverge.
-            vpp_str = format_mv(_vpp_mv)
+        # The info view calls the same predicate, so the two views cannot disagree.
+        if shows_programming_vpp(ic.get("protocol-id"), ic.get("vpp_mv")):
+            vpp_str = format_mv(int(ic["vpp_mv"]))
         else:
             vpp_str = "-"
 

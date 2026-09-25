@@ -47,10 +47,10 @@ measures coverage of `tools/`. The tests do run `tools/build_db.py` and its JSON
 rule selection is `E`, `F`, `I` and `UP`, and the config ignores `E501`. A `# noqa` code outside that
 selection has no effect.
 
-**`mypy` is strict on eleven modules.** An override in `pyproject.toml` sets
+**`mypy` is strict on fourteen modules.** An override in `pyproject.toml` sets
 `disallow_untyped_defs` and `check_untyped_defs` for `main`, `cli_handlers`, `chip_resolver`,
-`frame_parser`, `codec`, `address_parser`, `exceptions`, `serial_comm`, `sdp_honesty`, `log_capture`
-and `compare`. After a refactor, read the override list in `pyproject.toml`. Do not trust this list.
+`frame_parser`, `codec`, `address_parser`, `exceptions`, `serial_comm`, `sdp_honesty`, `log_capture`,
+`compare`, `jumper_table`, `vpp_display` and `erase_support`. After a refactor, read the override list in `pyproject.toml`. Do not trust this list.
 
 ## Architecture
 
