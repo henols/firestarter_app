@@ -4,33 +4,49 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-CAP-02 — shield-revision safety gate + extended MSG_OK_READY decode.
+Shield-revision gate + extended MSG_OK_READY decode.
 
 Chips whose bus-config routes VPP to bus line 11 (socket pin 21 on the
-DIP24_2716 / DIP24_2532 pinouts) need the 3-position JP4 header introduced on
-RURP shield Rev 2.2. Driving them on an earlier shield is a chip-damage path,
-so the host refuses at connect time.
+DIP24_2716 / DIP24_2532 pinouts) need the 3-position JP4 of RURP shield
+Rev 2.2 or Rev 2.3. A write or an erase on an earlier shield is a chip-damage
+path, so the host refuses it after the setup ack, unless --force is set.
 
-Three things are proved here:
+Proved here:
 
-  1. `_validate_hardware_revision` -- the pure policy. Most importantly that it
-     is an ALLOWLIST and not a `>=` comparison: REVISION_UNKNOWN is 0xFE, which
-     is numerically ABOVE REVISION_2_2 (0x04), so a comparison would admit
-     precisely the boards whose revision could not be determined.
+  1. `hw_revision_gate` -- the pure policy. It is an ALLOWLIST and not a `>=`
+     comparison: REVISION_UNKNOWN is 0xFE, numerically ABOVE REVISION_2_2
+     (0x04), so a comparison would admit precisely the boards whose revision
+     could not be determined. Only write and erase are gated, and --force
+     turns the refusal into a warning.
   2. `_decode_id_frame` -- that the extended ack is parsed, that the legacy
      2-byte ack still yields its buffer size, and that a malformed length
      prefix degrades to "no identity" (reject) rather than a partial string.
   3. The gate's coupling to the REAL database -- that DIP24_2716 / DIP24_2532
-     genuinely emit `vpp-pin: 11` and that no other pinout does. Without this,
-     a pinout edit could silently move chips in or out of the gate's scope.
+     genuinely emit `vpp-pin: 11` and that no other pinout does.
+  4. `EpromOperator._setup_operation` -- the refusal escapes both the cold and
+     the leased connect as its own typed error and drops the link.
+  5. The CLI -- `write` renders "Hardware error:" and exits 1, and
+     `config --rev` takes the silkscreen number.
 """
 
+import json
 import struct
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from click.testing import CliRunner
 
+from firestarter import hw_revision_gate
+from firestarter.chip_resolver import resolve_chip
+from firestarter.cli_handlers import AppContext, cli
+from firestarter.config import ConfigManager
 from firestarter.constants import (
+    COMMAND_CHECK_CHIP_ID,
+    COMMAND_ERASE,
+    COMMAND_READ,
+    COMMAND_WRITE,
+    FLAG_FORCE,
     REVISION_0,
     REVISION_1,
     REVISION_2_0,
@@ -40,116 +56,154 @@ from firestarter.constants import (
     REVISION_UNKNOWN,
 )
 from firestarter.database import EpromDatabase
-from firestarter.exceptions import HardwareRevisionUnsupportedError
+from firestarter.eprom_info import EpromConsolePresenter
+from firestarter.eprom_operations import EpromOperator
+from firestarter.exceptions import (
+    HardwareOperationError,
+    HardwareRevisionUnsupportedError,
+)
+from firestarter.firmware import FirmwareManager
+from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_OK_READY
 from firestarter.serial_comm import SerialCommunicator
 
 GATED_VPP_LINE = 11
+_DB_FILE = (
+    Path(__file__).resolve().parent.parent
+    / "firestarter"
+    / "data"
+    / "chip_database.json"
+)
 
-# A wire dict for a chip that needs Rev 2.2+ (VPP on bus line 11), and one for
-# an ordinary chip that does not.
-GATED_CMD = {"cmd": 1, "bus-config": {"bus": [0, 1, 2], "vpp-pin": GATED_VPP_LINE}}
-UNGATED_CMD = {"cmd": 1, "bus-config": {"bus": [0, 1, 2], "vpp-pin": 15}}
+
+def _cmd(cmd, vpp_pin=GATED_VPP_LINE, flags=0):
+    return {
+        "cmd": cmd,
+        "flags": flags,
+        "bus-config": {"bus": [0, 1, 2], "vpp-pin": vpp_pin},
+    }
 
 
-def _validate(command, detected):
-    return SerialCommunicator._validate_hardware_revision(command, detected)
+GATED_WRITE = _cmd(COMMAND_WRITE)
+
+
+def _require(command, detected, chip_name="2516"):
+    return hw_revision_gate.require_supported_revision(chip_name, command, detected)
 
 
 # 1. Pure policy
 
+REFUSED_REVISIONS = [
+    REVISION_0,
+    REVISION_1,
+    REVISION_2_0,
+    REVISION_2_1,
+    REVISION_UNKNOWN,
+    0xFF,
+    None,
+]
 
+
+@pytest.mark.parametrize("cmd", [COMMAND_WRITE, COMMAND_ERASE])
 @pytest.mark.parametrize("allowed", [REVISION_2_2, REVISION_2_3])
-def test_gated_chip_passes_on_rev_2_2_and_later(allowed):
-    """Rev 2.2 and Rev 2.3 both carry the 3-position header, so both pass."""
-    _validate(GATED_CMD, allowed)  # must not raise
+def test_gated_write_and_erase_pass_on_rev_2_2_and_2_3(cmd, allowed):
+    """Rev 2.2 and Rev 2.3 both carry the 3-position JP4, so both pass."""
+    _require(_cmd(cmd), allowed)  # must not raise
+    assert (
+        hw_revision_gate.forced_warning("2516", _cmd(cmd, flags=FLAG_FORCE), allowed)
+        is None
+    )
 
 
-@pytest.mark.parametrize(
-    "refused",
-    [REVISION_0, REVISION_1, REVISION_2_0, REVISION_2_1],
-)
-def test_gated_chip_refused_on_earlier_shields(refused):
-    """Every pre-2.2 revision is refused, including the REVISION_2_0 bucket.
-
-    REVISION_2_0 is the broad ADC bucket covering Rev 2.0/2.1/2.2, so a genuine
-    Rev 2.2 lands here until the operator writes the EEPROM override. Refusing
-    is the intended outcome: the operator must look at the physical header and
-    assert it, and that assertion IS the safety mechanism.
-    """
-    with pytest.raises(HardwareRevisionUnsupportedError):
-        _validate(GATED_CMD, refused)
+@pytest.mark.parametrize("cmd", [COMMAND_WRITE, COMMAND_ERASE])
+@pytest.mark.parametrize("refused", REFUSED_REVISIONS)
+def test_gated_write_and_erase_refused_on_every_other_revision(cmd, refused):
+    """Every value outside the allowlist is refused: the pre-2.2 revisions, the
+    REVISION_2_0 ADC bucket (a real Rev 2.2 lands here until the operator
+    writes the override), 0xFE, the 0xFF sentinel, and None (no revision)."""
+    with pytest.raises(HardwareRevisionUnsupportedError) as exc_info:
+        _require(_cmd(cmd), refused)
+    assert exc_info.value.detected == refused
 
 
 def test_revision_unknown_is_refused_despite_being_numerically_higher():
-    """THE trap this gate exists to avoid.
-
-    REVISION_UNKNOWN (0xFE) is numerically greater than REVISION_2_2 (0x04), so
-    the obvious `detected >= REVISION_2_2` spelling would ADMIT a board whose
-    revision could not be determined -- the single case most deserving a
-    refusal. The first assertion pins that arithmetic so this test keeps
-    explaining itself if the enum values ever move.
-    """
-    assert REVISION_UNKNOWN > REVISION_2_2, (
-        "the REVISION_* bytes are not a version-ordered scale; if this ever "
-        "becomes false the allowlist is still correct but this test's "
-        "rationale needs rewriting"
-    )
+    """THE trap this gate exists to avoid: `detected >= REVISION_2_2` would
+    ADMIT 0xFE, the board whose revision could not be determined."""
+    assert REVISION_UNKNOWN > REVISION_2_2
     with pytest.raises(HardwareRevisionUnsupportedError):
-        _validate(GATED_CMD, REVISION_UNKNOWN)
+        _require(GATED_WRITE, REVISION_UNKNOWN)
 
 
-def test_override_absent_sentinel_is_refused():
-    """0xFF ("no EEPROM override active") is not a revision and must refuse."""
-    with pytest.raises(HardwareRevisionUnsupportedError):
-        _validate(GATED_CMD, 0xFF)
-
-
-def test_absent_revision_is_refused():
-    """Firmware predating CAP-02 sends no revision byte -> detected is None.
-
-    None must be a REJECT, never a pass: "the firmware didn't tell me" is not
-    evidence that the shield is safe.
-    """
-    with pytest.raises(HardwareRevisionUnsupportedError) as exc_info:
-        _validate(GATED_CMD, None)
-    assert exc_info.value.detected is None
-    assert "firmware predates" in str(exc_info.value)
+@pytest.mark.parametrize("cmd", [COMMAND_READ, COMMAND_CHECK_CHIP_ID, None])
+@pytest.mark.parametrize("revision", REFUSED_REVISIONS)
+def test_non_write_commands_pass_on_every_revision(cmd, revision):
+    """read (which blank and verify also use), the chip-ID check and a bare
+    state command are not gated, even for a VPP-on-pin-21 chip."""
+    command = _cmd(cmd)
+    assert hw_revision_gate.is_refused(command, revision) is False
+    _require(command, revision)  # must not raise
+    assert hw_revision_gate.forced_warning("2516", command, revision) is None
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        UNGATED_CMD,
-        {"cmd": 1, "bus-config": {"bus": [0, 1]}},  # no vpp-pin at all
-        {"cmd": 1},  # no bus-config at all
-        {"state": 13},  # a bare state command
+        _cmd(COMMAND_WRITE, vpp_pin=15),
+        {"cmd": COMMAND_WRITE, "bus-config": {"bus": [0, 1]}},  # no vpp-pin
+        {"cmd": COMMAND_WRITE},  # no bus-config
     ],
 )
 def test_ungated_chips_pass_on_any_revision(command):
-    """Only VPP-on-line-11 chips are gated; everything else is untouched.
-
-    Checked against the WORST revision value so a gate that accidentally
-    widened to all chips would fail here rather than silently bricking every
-    operation on a Rev 2.0 board.
-    """
-    _validate(command, REVISION_2_0)  # must not raise
-    _validate(command, None)  # must not raise
+    """Only VPP-on-line-11 chips are gated. Checked against the worst revision
+    values, so a gate that widened to all chips fails here."""
+    _require(command, REVISION_2_0)
+    _require(command, None)
 
 
-def test_refusal_message_gives_the_exact_remedy():
-    """The error must name the byte to write, not the silkscreen number.
+@pytest.mark.parametrize("refused", [REVISION_2_0, REVISION_UNKNOWN, None])
+def test_force_turns_the_refusal_into_a_warning(refused):
+    command = _cmd(COMMAND_WRITE, flags=FLAG_FORCE)
+    _require(command, refused)  # must not raise
+    warning = hw_revision_gate.forced_warning("2516", command, refused)
+    assert warning is not None
+    assert warning.startswith("WARNING: 2516: ")
+    assert "--force is set, so the write continues" in warning
 
-    `firestarter config --rev` casts through int(), so '--rev 2.2' truncates to
-    2 and silently selects the Rev 2.0 bucket -- the exact opposite of what an
-    operator typing it intends. The message has to pre-empt that.
-    """
+
+def test_no_warning_without_force():
+    assert hw_revision_gate.forced_warning("2516", GATED_WRITE, REVISION_2_0) is None
+
+
+def test_refusal_text_names_the_chip_the_revision_and_both_escapes():
     with pytest.raises(HardwareRevisionUnsupportedError) as exc_info:
-        _validate(GATED_CMD, REVISION_2_0)
+        _require(_cmd(COMMAND_ERASE), REVISION_2_0, chip_name="tms2516")
     text = str(exc_info.value)
-    assert "firestarter config --rev 4" in text
-    assert "--rev 2.2" in text and "truncates" in text
-    assert exc_info.value.detected == REVISION_2_0
+    assert text == hw_revision_gate._REFUSAL_FORMAT.format(
+        chip_name="TMS2516", reported="Rev 2.0-class", operation="erase"
+    )
+    assert "firestarter config --rev 2.2" in text
+    assert "--force" in text
+
+
+def test_refusal_text_for_an_absent_revision():
+    with pytest.raises(HardwareRevisionUnsupportedError) as exc_info:
+        _require(GATED_WRITE, None)
+    assert hw_revision_gate._NO_REVISION_TEXT in str(exc_info.value)
+
+
+def test_refusal_text_for_an_unmapped_byte():
+    with pytest.raises(HardwareRevisionUnsupportedError) as exc_info:
+        _require(GATED_WRITE, 0xFF)
+    assert "revision byte 0xFF" in str(exc_info.value)
+
+
+def test_refusal_is_a_hardware_error_not_a_serial_error():
+    """`_setup_operation` catches SerialError and degrades it to a failed
+    connect. The refusal must not be one, or it is hidden again."""
+    from firestarter.exceptions import SerialError
+
+    assert issubclass(HardwareRevisionUnsupportedError, HardwareOperationError)
+    assert not issubclass(HardwareRevisionUnsupportedError, SerialError)
 
 
 # 2. Extended MSG_OK_READY decode
@@ -354,48 +408,150 @@ def test_exactly_two_pinouts_emit_the_gated_vpp_line():
     assert gated == {"DIP24_2716", "DIP24_2532"}
 
 
-# 4. Integration through _probe_port
+def test_exactly_16_database_rows_are_gated():
+    """Exact count of the chips the gate covers (15 DIP24_2716 + TI 2532)."""
+    data = json.loads(_DB_FILE.read_text())
+    gated = [
+        row["part_number"]
+        for rows in data.values()
+        for row in rows
+        if row.get("pinout") in {"DIP24_2716", "DIP24_2532"}
+    ]
+    assert len(gated) == 16
 
 
-def _probe(command, revision):
-    with (
-        patch.object(SerialCommunicator, "expect_ack", return_value=(True, "Ready")),
-        patch.object(SerialCommunicator, "send_json_command", return_value=42),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-        patch.object(SerialCommunicator, "disconnect", return_value=None),
-        patch.object(SerialCommunicator, "firmware_identity", "3.0.0:uno"),
-        patch.object(SerialCommunicator, "hw_revision", revision),
-        # setup_command asserts the link is open (207.1 D-11)
-        patch.object(SerialCommunicator, "is_connected", return_value=True),
-        patch.object(
-            SerialCommunicator,
-            "__init__",
-            lambda self, port, **k: setattr(self, "port_name", port),
-        ),
-    ):
-        return SerialCommunicator._probe_port(
-            port_name="/dev/null",
-            baud_rate=250000,
-            command_to_send=command,
-            config_manager=MagicMock(),
-        )
+# 4. EpromOperator._setup_operation
 
 
-def test_probe_port_refuses_gated_chip_on_rev_2_0_class_board():
-    """The refusal must ESCAPE _probe_port as its own typed error.
+def _chip_2516():
+    return resolve_chip("2516", db=EpromDatabase(skip_local_override=True))
 
-    _probe_port's default failure mode is `return None`, which find_and_connect
-    turns into "No compatible programmer found on any port" -- a message that
-    sends an operator hunting for a cable fault when the board is plainly
-    attached and the real answer is "wrong shield for this chip".
-    """
+
+def _mock_comm(revision):
+    comm = MagicMock()
+    comm.hw_revision = revision
+    comm.firmware_max_chunk = 64
+    comm.is_connected.return_value = True
+    comm.setup_command.return_value = True
+    return comm
+
+
+def _cold_setup(revision, cmd=COMMAND_WRITE, flags=0):
+    operator = EpromOperator(ConfigManager())
+    comm = _mock_comm(revision)
+    with patch.object(SerialCommunicator, "find_and_connect", return_value=comm):
+        result = operator._setup_operation("2516", _chip_2516(), cmd, flags)
+    return operator, comm, result
+
+
+def test_real_2516_wire_dict_is_gated():
+    command = _chip_2516()
+    command["cmd"] = COMMAND_WRITE
+    assert hw_revision_gate.is_refused(command, REVISION_2_0) is True
+
+
+def test_cold_setup_refusal_propagates_and_drops_the_link():
+    operator = EpromOperator(ConfigManager())
+    comm = _mock_comm(REVISION_2_0)
+    with patch.object(SerialCommunicator, "find_and_connect", return_value=comm):
+        with pytest.raises(HardwareRevisionUnsupportedError) as exc_info:
+            operator._setup_operation("2516", _chip_2516(), COMMAND_WRITE, 0)
+    assert str(exc_info.value).startswith("2516: This chip needs VPP on chip pin 21.")
+    comm.disconnect.assert_called_once()
+    assert operator.comm is None
+
+
+def test_cold_setup_passes_on_rev_2_2():
+    operator, comm, (command_dict, buffer_size) = _cold_setup(REVISION_2_2)
+    assert command_dict is not None and buffer_size == 64
+    comm.disconnect.assert_not_called()
+
+
+def test_cold_setup_read_is_not_gated():
+    _, comm, (command_dict, _) = _cold_setup(REVISION_2_0, cmd=COMMAND_READ)
+    assert command_dict is not None
+    comm.disconnect.assert_not_called()
+
+
+def test_cold_setup_forced_continues_with_warning_on_stderr(capsys):
+    _, comm, (command_dict, _) = _cold_setup(REVISION_2_0, flags=FLAG_FORCE)
+    assert command_dict is not None
+    comm.disconnect.assert_not_called()
+    err = capsys.readouterr().err
+    assert err.startswith("WARNING: 2516: The programmer reports Rev 2.0-class")
+
+
+def test_leased_setup_refusal_propagates_and_drops_the_link():
+    operator = EpromOperator(ConfigManager())
+    comm = _mock_comm(REVISION_2_0)
+    operator.comm = comm
+    operator._leased = True
     with pytest.raises(HardwareRevisionUnsupportedError):
-        _probe(GATED_CMD, REVISION_2_0)
+        operator._setup_operation("2516", _chip_2516(), COMMAND_WRITE, 0)
+    comm.setup_command.assert_called_once()
+    comm.disconnect.assert_called_once()
+    assert operator.comm is None
 
 
-def test_probe_port_allows_gated_chip_on_asserted_rev_2_2():
-    assert _probe(GATED_CMD, REVISION_2_2) is not None
+# 5. CLI
 
 
-def test_probe_port_allows_ungated_chip_on_rev_2_0_class_board():
-    assert _probe(UNGATED_CMD, REVISION_2_0) is not None
+def _app(**overrides):
+    return AppContext(
+        db=EpromDatabase(skip_local_override=True),
+        config_manager=ConfigManager(),
+        eprom_operator=overrides.pop("eprom_operator", Mock(spec=EpromOperator)),
+        hardware_manager=overrides.pop("hardware_manager", Mock(spec=HardwareManager)),
+        firmware_manager=Mock(spec=FirmwareManager),
+        eprom_presenter=Mock(spec=EpromConsolePresenter),
+    )
+
+
+def test_cli_write_renders_hardware_error_and_exits_1(tmp_path):
+    """End to end through the real write path: the connect succeeds on a
+    Rev 2.0-class board and the write stops before any data frame."""
+    image = tmp_path / "image.bin"
+    image.write_bytes(b"\x00" * 2048)
+    comm = _mock_comm(REVISION_2_0)
+    app = _app(eprom_operator=EpromOperator(ConfigManager()))
+    with patch.object(SerialCommunicator, "find_and_connect", return_value=comm):
+        result = CliRunner().invoke(
+            cli, ["write", "2516", str(image), "--no-blank-check"], obj=app
+        )
+    assert result.exit_code == 1, result.output
+    assert "Hardware error: 2516: This chip needs VPP on chip pin 21." in result.output
+    comm.send_bytes.assert_not_called()
+    comm.disconnect.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("value", "byte"),
+    [
+        ("2.2", REVISION_2_2),
+        ("2.3", REVISION_2_3),
+        ("2", REVISION_2_0),
+        ("2.0", REVISION_2_0),
+        ("2.1", REVISION_2_1),
+        ("0", REVISION_0),
+        ("1", REVISION_1),
+        ("-1", -1),
+    ],
+)
+def test_config_rev_maps_the_silkscreen_number_to_the_byte(value, byte):
+    hw = Mock(spec=HardwareManager)
+    hw.set_hardware_config.return_value = True
+    result = CliRunner().invoke(
+        cli, ["config", "--rev", value], obj=_app(hardware_manager=hw)
+    )
+    assert result.exit_code == 0, result.output
+    assert hw.set_hardware_config.call_args.args[0] == byte
+
+
+@pytest.mark.parametrize("value", ["4", "5", "2.4", "abc", "2.20"])
+def test_config_rev_refuses_other_values_before_any_serial_byte(value):
+    hw = Mock(spec=HardwareManager)
+    result = CliRunner().invoke(
+        cli, ["config", "--rev", value], obj=_app(hardware_manager=hw)
+    )
+    assert result.exit_code == 2
+    hw.set_hardware_config.assert_not_called()

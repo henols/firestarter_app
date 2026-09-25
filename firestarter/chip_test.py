@@ -2594,14 +2594,14 @@ def _run_step_untimed(
         FirmwareOutdatedError,
         HardwareRevisionUnsupportedError,
     ):
-        # These SerialError subclasses are run-fatal
+        # These are run-fatal
         # host-setup conditions ("no programmer attached", "firmware too
         # old", "shield revision cannot safely drive this chip"), not chip
         # findings -- they belong to cli_handlers.py's
         # @map_typed_errors mapper, which already renders them as
         # ClickExceptions with stable exit codes. This clause MUST precede
-        # the (SerialError, HardwareOperationError) clause below: both are
-        # SerialError subclasses and Python matches the first satisfying
+        # the (SerialError, HardwareOperationError) clause below: each one
+        # also matches that clause, and Python matches the first satisfying
         # except clause. If the order were inverted, a no-board or
         # old-firmware run would degrade every remaining destructive/verify
         # step to BAD instead of escaping once, producing a six-BAD-step

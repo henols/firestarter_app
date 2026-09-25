@@ -208,3 +208,16 @@ REVISION_2_1 = 0x03  # via EEPROM override only — ADC cannot distinguish
 REVISION_2_2 = 0x04  # via EEPROM override only — ADC cannot distinguish
 REVISION_2_3 = 0x05  # R41=10k physical detect
 REVISION_UNKNOWN = 0xFE  # ADC band-gap or pre-detect-resistor + A2 indeterminate
+
+# `firestarter config --rev` value (board silkscreen) -> revision byte. -1 is
+# the sentinel that set_hardware_config sends as 0xFF (remove the override).
+REVISION_BY_SILKSCREEN = {
+    "-1": -1,
+    "0": REVISION_0,
+    "1": REVISION_1,
+    "2": REVISION_2_0,
+    "2.0": REVISION_2_0,
+    "2.1": REVISION_2_1,
+    "2.2": REVISION_2_2,
+    "2.3": REVISION_2_3,
+}

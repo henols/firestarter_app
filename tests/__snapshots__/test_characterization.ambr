@@ -124,11 +124,15 @@
     Handles CONFIGURATION values.
   
   Options:
-    --rev FLOAT            WARNING Overrides hardware revision (0-2), only use
-                           with HW mods. -1 disables override.
-    -r1, --r16 INTEGER     Set R16 resistance, resistor connected to VPE
-    -r2, --r14r15 INTEGER  Set R14/R15 resistance, resistors connected to GND
-    --help                 Show this message and exit.
+    --rev [-1|0|1|2|2.0|2.1|2.2|2.3]
+                                    Set the shield revision override. Use 2.2 or
+                                    2.3 for a shield that has the three-position
+                                    JP4. -1 removes the override.
+    -r1, --r16 INTEGER              Set R16 resistance, resistor connected to
+                                    VPE
+    -r2, --r14r15 INTEGER           Set R14/R15 resistance, resistors connected
+                                    to GND
+    --help                          Show this message and exit.
   
   '''
 # ---
@@ -192,8 +196,9 @@
     exit 0 instead, for scripting, while still printing the same line.
   
   Options:
-    -f, --force                   Force, even if the VPP or chip id doesn't
-                                  match.
+    -f, --force                   Continue when the VPP or the chip ID does not
+                                  match. Also continue, with a warning, when the
+                                  shield revision is not proven for this chip.
     -b, --blank-check             Do a blank check after erase.
     -s, --sector-address ADDRESS  Sector address for sector erase (hex e.g.
                                   0x10000). Omit for chip erase.
@@ -415,7 +420,9 @@
                               skipping erase on a non-blank electrically-
                               erasable chip leaves un-erased bits that cannot be
                               reprogrammed.
-    -f, --force               Force, even if the VPP or chip id doesn't match.
+    -f, --force               Continue when the VPP or the chip ID does not
+                              match. Also continue, with a warning, when the
+                              shield revision is not proven for this chip.
     -a, --address TEXT        Write start address in dec/hex
     --vpe-as-vpp              Use VPE as VPP voltage
     --pulse-us INTEGER RANGE  Override the database program-pulse width for this
@@ -1485,7 +1492,9 @@
                               skipping erase on a non-blank electrically-
                               erasable chip leaves un-erased bits that cannot be
                               reprogrammed.
-    -f, --force               Force, even if the VPP or chip id doesn't match.
+    -f, --force               Continue when the VPP or the chip ID does not
+                              match. Also continue, with a warning, when the
+                              shield revision is not proven for this chip.
     -a, --address TEXT        Write start address in dec/hex
     --vpe-as-vpp              Use VPE as VPP voltage
     --pulse-us INTEGER RANGE  Override the database program-pulse width for this

@@ -61,6 +61,9 @@ class _FakeComm:
         self._events = events
         self._name = name
         self._open = True
+        # The real class declares it at class level. _CMD_DATA is not a
+        # VPP-on-pin-21 chip, so the shield-revision gate passes it.
+        self.hw_revision: int | None = None
         self._fail_setup_on_call = fail_setup_on_call
         self._fail_with = fail_with
         self._fail_drain = fail_drain

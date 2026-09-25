@@ -34,29 +34,6 @@ class FirmwareOutdatedError(SerialError):
     pass
 
 
-class HardwareRevisionUnsupportedError(SerialError):
-    """Raised when the attached shield revision cannot safely program the chip.
-
-    Chips whose bus-config routes VPP to bus line 11 (socket pin 21 on the
-    DIP24_2716 / DIP24_2532 pinouts) need the 3-position JP4 header introduced
-    on RURP Rev 2.2. Driving them on an earlier shield is a chip-damage path,
-    so the host refuses at connect time — before the operation-setup ack is
-    answered and therefore before the firmware engages the VPP regulator.
-
-    A SerialError subclass so callers already handling connect-time transport
-    failures see it, but _probe_port catches it explicitly and re-raises rather
-    than degrading it to "no programmer found" (an operator staring at a board
-    that is plainly attached needs the real reason).
-
-    `detected` carries the effective revision byte the firmware reported, or
-    None when the firmware predates the CAP-02 ack and sent no revision at all.
-    """
-
-    def __init__(self, *args: object, detected: int | None = None) -> None:
-        super().__init__(*args)
-        self.detected = detected
-
-
 class EpromOperationError(Exception):
     """Custom exception for EPROM operation failures."""
 
@@ -139,6 +116,31 @@ class HardwareOperationError(Exception):
     pass
 
 
+class HardwareRevisionUnsupportedError(HardwareOperationError):
+    """Raised when the attached shield revision cannot safely program the chip.
+
+    Raised by `hw_revision_gate.require_supported_revision`, which
+    `SerialCommunicator.setup_command` calls after the operation-setup ack and
+    before the host answers it, so the firmware has not engaged VPP. Only a
+    write or an erase of a chip whose bus-config routes VPP to bus line 11
+    (socket pin 21 on DIP24_2716 / DIP24_2532) is refused, and only when the
+    shield does not report Rev 2.2 or Rev 2.3 and `--force` is not set.
+
+    A `HardwareOperationError`, not a `SerialError`: `_setup_operation`
+    catches `SerialError` and degrades it to a failed connect, which hid this
+    refusal. It renders as "Hardware error: ..." through `map_typed_errors`.
+    `_probe_port` and `find_and_connect` catch it explicitly and re-raise, so
+    it is never degraded to "no programmer found".
+
+    `detected` carries the effective revision byte the firmware reported, or
+    None when the firmware sent no revision.
+    """
+
+    def __init__(self, *args: object, detected: int | None = None) -> None:
+        super().__init__(*args)
+        self.detected = detected
+
+
 class Pin1HazardRefusedError(HardwareOperationError):
     """Raised when a damage-capable operation on an affected part is refused.
 
@@ -147,7 +149,7 @@ class Pin1HazardRefusedError(HardwareOperationError):
     programming rail. Every RURP Rev 2.x board reaches socket pin 1 through
     JP5 the same way, so this is not a shield-revision problem --
     `HardwareRevisionUnsupportedError` would be the wrong (and dishonest)
-    base to reuse here. It subclasses `HardwareOperationError` instead.
+    class to reuse here. Both subclass `HardwareOperationError`.
 
     Raised either because the part is affected and no acknowledgement was
     given in this invocation, or because the bus configuration carries no

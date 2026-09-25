@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 79
+Total messages: 80
 """
 
 from dataclasses import dataclass
@@ -123,6 +123,7 @@ MSG_ERR_MAX_PULSES = 0xBD
 MSG_ERR_ENERGY_CAP = 0xBE
 MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_ERR_FL4_PAGE_ALIGN = 0xC0
+MSG_ERR_INVALID_REV = 0xC1
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -780,6 +781,15 @@ CATALOG: dict[int, MessageDef] = {
         format="Write refused -- address 0x%06lx not page-aligned or length %u not a whole page",
         params=(("u24", "hex_addr"), ("u16", "dec")),
         param_bytes=5,
+        wire_format="id_frame",
+    ),
+    0xC1: MessageDef(
+        id=0xC1,
+        name="MSG_ERR_INVALID_REV",
+        severity=SEVERITY_ERROR,
+        format="Hardware revision refused -- use 0 to 5, or 255 to remove the override",
+        params=(),
+        param_bytes=0,
         wire_format="id_frame",
     ),
     0xE0: MessageDef(

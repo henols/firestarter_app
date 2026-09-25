@@ -31,12 +31,9 @@ from firestarter.constants import (
     FLAG_OUTPUT_ENABLE,
     FLAG_SKIP_ERASE,
     FLAG_VPE_AS_VPP,
-    REVISION_2_2,
-    REVISION_2_3,
 )
 from firestarter.exceptions import (
     FirmwareOutdatedError,
-    HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
     ProtocolNotImplementedError,
     SerialError,
@@ -746,62 +743,6 @@ class SerialCommunicator:
                 f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
             )
 
-    # Bus line 11 is where socket pin 21 lands on the 24-pin RURP wiring, and
-    # it is the VPP line for exactly two pinouts — DIP24_2716 and DIP24_2532.
-    # Those parts need the 3-position JP4 header introduced on shield Rev 2.2;
-    # driving them on an earlier board is a chip-damage path.
-    _VPP_LINE_REQUIRING_REV_2_2 = 11
-    # ALLOWLIST, deliberately not a `>=` comparison. The REVISION_* bytes are
-    # not a version-ordered scale: REVISION_UNKNOWN is 0xFE, numerically ABOVE
-    # REVISION_2_2 (0x04), so `detected >= REVISION_2_2` would admit precisely
-    # the boards whose revision could not be determined. Membership fails
-    # closed for 0xFE, for the 0xFF override-absent sentinel, for the
-    # REVISION_2_0 broad bucket, and for None (pre-CAP-02 firmware).
-    _REVISIONS_WITH_3_POSITION_JP4 = (REVISION_2_2, REVISION_2_3)
-
-    @staticmethod
-    def _validate_hardware_revision(
-        command_to_send: dict, detected: int | None
-    ) -> None:
-        """Pure-policy shield-revision guard. Raises on reject, returns on pass.
-
-        Mirrors _validate_firmware_version's shape: no I/O, no environment
-        reads, no serial access — just the wire dict the host is about to act
-        on and the revision byte the firmware reported. That makes the policy
-        testable without a board and keeps _probe_port free of the reasoning.
-
-        Only chips whose bus-config routes VPP to bus line 11 are gated; every
-        other chip passes through untouched regardless of shield revision.
-
-        Note for operators hitting this: ADC detection collapses Rev 2.0, 2.1
-        and 2.2 into the single REVISION_2_0 bucket, so a genuine Rev 2.2 board
-        reports as 2.0-class until the EEPROM override is written. That is the
-        intended design — the operator has to look at the physical header and
-        assert it, and asserting it is the safety mechanism, not a workaround.
-        """
-        bus_config = command_to_send.get("bus-config") or {}
-        if bus_config.get("vpp-pin") != SerialCommunicator._VPP_LINE_REQUIRING_REV_2_2:
-            return
-        if detected in SerialCommunicator._REVISIONS_WITH_3_POSITION_JP4:
-            return
-
-        if detected is None:
-            reported = "nothing (firmware predates the revision-carrying ack)"
-        else:
-            reported = f"0x{detected:02X}"
-        raise HardwareRevisionUnsupportedError(
-            f"This chip routes VPP to socket pin 21, which needs the 3-position "
-            f"JP4 header introduced on RURP shield Rev 2.2. The programmer "
-            f"reported {reported}. Refusing to program — an earlier shield "
-            f"cannot route VPP there and attempting it can damage the EPROM.\n"
-            f"If this board really is a Rev 2.2 or 2.3, ADC detection cannot "
-            f"tell it apart from a Rev 2.0, so you must assert it once with "
-            f"'firestarter config --rev 4' (4 = Rev 2.2, 5 = Rev 2.3). Note "
-            f"that --rev takes the revision BYTE, not the silkscreen number: "
-            f"'--rev 2.2' truncates to 2 and selects the Rev 2.0 bucket.",
-            detected=detected,
-        )
-
     def setup_command(
         self,
         command_to_send: dict,
@@ -860,8 +801,9 @@ class SerialCommunicator:
         # dedicated CMD_FW_VERSION pre-probe this replaces cost a full
         # command exchange (2 acks) on every single connect; MSG_OK_READY
         # now carries the firmware identity AND the effective hardware
-        # revision, so both gates run off the ack this command was going to
-        # produce anyway.
+        # revision, so the version gate below and the shield-revision gate
+        # (hw_revision_gate, called by EpromOperator._setup_operation) run off
+        # the ack this command was going to produce anyway.
         #
         # Validating after the command is on the wire is safe by
         # construction, not by luck. init_programmer_framed does run
@@ -947,14 +889,6 @@ class SerialCommunicator:
                 allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
             )
 
-        # Shield-revision gate — ordered after the version check because
-        # firmware old enough to fail that check cannot be trusted to have
-        # reported a revision at all, and before the caller is handed a
-        # connection it would immediately start driving.
-        SerialCommunicator._validate_hardware_revision(
-            command_to_send, self.hw_revision
-        )
-
         self.programmer_info = msg
         logger.debug(f"Programmer setup complete on {self.port_name}: {msg}")
         config_manager.remember_port(self.port_name)  # never promotes a typed --port
@@ -1010,16 +944,6 @@ class SerialCommunicator:
             )
             return communicator
 
-        except HardwareRevisionUnsupportedError:
-            # MUST precede the SerialError clause below (it is a subclass) and
-            # MUST re-raise. Falling through to `return None` would surface a
-            # deliberate safety refusal as "no programmer found" — the worst
-            # possible message for an operator looking at a board that is
-            # plainly attached, and one that invites them to go hunting for a
-            # cable fault instead of reading the actual reason.
-            if communicator:
-                communicator.disconnect()
-            raise
         except (SerialError, FirmwareOutdatedError) as e:
             logger.debug(f"Probe failed for {port_name}: {e}")
             if communicator:
@@ -1120,18 +1044,13 @@ class SerialCommunicator:
                     return communicator
             except (
                 FirmwareOutdatedError,
-                HardwareRevisionUnsupportedError,
                 ProtocolNotImplementedError,
             ) as e:
                 if status_update_active:
                     logger.info("Connecting... Failed  ", extra={"status": "end"})
-                # If firmware is outdated, the shield revision cannot safely
-                # drive this chip, or the protocol is not implemented, stop
-                # probing and raise the specific error (all three are
-                # stop-probing, surface-the-specific-error cases). Listing the
-                # revision error here is about closing the "Connecting..."
-                # status line — it already escapes the loop by not matching any
-                # clause, but it would leave that line dangling on the way out.
+                # If firmware is outdated or the protocol is not implemented,
+                # stop probing and raise the specific error (both are
+                # stop-probing, surface-the-specific-error cases).
                 raise e
 
         # If the loop completes without finding a programmer, it's a failure.

@@ -62,6 +62,7 @@ from firestarter.constants import (
     FIRESTARTER_RELEASES_URL,
     FLAG_CHIP_ENABLE,
     FLAG_OUTPUT_ENABLE,
+    REVISION_BY_SILKSCREEN,
 )
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import (
@@ -633,7 +634,8 @@ _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED = (
     "-f",
     "--force",
     is_flag=True,
-    help="Force, even if the VPP or chip id doesn't match.",
+    help="Continue when the VPP or the chip ID does not match. Also continue, "
+    "with a warning, when the shield revision is not proven for this chip.",
 )
 @click.option("-a", "--address", default=None, help="Write start address in dec/hex")
 @click.option("--vpe-as-vpp", "vpe_as_vpp", is_flag=True, help="Use VPE as VPP voltage")
@@ -1276,7 +1278,8 @@ def blank(
     "-f",
     "--force",
     is_flag=True,
-    help="Force, even if the VPP or chip id doesn't match.",
+    help="Continue when the VPP or the chip ID does not match. Also continue, "
+    "with a warning, when the shield revision is not proven for this chip.",
 )
 @click.option(
     "-b",
@@ -1481,9 +1484,10 @@ def hw(app: AppContext) -> None:
 @cli.command(name="config")
 @click.option(
     "--rev",
-    type=float,
+    type=click.Choice(list(REVISION_BY_SILKSCREEN)),
     default=None,
-    help="WARNING Overrides hardware revision (0-2), only use with HW mods. -1 disables override.",  # noqa: E501
+    help="Set the shield revision override. Use 2.2 or 2.3 for a shield that has "
+    "the three-position JP4. -1 removes the override.",
 )
 @click.option(
     "-r1",
@@ -1505,15 +1509,13 @@ def hw(app: AppContext) -> None:
 @map_typed_errors
 def config(
     app: AppContext,
-    rev: float | None,
+    rev: str | None,
     r16: int | None,
     r14r15: int | None,
 ) -> None:
     """Handles CONFIGURATION values."""
-    # set_hardware_config expects Optional[int]; the Click option accepts float
-    # so users can write `--rev 2.0` interchangeably with `--rev 2`. Cast to int
-    # at the boundary (rev=-1 sentinel + integer rev values preserved verbatim).
-    rev_int = int(rev) if rev is not None else None
+    # --rev takes the silkscreen number; the wire takes the revision byte.
+    rev_int = REVISION_BY_SILKSCREEN[rev] if rev is not None else None
     ok = app.hardware_manager.set_hardware_config(
         rev_int, r16, r14r15, flags=_build_op_flags()
     )

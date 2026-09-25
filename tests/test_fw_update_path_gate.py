@@ -123,21 +123,27 @@ class TestOutdatedFirmwareWaiverScope:
     def test_waiver_does_not_touch_the_shield_revision_gate(self):
         """The waiver is scoped to VERSION refusals only.
 
-        A command that routes VPP to bus line 11 on firmware that reports no
-        revision must still be refused, waiver or not — that refusal is a
-        chip-damage guard, not a version policy.
+        The shield-revision gate runs in `EpromOperator._setup_operation`,
+        which never asks for the waiver. A write that routes VPP to bus line
+        11 on a shield with no revision is still refused.
         """
+        from firestarter.config import ConfigManager
+        from firestarter.constants import COMMAND_WRITE
+        from firestarter.eprom_operations import EpromOperator
         from firestarter.exceptions import HardwareRevisionUnsupportedError
 
-        with _probe_with_identity(None):
+        comm = MagicMock()
+        comm.hw_revision = None
+        with patch.object(
+            SerialCommunicator, "find_and_connect", return_value=comm
+        ) as connect:
             with pytest.raises(HardwareRevisionUnsupportedError):
-                SerialCommunicator._probe_port(
-                    port_name="/dev/null",
-                    baud_rate=250000,
-                    command_to_send={"bus-config": {"vpp-pin": 11}},
-                    config_manager=MagicMock(),
-                    allow_outdated_firmware=True,
+                EpromOperator(ConfigManager())._setup_operation(
+                    "2516",
+                    {"bus-config": {"vpp-pin": 11}},
+                    COMMAND_WRITE,
                 )
+        assert not connect.call_args.kwargs.get("allow_outdated_firmware", False)
 
 
 class TestWaiverPlumbing:

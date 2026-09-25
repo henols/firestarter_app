@@ -589,25 +589,27 @@ def test_run_fatal_escapes(exc_cls):
     _run_step's re-raise clause would silently bypass it and become a
     false-green no-board report -- this assertion is what would catch that.
 
-    CAP-02 grew the census from three to four. The gate fired exactly as
-    designed when HardwareRevisionUnsupportedError was introduced: without the
-    matching _run_step change, a shield-revision refusal would have degraded to
-    a BAD step per remaining operation, reporting a damaged-looking chip when
-    the real cause was a shield that cannot safely drive it."""
+    HardwareRevisionUnsupportedError is a HardwareOperationError, not a
+    SerialError, so it is outside that census. It also matches the
+    (SerialError, HardwareOperationError) degrade clause, so the re-raise
+    clause must name it explicitly; the escape assertion below proves it does.
+    Without that, a shield-revision refusal would degrade to a BAD step per
+    remaining operation, reporting a damaged-looking chip when the real cause
+    was a shield that cannot safely drive it."""
     assert set(SerialError.__subclasses__()) == {
         SerialTimeoutError,
         ProgrammerNotFoundError,
         FirmwareOutdatedError,
-        HardwareRevisionUnsupportedError,
     }, (
         "SerialError gained or lost a subclass since D-08 was measured -- "
         "_run_step's (ProgrammerNotFoundError, FirmwareOutdatedError, "
         "HardwareRevisionUnsupportedError) re-raise clause is only complete "
-        "against the FOUR-class census named here; a new subclass would "
+        "against the census named here; a new subclass would "
         "silently fall through to the (SerialError, HardwareOperationError) "
-        "degrade clause instead of escaping, turning a no-board/old-firmware/"
-        "wrong-shield run into a false BAD-step report (133-CONTEXT.md D-08)."
+        "degrade clause instead of escaping, turning a no-board/old-firmware "
+        "run into a false BAD-step report (133-CONTEXT.md D-08)."
     )
+    assert issubclass(HardwareRevisionUnsupportedError, HardwareOperationError)
 
     operator = _mock_operator()
     injected = exc_cls("133-02 injected run-fatal probe")

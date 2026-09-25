@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Tuple  # noqa: UP035
 
+import click
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -55,12 +56,14 @@ from firestarter.constants import (
 from firestarter.exceptions import (
     EpromOperationError,
     FirmwareOutdatedError,
+    HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
     ProtocolNotImplementedError,
     SerialError,
     SerialTimeoutError,
 )
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
+from firestarter.hw_revision_gate import forced_warning, require_supported_revision
 from firestarter.jp5_gate import require_acknowledged
 from firestarter.messages import (
     MSG_DATA_PROTECTION_STATUS,
@@ -601,6 +604,20 @@ class EpromOperator:
             return float(budget)
         return WRITE_BLOCK_TIMEOUT_FALLBACK_S
 
+    def _check_shield_revision(self, eprom_name: str, command_dict: dict) -> None:
+        # Runs after the setup ack and before the host answers it, so the
+        # firmware has not engaged VPP. A refusal drops the link, which leaves
+        # the firmware waiting for an ack that never comes.
+        detected = self.comm.hw_revision if self.comm else None
+        try:
+            require_supported_revision(eprom_name, command_dict, detected)
+        except HardwareRevisionUnsupportedError:
+            self._disconnect_programmer()
+            raise
+        warning = forced_warning(eprom_name, command_dict, detected)
+        if warning:
+            click.echo(warning, err=True)
+
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,
         eprom_name: str,  # For logging
@@ -718,6 +735,7 @@ class EpromOperator:
                 # connect failure: the caller's existing not-`command_dict`
                 # guard in `_operation_context` handles it unchanged.
                 return None, 0
+            self._check_shield_revision(eprom_name, command_dict)
             buffer_size = self._calculate_buffer_size()
             logger.debug(
                 f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s, leased). Buffer size: {buffer_size}"  # noqa: E501
@@ -732,6 +750,7 @@ class EpromOperator:
                 fault_inject_outgoing=fault_inject_outgoing,
                 restrict_to_port=restrict_to_port,
             )
+            self._check_shield_revision(eprom_name, command_dict)
             buffer_size = self._calculate_buffer_size()
             logger.debug(
                 f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"  # noqa: E501
