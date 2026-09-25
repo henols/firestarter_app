@@ -9,9 +9,16 @@ IC Layout Generation Module
 import logging
 from typing import Dict, List  # noqa: UP035
 
-from firestarter.database import EpromDatabase, format_mv  # Changed import
+from firestarter import jumper_table
+from firestarter.database import EpromDatabase, format_mv
+from firestarter.erase_support import erase_accepted, is_electrically_erasable
+from firestarter.vpp_display import shows_programming_vpp
 
 logger = logging.getLogger("EpromSpecBuilder")
+
+CAN_ERASE_YES = "yes (electrically erasable)"
+CAN_ERASE_UV_ONLY = "no (UV erase only)"
+CAN_ERASE_NOT_SUPPORTED = "no (erase is not supported for this chip)"
 
 
 class EpromSpecBuilder:
@@ -130,59 +137,6 @@ class EpromSpecBuilder:
         """
         return pin_field[0]
 
-    def _select_jumper_label(self, jp_setting: int, label1: str, label2: str) -> str:
-        if jp_setting == 1:
-            return label1
-        if jp_setting == 2:
-            return label2
-        return "NA"
-
-    def _get_rev1_jumper_settings_data(self, jp1: int, jp2: int, jp3: int) -> dict:
-        """Generates structured data for Rev 0.1 & 1.0 jumper settings."""
-        jumper_display = [" ● ● ● ", " ●(● ●)", "(● ●)● "]  # 0: N/A, 1: Pos1, 2: Pos2
-        jp1_label = self._select_jumper_label(jp1, "A13", "VCC")
-        jp2_label = self._select_jumper_label(jp2, "A17", "VCC")
-        jp3_label = self._select_jumper_label(jp3, "32pin", "28pin")
-        return {
-            "0.1 & 1.0": {
-                "jp1": {
-                    "config_text": "5V",
-                    "display": jumper_display[jp1],
-                    "pin_text": "A13",
-                    "selected_label": jp1_label,
-                },
-                "jp2": {
-                    "config_text": "5V",
-                    "display": jumper_display[jp2],
-                    "pin_text": "A17",
-                    "selected_label": jp2_label,
-                },
-                "jp3": {
-                    "config_text": "28pin",
-                    "display": jumper_display[jp3],
-                    "pin_text": "32pin",
-                    "selected_label": jp3_label,
-                },
-            }
-        }
-
-    def _get_rev2_jumper_settings_data(self, jp4: int) -> dict:
-        """Generates structured data for Rev 2.0 & 2.1 jumper settings."""
-        jp4_label = self._select_jumper_label(
-            jp4, "Open", "Closed"
-        )  # Assuming 1=Open, 2=Closed
-        jumper_display = [" N/A   ", " ● ●   ", "(● ●)  "]  # 0: N/A, 1: Open, 2: Closed
-        return {
-            "2.0 & 2.1": {
-                "jp4": {
-                    "config_text": "28pin",
-                    "display": jumper_display[jp4],
-                    "pin_text": "32pin",
-                    "selected_label": jp4_label,
-                },
-            }
-        }
-
     def get_chip_type_string(self, protocol_id: int | None = None) -> str:
         """Return a user-facing chip-type label.
 
@@ -267,7 +221,7 @@ class EpromSpecBuilder:
                 "Legacy EPROM/EEPROM",
                 (
                     "Programming protocol for older 24-pin devices",
-                    "Shares pins between OE/VPP so high voltage is common",
+                    "VPP is on pin 21 (2716, 2532), or it shares OE on pin 20 (2732)",
                     "Targets small capacity 2716/2732/28C04/16 era parts",
                 ),
             ),
@@ -552,29 +506,24 @@ class EpromSpecBuilder:
             "flags_info": None,
         }
 
-        # "Can be erased" is derived from electrical.type, NOT protocol_id.
-        # EEPROM/Flash/EEPROM → electrically erasable; UV-EPROM → UV-only;
-        # SRAM → omit row (volatile); absent/unknown → omit row (safe fallback).
-        if etype in ("EEPROM", "Flash/EEPROM"):
-            output_data["can_erase_str"] = "yes (electrically erasable)"
+        # "Can be erased" states what `firestarter erase` does. It uses the rule that sets
+        # FLAG_CAN_ERASE (erase_support.erase_accepted), so the line and the command agree.
+        # A not-supported chip is changed to "no" in eprom_info, where support_status is known.
+        # SRAM and absent/unknown type: no can_erase_str row.
+        if erase_accepted(etype, eprom_data.get("protocol-id")):
+            output_data["can_erase_str"] = CAN_ERASE_YES
+        elif is_electrically_erasable(etype):
+            output_data["can_erase_str"] = CAN_ERASE_NOT_SUPPORTED
         elif etype == "UV-EPROM":
-            output_data["can_erase_str"] = "no (UV erase only)"
-        # SRAM and absent/unknown: no can_erase_str row
+            output_data["can_erase_str"] = CAN_ERASE_UV_ONLY
 
-        # Gate on vpp_mv > 0, not the always-zero flags & 0x08.
-        # Coerce defensively: user-override entries may supply vpp_mv as a string.
-        # Exclude SRAM and FRAM: volatile/no-program-VPP; vpp_mv=12000 is an
-        # upstream infoic.xml decode artifact for SRAM/FRAM entries, not a real VPP.
-        # FRAM is gated alongside SRAM.
-        try:
-            _vpp_mv = int(eprom_data.get("vpp_mv", 0) or 0)
-        except (TypeError, ValueError):
-            _vpp_mv = 0
-        if etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
-            # Parity with eprom_info.py's list view is structural —
-            # both views call format_mv on the same already-coerced _vpp_mv, so
-            # they cannot diverge (no more hand-mirrored 'N/A' fallbacks).
-            output_data["vpp_str"] = format_mv(_vpp_mv)
+        # VPP row only where vpp_mv is a programming VPP (vpp_display.shows_programming_vpp). On
+        # the 5 V-only protocols vpp_mv is the WP-pin voltage, and on SRAM/FRAM it is a decode
+        # artifact. The list view calls the same predicate.
+        if shows_programming_vpp(
+            eprom_data.get("protocol-id"), eprom_data.get("vpp_mv")
+        ):
+            output_data["vpp_str"] = format_mv(int(eprom_data["vpp_mv"]))
 
         # Chip ID: always render a row, but show "-" when the chip has no
         # real/readable ID — i.e. the key is absent, or it is a 0x00000000
@@ -598,44 +547,16 @@ class EpromSpecBuilder:
                     pin_count, display_pin_names
                 )
 
-                # Determine jumper settings based on pin count and VPP presence
-                jp1, jp2, jp3_rev01, jp4_rev2 = (
-                    0,
-                    0,
-                    0,
-                    0,
-                )  # Default to N/A or first position
-                has_vpp_pin_on_map = False
-                pin_map_details = self.db.get_pin_map(
-                    pin_count, eprom_data.get("pin-map")
+            # Jumper settings come from the per-pin-map table only (jumper_table.py). A pin
+            # map with no entry gets a fail-closed note and no jumper settings.
+            pin_map_key = eprom_data.get("pin-map")
+            entry = jumper_table.lookup(pin_map_key)
+            if entry is None:
+                output_data["jumper_note"] = jumper_table.NO_ENTRY_FORMAT.format(
+                    pin_map=pin_map_key or "(none)"
                 )
-                if pin_map_details and "vpp-pin" in pin_map_details:
-                    has_vpp_pin_on_map = True
-
-                if pin_count == 24:
-                    jp1 = 2  # VCC
-                elif pin_count == 28:
-                    jp1 = 1  # A13
-                    jp2 = 2  # VCC
-                    if has_vpp_pin_on_map:
-                        jp3_rev01 = (
-                            2  # 28pin (if VPP is used, implies 28pin mode for VPP)
-                        )
-                    jp4_rev2 = (
-                        2 if has_vpp_pin_on_map else 1
-                    )  # Closed if VPP, Open otherwise
-                elif pin_count == 32:
-                    jp1 = 1  # A13
-                    jp2 = 1  # A17
-                    if has_vpp_pin_on_map:
-                        jp3_rev01 = 1  # 32pin
-                    jp4_rev2 = 2 if has_vpp_pin_on_map else 1
-                output_data["jumpers"].update(
-                    self._get_rev1_jumper_settings_data(jp1, jp2, jp3_rev01)
-                )
-                output_data["jumpers"].update(
-                    self._get_rev2_jumper_settings_data(jp4_rev2)
-                )
+            else:
+                output_data["jumpers"] = jumper_table.render_blocks(entry)
 
         protocol_id = eprom_data.get("protocol-id")
         if protocol_id is not None:

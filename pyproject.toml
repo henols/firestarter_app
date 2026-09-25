@@ -160,7 +160,8 @@ check_untyped_defs = true
 # of firestarter.sdp_capability, which is NOT in this list. Phase 202-01
 # D-01 adds a tenth, firestarter.compare, which also joins from birth for
 # the same reason sdp_honesty did: a new import-light module should never
-# accrue untyped defs it has to be retrofitted later.
+# accrue untyped defs it has to be retrofitted later. jumper_table,
+# vpp_display and erase_support join from birth for the same reason.
 # eprom_operations.py DELIBERATELY EXCLUDED per D-07 (GATE-1.8d read-path ring-fence; deferred to v1.9 post-RCA).
 module = [
     "firestarter.main",
@@ -174,6 +175,9 @@ module = [
     "firestarter.sdp_honesty",
     "firestarter.log_capture",
     "firestarter.compare",
+    "firestarter.jumper_table",
+    "firestarter.vpp_display",
+    "firestarter.erase_support",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true

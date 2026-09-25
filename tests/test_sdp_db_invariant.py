@@ -53,16 +53,8 @@ Coverage:
      `_assert_two_partitions_match` raise, naming the moved chip and not an
      untouched control -- `test_partition_flags_a_moved_chip_via_db_field_non_vacuous`.
 
-This module intentionally carries NO FW_ABSENT-style skip marker: it reads
-only the packaged chip_database.json, which is always present in host-only
-CI. Keeping this concern in its own file (separate from
-test_sdp_bus_config_drift.py's FW_ABSENT-marked tests) prevents that skip
-marker from leaking in here and silently making TRACE-05 / GATE-08 vacuous in
-CI (correction F-02: `test_sdp_table_parity.py` imports the sibling-repo
-presence marker from `tests.fw_presence` at module scope and is therefore
-skipped whole-module under the CI-parity recipe's empty-sibling leg -- any
-narrowing gate placed there would be invisible exactly where it matters
-most).
+This module carries no skip marker: it reads only the packaged
+chip_database.json, which is always present in host-only CI.
 """
 
 import json

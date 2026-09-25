@@ -30,9 +30,7 @@ over that file returns zero matches, and every mention of `DFUSE_ERASE_PAGE`,
 import or a label inside a genuinely independent sequencing assertion --
 exactly what D-18's own next sentence orders kept. This plan therefore
 creates ONE new module and deletes or converts nothing in
-`tests/test_py32_dfu.py`; `test_test_py32_dfu_still_contains_no_source_source_opcode_oracle`
-below holds that property forward so the removed-oracle shape cannot be
-reintroduced there later.
+`tests/test_py32_dfu.py`.
 
 **Residual A1 (carried, not hidden).** Research (`.planning/research/SUMMARY.md`)
 did not fetch UM1504 or the USB DFU 1.1 specification before this plan ran --
@@ -64,28 +62,15 @@ read-only lookup attempt against both documents:
   ledger; a future plan re-attempting the UM1504 fetch from a different
   network vantage point would fully discharge it.
 
-**The `bitCanUpload` mask is a special case (do not skip this note).** Plan
-127-09, not this plan, CREATES the module's `bitCanUpload` mask constant on
-`Py32DfuFlasher` -- it does not exist yet. This module therefore anchors the
-mask value as a bare literal with its citation only, asserts nothing against
-it, and refers to the not-yet-existing production constant only by
-description ("the module's `bitCanUpload` mask constant"), **never by
-name, anywhere in this file** -- the phase evidence artifact's gate greps
-this whole file for that production constant's name and expects zero
-matches, precisely because its presence here would mean an assertion
-against a symbol that does not yet exist. Plan 127-09 adds the first
-equality assertion once that constant exists.
+**The `bitCanUpload` mask.** Plan 127-09 created the module's mask constant,
+`_DFU_BIT_CAN_UPLOAD`. The last test below compares it with the anchored bit.
 
 No skip marker of any kind lives in this module: it is a pure module-level
-constant comparison plus one textual scan, and both run identically whether
-or not `pyusb` is installed, so it needs no `ALLOWED_SKIP_REASONS` entry
-(`tests/test_skip_census.py`).
+constant comparison, and it runs identically whether or not `pyusb` is
+installed.
 """
 
 from __future__ import annotations
-
-import re
-from pathlib import Path
 
 from firestarter import py32_dfu
 
@@ -218,11 +203,3 @@ def test_bit_can_upload_mask_matches_usb_dfu_11_section_4_1_3() -> None:
         f"(bitCanUpload): expected {expected:#04x}, "
         f"firestarter.py32_dfu._DFU_BIT_CAN_UPLOAD == {actual:#04x}"
     )
-
-
-_TEST_PY32_DFU = Path(__file__).parent / "test_py32_dfu.py"
-
-_SOURCE_SOURCE_ORACLE_RE = re.compile(
-    r"assert\s+(?:py32_dfu\.)?(?:DFU|DFUSE|FLASH)_[A-Z_]+\s*==\s*(?:0x)?[0-9]"
-)
-_CONSTANT_MENTION_RE = re.compile(r"\b(?:DFU|DFUSE|FLASH)_[A-Z_]+\b")

@@ -703,8 +703,7 @@ class DiagnosticReport:
     per rail (`vpp_before_mv`/`vpp_after_mv`/`vpe_before_mv`/`vpe_after_mv`).
     Schema 2.0 dropped the standalone non-destructive `vpp_mv`/`vpe_mv`
     slots that shape used to also carry -- no code path had ever assigned
-    them (RPT-B1, proven by `tests/test_voltage_field_census.py`'s
-    attribute-scoped AST census).
+    them (RPT-B1).
 
     `db_diff` (plan 03) is the advisory, read-only DB-diff -- current
     `support_status` beside a proposed-disposition string derived purely from

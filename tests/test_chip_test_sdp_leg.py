@@ -133,7 +133,6 @@ References:
   - .planning/phases/133-sdp-leg-mechanism/133-PATTERNS.md
     §tests/test_chip_test_sdp_leg.py
   - tests/test_chip_test.py :287, :793-825 (the harness this module copies)
-  - tests/test_sdp_table_parity.py :300-341 (the non-vacuity idiom)
 """
 
 import ast

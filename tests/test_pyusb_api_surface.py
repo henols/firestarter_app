@@ -18,7 +18,7 @@ USB device) has already drifted from the real signature.
 This module runs ONLY where pyusb is installed. It is kept out of the
 primary (pyusb-absent) leg by `tests/conftest.py`'s conditional
 `collect_ignore`, chosen because it produces a NON-COLLECTION rather than a
-skip -- so no new `ALLOWED_SKIP_REASONS` entry is owed. The `ci-py32` CI job
+skip. The `ci-py32` CI job
 names this file explicitly (`pytest tests/test_pyusb_api_surface.py -q`),
 which is exactly why a missing `[py32]` extra surfaces there as a hard
 collection error rather than a quiet pass: `collect_ignore` does not

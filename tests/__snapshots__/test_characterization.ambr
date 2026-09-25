@@ -460,7 +460,6 @@
   Type:               EEPROM
   Can be erased:      yes (electrically erasable)
   VCC:                5.0v
-  VPP:                12.0v
   Chip ID:            -
   
          28-DIP package
@@ -481,13 +480,25 @@
     GND -| 14     15 |- D3    
           -----------
   
-  Jumper config (Rev 0.1 & 1.0):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2: (● ●)●  (5V, A17 = VCC)
-    JP3:  ● ● ●  (28pin, 32pin = NA)
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+         ║
+       A ●                 B ●               VPP ●
+                             ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to 5V.     Bridge B to A13.    No jumper.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4:  ● ●    (28pin, 32pin = Open)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EEPROM - 5V parallel, SDP + DQ7 poll (ID: 0x0D)
     - Programming protocol for large EEPROMs
@@ -534,13 +545,25 @@
     GND -| 14     15 |- D3    
           -----------
   
-  Jumper config (Rev 0.1 & 1.0):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2: (● ●)●  (5V, A17 = VCC)
-    JP3: (● ●)●  (28pin, 32pin = 28pin)
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+         ║
+       A ●                 B ●               VPP ●
+                             ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to 5V.     Bridge B to A13.    No jumper.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4: (● ●)   (28pin, 32pin = Closed)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EPROM - 28-pin UV/EE, 13V VPP (ID: 0x07)
     - JEDEC 28-pin EPROM algorithm (also covers compatible 28C parts)
@@ -593,13 +616,25 @@
     GND -| 16     17 |- D3    
           -----------
   
-  Jumper config (Rev 0.1 & 1.0):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2:  ●(● ●) (5V, A17 = A17)
-    JP3:  ●(● ●) (28pin, 32pin = 32pin)
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+                                                 ║
+       A ●                 B ●               VPP ●
+         ║                   ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to A17.    Bridge B to A13.    Bridge VPP to D.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4: (● ●)   (28pin, 32pin = Closed)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
     - High-voltage EPROM algorithm for 32-pin devices
@@ -651,13 +686,25 @@
     GND -| 16     17 |- D3    
           -----------
   
-  Jumper config (Rev 0.1 & 1.0):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2:  ●(● ●) (5V, A17 = A17)
-    JP3:  ●(● ●) (28pin, 32pin = 32pin)
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+                                                 ║
+       A ●                 B ●               VPP ●
+         ║                   ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to A17.    Bridge B to A13.    Bridge VPP to D.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4: (● ●)   (28pin, 32pin = Closed)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
     - High-voltage EPROM algorithm for 32-pin devices
@@ -678,8 +725,8 @@
   | Name                | Manufacturer     | Pins | Chip ID    | Type        | VPP  |
   +---------------------+------------------+------+------------+-------------+------+
   | M8720               | ALI(Acer)        |   32 |            | EEPROM      | 12.0v|
-  | AS29F002T           | ALLIANCE         |   32 | 0x52B0     | Flash/EEPROM| 12.0v|
-  | AS29F002B           | ALLIANCE         |   32 | 0x5234     | Flash/EEPROM| 12.0v|
+  | AS29F002T           | ALLIANCE         |   32 | 0x52B0     | Flash/EEPROM| -    |
+  | AS29F002B           | ALLIANCE         |   32 | 0x5234     | Flash/EEPROM| -    |
   | AM2716              | AMD              |   24 |            | UV-EPROM    | 18.0v|
   | AM2716B             | AMD              |   24 |            | UV-EPROM    | 13.0v|
   | AM2732,AM2732A      | AMD              |   24 |            | UV-EPROM    | 18.0v|
@@ -702,45 +749,45 @@
   | AM27LV080           | AMD              |   32 | 0x011C     | UV-EPROM    | 12.0v|
   | AM27H010,AM27HB010  | AMD              |   32 | 0x010E     | UV-EPROM    | 13.0v|
   | AM27H256            | AMD              |   28 | 0x0110     | UV-EPROM    | 13.0v|
-  | AM28C16A            | AMD              |   24 |            | EEPROM      | 12.0v|
-  | AM28C17A            | AMD              |   28 |            | EEPROM      | 12.0v|
-  | AM28C64A,AM28C64AE,…| AMD              |   28 |            | EEPROM      | 12.0v|
+  | AM28C16A            | AMD              |   24 |            | EEPROM      | -    |
+  | AM28C17A            | AMD              |   28 |            | EEPROM      | -    |
+  | AM28C64A,AM28C64AE,…| AMD              |   28 |            | EEPROM      | -    |
   | AM28F256            | AMD              |   32 | 0x01A1     | Flash/EEPROM| 12.0v|
   | AM28F512            | AMD              |   32 | 0x0125     | Flash/EEPROM| 12.0v|
   | AM28F010            | AMD              |   32 | 0x01A7     | Flash/EEPROM| 12.0v|
   | AM28F010A           | AMD              |   32 | 0x01A2     | Flash/EEPROM| 12.0v|
   | AM28F020            | AMD              |   32 | 0x012A     | Flash/EEPROM| 12.0v|
   | AM28F020A           | AMD              |   32 | 0x0129     | Flash/EEPROM| 12.0v|
-  | AM29F002B,AM29F002BB| AMD              |   32 | 0x0134     | Flash/EEPROM| 12.0v|
-  | AM29F002BT,AM29F002T| AMD              |   32 | 0x01B0     | Flash/EEPROM| 12.0v|
-  | AM29F002NB,AM29F002…| AMD              |   32 | 0x0134     | Flash/EEPROM| 12.0v|
-  | AM29F002NBT,AM29F00…| AMD              |   32 | 0x01B0     | Flash/EEPROM| 12.0v|
-  | AM29F010,AM29F010B  | AMD              |   32 | 0x0120     | Flash/EEPROM| 12.0v|
-  | AM29F040,AM29F040B  | AMD              |   32 | 0x01A4     | Flash/EEPROM| 12.0v|
+  | AM29F002B,AM29F002BB| AMD              |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002BT,AM29F002T| AMD              |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F002NB,AM29F002…| AMD              |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002NBT,AM29F00…| AMD              |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F010,AM29F010B  | AMD              |   32 | 0x0120     | Flash/EEPROM| -    |
+  | AM29F040,AM29F040B  | AMD              |   32 | 0x01A4     | Flash/EEPROM| -    |
   | A27020              | AMIC             |   32 | 0x3764     | UV-EPROM    | 12.0v|
   | A276308             | AMIC             |   28 | 0x373D     | UV-EPROM    | 13.0v|
   | A276308A            | AMIC             |   28 | 0x372C     | UV-EPROM    | 13.0v|
   | A278308             | AMIC             |   28 | 0x3761     | UV-EPROM    | 13.0v|
   | A278308A            | AMIC             |   28 | 0x3764     | UV-EPROM    | 13.0v|
-  | A29001T             | AMIC             |   32 | 0x37A1     | Flash/EEPROM| 12.0v|
-  | A29001U             | AMIC             |   32 | 0x374C     | Flash/EEPROM| 12.0v|
-  | A290011T            | AMIC             |   32 | 0x37A1     | Flash/EEPROM| 12.0v|
-  | A290011U            | AMIC             |   32 | 0x374C     | Flash/EEPROM| 12.0v|
-  | A29002T             | AMIC             |   32 | 0x378C     | Flash/EEPROM| 12.0v|
-  | A29002U             | AMIC             |   32 | 0x370D     | Flash/EEPROM| 12.0v|
-  | A290021T            | AMIC             |   32 | 0x378C     | Flash/EEPROM| 12.0v|
-  | A290021U            | AMIC             |   32 | 0x370D     | Flash/EEPROM| 12.0v|
-  | A29512              | AMIC             |   32 | 0x37A4     | Flash/EEPROM| 12.0v|
-  | A29512A             | AMIC             |   32 | 0x37A1     | Flash/EEPROM| 12.0v|
-  | A29010              | AMIC             |   32 | 0x37A4     | Flash/EEPROM| 12.0v|
-  | A29040,A29040A,A290…| AMIC             |   32 | 0x3786     | Flash/EEPROM| 12.0v|
-  | A29L040,A29L040A    | AMIC             |   32 | 0x3792     | Flash/EEPROM| 9.0v |
+  | A29001T             | AMIC             |   32 | 0x37A1     | Flash/EEPROM| -    |
+  | A29001U             | AMIC             |   32 | 0x374C     | Flash/EEPROM| -    |
+  | A290011T            | AMIC             |   32 | 0x37A1     | Flash/EEPROM| -    |
+  | A290011U            | AMIC             |   32 | 0x374C     | Flash/EEPROM| -    |
+  | A29002T             | AMIC             |   32 | 0x378C     | Flash/EEPROM| -    |
+  | A29002U             | AMIC             |   32 | 0x370D     | Flash/EEPROM| -    |
+  | A290021T            | AMIC             |   32 | 0x378C     | Flash/EEPROM| -    |
+  | A290021U            | AMIC             |   32 | 0x370D     | Flash/EEPROM| -    |
+  | A29512              | AMIC             |   32 | 0x37A4     | Flash/EEPROM| -    |
+  | A29512A             | AMIC             |   32 | 0x37A1     | Flash/EEPROM| -    |
+  | A29010              | AMIC             |   32 | 0x37A4     | Flash/EEPROM| -    |
+  | A29040,A29040A,A290…| AMIC             |   32 | 0x3786     | Flash/EEPROM| -    |
+  | A29L040,A29L040A    | AMIC             |   32 | 0x3792     | Flash/EEPROM| -    |
   | 27CX010             | ANACHIP          |   32 | 0x010E     | UV-EPROM    | 12.0v|
   | 27CX256             | ANACHIP          |   28 | 0x0110     | UV-EPROM    | 12.0v|
-  | AE29F1008           | ASD              |   32 | 0xDAC1     | Flash/EEPROM| 12.0v|
-  | AE29F2008           | ASD              |   32 | 0xDA45     | Flash/EEPROM| 12.0v|
-  | AE29F4008           | ASD              |   32 | 0xDA46     | Flash/EEPROM| 12.0v|
-  | AE49F2008           | ASD              |   32 | 0xDA0B     | Flash/EEPROM| 12.0v|
+  | AE29F1008           | ASD              |   32 | 0xDAC1     | Flash/EEPROM| -    |
+  | AE29F2008           | ASD              |   32 | 0xDA45     | Flash/EEPROM| -    |
+  | AE29F4008           | ASD              |   32 | 0xDA46     | Flash/EEPROM| -    |
+  | AE49F2008           | ASD              |   32 | 0xDA0B     | Flash/EEPROM| -    |
   | SMJ27C010A          | ASI Semic        |   32 | 0x97D6     | UV-EPROM    | 13.0v|
   | SMJ27C040           | ASI Semic        |   32 | 0x9750     | UV-EPROM    | 13.0v|
   | SMJ27C128           | ASI Semic        |   28 | 0x9783     | UV-EPROM    | 13.0v|
@@ -765,65 +812,65 @@
   | AT27BV040,AT27LV040…| ATMEL            |   32 | 0x1E0B     | UV-EPROM    | 12.0v|
   | AT27BV256,AT27LV256…| ATMEL            |   28 | 0x1E8C     | UV-EPROM    | 12.0v|
   | AT27BV512,AT27LV512…| ATMEL            |   28 | 0x1E0D     | UV-EPROM    | 12.0v|
-  | AT28BV64,AT28LV64   | ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28BV64B,AT28LV64B | ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28BV256,AT28LV256 | ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28C010,AT28C010E  | ATMEL            |   32 |            | Flash/EEPROM| 12.0v|
-  | AT28C04,AT28HC04    | ATMEL            |   24 |            | EEPROM      | 12.0v|
-  | AT28C04E,AT28C04F   | ATMEL            |   24 |            | EEPROM      | 12.0v|
-  | AT28C040,AT28C040E  | ATMEL            |   32 |            | Flash/EEPROM| 12.0v|
-  | AT28C16,AT28HC16,AT…| ATMEL            |   24 |            | EEPROM      | 12.0v|
-  | AT28C16E,AT28C16F   | ATMEL            |   24 |            | EEPROM      | 12.0v|
-  | AT28C17             | ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28C17E,AT28C17F   | ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28C256,AT28C256E,…| ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28C64,AT28C64B(No…| ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28C64B,AT28HC64B,…| ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28C64E,AT28C64F   | ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT28LV010           | ATMEL            |   32 |            | Flash/EEPROM| 12.0v|
-  | AT28MC010           | ATMEL            |   32 |            | Flash/EEPROM| 12.0v|
-  | AT28MC020           | ATMEL            |   32 |            | Flash/EEPROM| 12.0v|
-  | AT28MC040           | ATMEL            |   32 |            | Flash/EEPROM| 12.0v|
-  | AT28PC64,AT28PC64E  | ATMEL            |   28 |            | EEPROM      | 12.0v|
-  | AT29BV010A,AT29LV01…| ATMEL            |   32 | 0x1F35     | Flash/EEPROM| 12.0v|
-  | AT29BV020,AT29LV020 | ATMEL            |   32 | 0x1FBA     | Flash/EEPROM| 12.0v|
-  | AT29BV040,AT29LV040 | ATMEL            |   32 | 0x1F3B     | Flash/EEPROM| 12.0v|
-  | AT29BV040A,AT29LV04…| ATMEL            |   32 | 0x1FC4     | Flash/EEPROM| 12.0v|
-  | AT29C256            | ATMEL            |   28 | 0x1FDC     | Flash/EEPROM| 12.0v|
-  | AT29C257            | ATMEL            |   32 | 0x1FDC     | Flash/EEPROM| 12.0v|
-  | AT29C512            | ATMEL            |   32 | 0x1F5D     | Flash/EEPROM| 12.0v|
-  | AT29C010A           | ATMEL            |   32 | 0x1FD5     | Flash/EEPROM| 12.0v|
-  | AT29C020            | ATMEL            |   32 | 0x1FDA     | Flash/EEPROM| 12.0v|
-  | AT29C040            | ATMEL            |   32 | 0x1F5B     | Flash/EEPROM| 12.0v|
-  | AT29C040A           | ATMEL            |   32 | 0x1FA4     | Flash/EEPROM| 12.0v|
-  | AT29LV256           | ATMEL            |   28 | 0x1FDC     | Flash/EEPROM| 12.0v|
-  | AT29LV512           | ATMEL            |   32 | 0x1F3D     | Flash/EEPROM| 12.0v|
-  | AT49BV001,AT49BV001…| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| 12.0v|
-  | AT49BV001AN,AT49BV0…| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| 12.0v|
-  | AT49BV001ANT,AT49BV…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| 12.0v|
-  | AT49BV001AT,AT49BV0…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| 12.0v|
-  | AT49BV002,AT49BV002…| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| 12.0v|
-  | AT49BV002AN,AT49BV0…| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| 12.0v|
-  | AT49BV002ANT,AT49BV…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| 12.0v|
-  | AT49BV002AT,AT49BV0…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| 12.0v|
-  | AT49BV010,AT49HBV01…| ATMEL            |   32 | 0x1F17     | Flash/EEPROM| 12.0v|
-  | AT49BV020,AT49LV020 | ATMEL            |   32 | 0x1F0B     | Flash/EEPROM| 12.0v|
-  | AT49BV040,AT49BV040…| ATMEL            |   32 | 0x1F13     | Flash/EEPROM| 12.0v|
-  | AT49BV040T,AT49LV04…| ATMEL            |   32 | 0x1F12     | Flash/EEPROM| 12.0v|
-  | AT49BV512,AT49LV512 | ATMEL            |   32 | 0x1F03     | Flash/EEPROM| 12.0v|
-  | AT49F001,AT49F001A  | ATMEL            |   32 | 0x1F05     | Flash/EEPROM| 12.0v|
-  | AT49F001AN,AT49F001N| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| 12.0v|
-  | AT49F001ANT,AT49F00…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| 12.0v|
-  | AT49F001AT,AT49F001T| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| 12.0v|
-  | AT49F002,AT49F002A  | ATMEL            |   32 | 0x1F07     | Flash/EEPROM| 12.0v|
-  | AT49F002AN,AT49F002N| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| 12.0v|
-  | AT49F002ANT,AT49F00…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| 12.0v|
-  | AT49F002AT,AT49F002T| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| 12.0v|
-  | AT49F010,AT49HF010  | ATMEL            |   32 | 0x1F17     | Flash/EEPROM| 12.0v|
-  | AT49F020            | ATMEL            |   32 | 0x1F0B     | Flash/EEPROM| 12.0v|
-  | AT49F040,AT49F040A  | ATMEL            |   32 | 0x1F13     | Flash/EEPROM| 12.0v|
-  | AT49F040T           | ATMEL            |   32 | 0x1F12     | Flash/EEPROM| 12.0v|
-  | AT49F512            | ATMEL            |   32 | 0x1F03     | Flash/EEPROM| 12.0v|
+  | AT28BV64,AT28LV64   | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28BV64B,AT28LV64B | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28BV256,AT28LV256 | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C010,AT28C010E  | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28C04,AT28HC04    | ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C04E,AT28C04F   | ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C040,AT28C040E  | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28C16,AT28HC16,AT…| ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C16E,AT28C16F   | ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C17             | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C17E,AT28C17F   | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C256,AT28C256E,…| ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C64,AT28C64B(No…| ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C64B,AT28HC64B,…| ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C64E,AT28C64F   | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28LV010           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28MC010           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28MC020           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28MC040           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28PC64,AT28PC64E  | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT29BV010A,AT29LV01…| ATMEL            |   32 | 0x1F35     | Flash/EEPROM| -    |
+  | AT29BV020,AT29LV020 | ATMEL            |   32 | 0x1FBA     | Flash/EEPROM| -    |
+  | AT29BV040,AT29LV040 | ATMEL            |   32 | 0x1F3B     | Flash/EEPROM| -    |
+  | AT29BV040A,AT29LV04…| ATMEL            |   32 | 0x1FC4     | Flash/EEPROM| -    |
+  | AT29C256            | ATMEL            |   28 | 0x1FDC     | Flash/EEPROM| -    |
+  | AT29C257            | ATMEL            |   32 | 0x1FDC     | Flash/EEPROM| -    |
+  | AT29C512            | ATMEL            |   32 | 0x1F5D     | Flash/EEPROM| -    |
+  | AT29C010A           | ATMEL            |   32 | 0x1FD5     | Flash/EEPROM| -    |
+  | AT29C020            | ATMEL            |   32 | 0x1FDA     | Flash/EEPROM| -    |
+  | AT29C040            | ATMEL            |   32 | 0x1F5B     | Flash/EEPROM| -    |
+  | AT29C040A           | ATMEL            |   32 | 0x1FA4     | Flash/EEPROM| -    |
+  | AT29LV256           | ATMEL            |   28 | 0x1FDC     | Flash/EEPROM| -    |
+  | AT29LV512           | ATMEL            |   32 | 0x1F3D     | Flash/EEPROM| -    |
+  | AT49BV001,AT49BV001…| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49BV001AN,AT49BV0…| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49BV001ANT,AT49BV…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49BV001AT,AT49BV0…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49BV002,AT49BV002…| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49BV002AN,AT49BV0…| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49BV002ANT,AT49BV…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49BV002AT,AT49BV0…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49BV010,AT49HBV01…| ATMEL            |   32 | 0x1F17     | Flash/EEPROM| -    |
+  | AT49BV020,AT49LV020 | ATMEL            |   32 | 0x1F0B     | Flash/EEPROM| -    |
+  | AT49BV040,AT49BV040…| ATMEL            |   32 | 0x1F13     | Flash/EEPROM| -    |
+  | AT49BV040T,AT49LV04…| ATMEL            |   32 | 0x1F12     | Flash/EEPROM| -    |
+  | AT49BV512,AT49LV512 | ATMEL            |   32 | 0x1F03     | Flash/EEPROM| -    |
+  | AT49F001,AT49F001A  | ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49F001AN,AT49F001N| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49F001ANT,AT49F00…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49F001AT,AT49F001T| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49F002,AT49F002A  | ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49F002AN,AT49F002N| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49F002ANT,AT49F00…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49F002AT,AT49F002T| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49F010,AT49HF010  | ATMEL            |   32 | 0x1F17     | Flash/EEPROM| -    |
+  | AT49F020            | ATMEL            |   32 | 0x1F0B     | Flash/EEPROM| -    |
+  | AT49F040,AT49F040A  | ATMEL            |   32 | 0x1F13     | Flash/EEPROM| -    |
+  | AT49F040T           | ATMEL            |   32 | 0x1F12     | Flash/EEPROM| -    |
+  | AT49F512            | ATMEL            |   32 | 0x1F03     | Flash/EEPROM| -    |
   | CAT27010            | CATALYST(CSI)    |   32 |            | UV-EPROM    | 13.0v|
   | CAT2764A            | CATALYST(CSI)    |   28 |            | UV-EPROM    | 13.0v|
   | CAT27128A           | CATALYST(CSI)    |   28 |            | UV-EPROM    | 13.0v|
@@ -831,38 +878,38 @@
   | CAT27512            | CATALYST(CSI)    |   28 |            | UV-EPROM    | 13.0v|
   | CAT27C16            | CATALYST(CSI)    |   24 |            | UV-EPROM    | 13.0v|
   | CAT27HC256          | CATALYST(CSI)    |   28 | 0x3140     | UV-EPROM    | 13.0v|
-  | CAT28C16A,CAT28C16AI| CATALYST(CSI)    |   24 |            | EEPROM      | 12.0v|
-  | CAT28C17A           | CATALYST(CSI)    |   28 |            | EEPROM      | 12.0v|
-  | CAT28C256,CAT28C257 | CATALYST(CSI)    |   28 |            | EEPROM      | 12.0v|
-  | CAT28C64A,CAT28C65  | CATALYST(CSI)    |   28 |            | EEPROM      | 12.0v|
-  | CAT28C64B           | CATALYST(CSI)    |   28 |            | EEPROM      | 12.0v|
-  | CAT28C512           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| 12.0v|
-  | CAT28C010           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| 12.0v|
-  | CAT28C020           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| 12.0v|
-  | CAT28C040           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| 12.0v|
-  | CAT28LV64,CAT28LV65 | CATALYST(CSI)    |   28 |            | EEPROM      | 12.0v|
-  | CAT28LV256          | CATALYST(CSI)    |   28 |            | EEPROM      | 12.0v|
+  | CAT28C16A,CAT28C16AI| CATALYST(CSI)    |   24 |            | EEPROM      | -    |
+  | CAT28C17A           | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C256,CAT28C257 | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C64A,CAT28C65  | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C64B           | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C512           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28C010           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28C020           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28C040           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28LV64,CAT28LV65 | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28LV256          | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
   | CAT28F001P-B        | CATALYST(CSI)    |   32 | 0x3195     | Flash/EEPROM| 12.0v|
   | CAT28F001P-T        | CATALYST(CSI)    |   32 | 0x3194     | Flash/EEPROM| 12.0v|
   | CAT28F256           | CATALYST(CSI)    |   32 | 0x31B9     | Flash/EEPROM| 12.0v|
   | CAT28F512           | CATALYST(CSI)    |   32 | 0x31B8     | Flash/EEPROM| 12.0v|
   | CAT28F010           | CATALYST(CSI)    |   32 | 0x31B4     | Flash/EEPROM| 12.0v|
   | CAT28F020           | CATALYST(CSI)    |   32 | 0x31BD     | Flash/EEPROM| 12.0v|
-  | EN29F002AB,EN29F002B| CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F002ANT,EN29F00…| CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F002ANB,EN29F00…| CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F002AT,EN29F002T| CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F512            | CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F010            | CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F040,EN29F040A  | CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29LV040A          | CFEON            |   32 |            | Flash/EEPROM| 12.0v|
-  | PM29F002T           | CHINGIS          |   32 | 0x9D1D     | Flash/EEPROM| 12.0v|
-  | PM29F002B           | CHINGIS          |   32 | 0x9D2D     | Flash/EEPROM| 12.0v|
-  | PM29F004T           | CHINGIS          |   32 | 0x9D1E     | Flash/EEPROM| 12.0v|
-  | PM29F004B           | CHINGIS          |   32 | 0x9D2E     | Flash/EEPROM| 12.0v|
-  | PM39F010            | CHINGIS          |   32 | 0x9D1C     | Flash/EEPROM| 12.0v|
-  | PM39F020            | CHINGIS          |   32 | 0x9D4D     | Flash/EEPROM| 12.0v|
-  | PM39F040            | CHINGIS          |   32 | 0x9D4E     | Flash/EEPROM| 12.0v|
+  | EN29F002AB,EN29F002B| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F002ANT,EN29F00…| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F002ANB,EN29F00…| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F002AT,EN29F002T| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F512            | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F010            | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F040,EN29F040A  | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29LV040A          | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | PM29F002T           | CHINGIS          |   32 | 0x9D1D     | Flash/EEPROM| -    |
+  | PM29F002B           | CHINGIS          |   32 | 0x9D2D     | Flash/EEPROM| -    |
+  | PM29F004T           | CHINGIS          |   32 | 0x9D1E     | Flash/EEPROM| -    |
+  | PM29F004B           | CHINGIS          |   32 | 0x9D2E     | Flash/EEPROM| -    |
+  | PM39F010            | CHINGIS          |   32 | 0x9D1C     | Flash/EEPROM| -    |
+  | PM39F020            | CHINGIS          |   32 | 0x9D4D     | Flash/EEPROM| -    |
+  | PM39F040            | CHINGIS          |   32 | 0x9D4E     | Flash/EEPROM| -    |
   | CY27C010,CY27H010   | CYPRESS          |   32 | 0x341D     | UV-EPROM    | 12.0v|
   | CY27C020            | CYPRESS          |   32 |            | UV-EPROM    | 12.0v|
   | CY27C040            | CYPRESS          |   32 |            | UV-EPROM    | 12.0v|
@@ -871,7 +918,7 @@
   | CY27C512            | CYPRESS          |   28 |            | UV-EPROM    | 12.0v|
   | CY27H256            | CYPRESS          |   28 | 0x3421     | UV-EPROM    | 12.0v|
   | CY27H512            | CYPRESS          |   28 | 0x341F     | UV-EPROM    | 12.0v|
-  | FM28V020            | CYPRESS          |   28 |            | EEPROM      | 12.0v|
+  | FM28V020            | CYPRESS          |   28 |            | EEPROM      | -    |
   | DS1220(RW)          | DALLAS           |   24 |            | SRAM        | -    |
   | DS1220(TEST)        | DALLAS           |   24 |            | SRAM        | -    |
   | DS1225(RW)          | DALLAS           |   28 |            | SRAM        | -    |
@@ -895,22 +942,22 @@
   | DPV27C101           | DENSE-PAC        |   32 |            | UV-EPROM    | 12.0v|
   | DPV27C256           | DENSE-PAC        |   28 |            | UV-EPROM    | 12.0v|
   | DPV27C512           | DENSE-PAC        |   28 |            | UV-EPROM    | 12.0v|
-  | F49B002UA           | EFST             |   32 | 0x8C00     | Flash/EEPROM| 12.0v|
+  | F49B002UA           | EFST             |   32 | 0x8C00     | Flash/EEPROM| -    |
   | EN27C010            | EON              |   32 | 0x1C01     | UV-EPROM    | 12.0v|
   | EN27C512            | EON              |   28 | 0x1C83     | UV-EPROM    | 12.0v|
-  | EN29F002AB,EN29F002…| EON              |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F002ANT,EN29F00…| EON              |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F512            | EON              |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F010            | EON              |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29F040,EN29F040A  | EON              |   32 |            | Flash/EEPROM| 12.0v|
-  | EN29LV040A          | EON              |   32 |            | Flash/EEPROM| 12.0v|
-  | XL2804A             | EXEL             |   24 |            | EEPROM      | 12.0v|
-  | XL2816A,XLE28C16A,X…| EXEL             |   24 |            | EEPROM      | 12.0v|
-  | XLE2865A,XLS2865A   | EXEL             |   28 |            | EEPROM      | 12.0v|
-  | XLE28C16B,XLS28C16B | EXEL             |   24 |            | EEPROM      | 12.0v|
-  | XLE28C64A,XLS28C64A | EXEL             |   28 |            | EEPROM      | 12.0v|
-  | XLE28C64B,XLS28C64B | EXEL             |   28 |            | EEPROM      | 12.0v|
-  | XLE28C256,XLS28C256 | EXEL             |   28 |            | EEPROM      | 12.0v|
+  | EN29F002AB,EN29F002…| EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F002ANT,EN29F00…| EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F512            | EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F010            | EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F040,EN29F040A  | EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29LV040A          | EON              |   32 |            | Flash/EEPROM| -    |
+  | XL2804A             | EXEL             |   24 |            | EEPROM      | -    |
+  | XL2816A,XLE28C16A,X…| EXEL             |   24 |            | EEPROM      | -    |
+  | XLE2865A,XLS2865A   | EXEL             |   28 |            | EEPROM      | -    |
+  | XLE28C16B,XLS28C16B | EXEL             |   24 |            | EEPROM      | -    |
+  | XLE28C64A,XLS28C64A | EXEL             |   28 |            | EEPROM      | -    |
+  | XLE28C64B,XLS28C64B | EXEL             |   28 |            | EEPROM      | -    |
+  | XLE28C256,XLS28C256 | EXEL             |   28 |            | EEPROM      | -    |
   | FM27C010            | FAIRCHILD        |   32 | 0x8F86     | UV-EPROM    | 12.0v|
   | FM27C040            | FAIRCHILD        |   32 | 0x8F08     | UV-EPROM    | 12.0v|
   | FM27C256,NM27C256,N…| FAIRCHILD        |   28 | 0x8F04     | UV-EPROM    | 13.0v|
@@ -926,7 +973,7 @@
   | NMC27C16Q           | FAIRCHILD        |   24 |            | UV-EPROM    | 18.0v|
   | NMC27C32,NMC27C32E,…| FAIRCHILD        |   24 |            | UV-EPROM    | 18.0v|
   | NMC27C32B,NMC27C32BQ| FAIRCHILD        |   24 |            | UV-EPROM    | 13.0v|
-  | MB85R256H           | FUJITSU          |   28 |            | EEPROM      | 12.0v|
+  | MB85R256H           | FUJITSU          |   28 |            | EEPROM      | -    |
   | MBM2716             | FUJITSU          |   24 |            | UV-EPROM    | 12.0v|
   | MBM27128            | FUJITSU          |   28 |            | UV-EPROM    | 21.0v|
   | MBM27256            | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
@@ -942,9 +989,9 @@
   | MBM27C512           | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
   | MBM27C64            | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
   | MBM28F010           | FUJITSU          |   32 | 0x048F     | Flash/EEPROM| 12.0v|
-  | MBM29F002B          | FUJITSU          |   32 | 0x0434     | Flash/EEPROM| 12.0v|
-  | MBM29F002T          | FUJITSU          |   32 | 0x04B0     | Flash/EEPROM| 12.0v|
-  | MBM29F040           | FUJITSU          |   32 | 0x04A4     | Flash/EEPROM| 12.0v|
+  | MBM29F002B          | FUJITSU          |   32 | 0x0434     | Flash/EEPROM| -    |
+  | MBM29F002T          | FUJITSU          |   32 | 0x04B0     | Flash/EEPROM| -    |
+  | MBM29F040           | FUJITSU          |   32 | 0x04A4     | Flash/EEPROM| -    |
   | GR2764              | GREENWICH        |   28 |            | UV-EPROM    | 13.0v|
   | GR27128             | GREENWICH        |   28 |            | UV-EPROM    | 13.0v|
   | GR27256             | GREENWICH        |   28 |            | UV-EPROM    | 13.0v|
@@ -962,7 +1009,7 @@
   | HN27C64G            | HITACHI          |   28 |            | UV-EPROM    | 18.0v|
   | HN27C64FP           | HITACHI          |   28 | 0x0115     | UV-EPROM    | 18.0v|
   | HN28F101P,HN28F101FP| HITACHI          |   32 | 0x0719     | Flash/EEPROM| 12.0v|
-  | HN58C256AP          | HITACHI          |   28 |            | EEPROM      | 12.0v|
+  | HN58C256AP          | HITACHI          |   28 |            | EEPROM      | -    |
   | HT27C010            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
   | HT27C020            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
   | HT27C040            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
@@ -972,13 +1019,13 @@
   | HT27LC040           | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
   | HT27LC512           | HOLTEK           |   28 |            | UV-EPROM    | 12.0v|
   | HY27C64             | HYNIX            |   28 | 0x08A7     | UV-EPROM    | 13.0v|
-  | HY29F002T           | HYNIX            |   32 | 0xADB0     | Flash/EEPROM| 12.0v|
-  | HY29F040            | HYNIX            |   32 | 0xAD40     | Flash/EEPROM| 12.0v|
-  | HY29F040A,HY29F040T | HYNIX            |   32 | 0xADA4     | Flash/EEPROM| 12.0v|
+  | HY29F002T           | HYNIX            |   32 | 0xADB0     | Flash/EEPROM| -    |
+  | HY29F040            | HYNIX            |   32 | 0xAD40     | Flash/EEPROM| -    |
+  | HY29F040A,HY29F040T | HYNIX            |   32 | 0xADA4     | Flash/EEPROM| -    |
   | HY27C64             | HYUNDAI          |   28 | 0x08A7     | UV-EPROM    | 13.0v|
-  | HY29F002T           | HYUNDAI          |   32 | 0xADB0     | Flash/EEPROM| 12.0v|
-  | HY29F040            | HYUNDAI          |   32 | 0xAD40     | Flash/EEPROM| 12.0v|
-  | HY29F040A,HY29F040T | HYUNDAI          |   32 | 0xADA4     | Flash/EEPROM| 12.0v|
+  | HY29F002T           | HYUNDAI          |   32 | 0xADB0     | Flash/EEPROM| -    |
+  | HY29F040            | HYUNDAI          |   32 | 0xAD40     | Flash/EEPROM| -    |
+  | HY29F040A,HY29F040T | HYUNDAI          |   32 | 0xADA4     | Flash/EEPROM| -    |
   | ICE27C010,ICE27LC010| ICE              |   32 |            | UV-EPROM    | 13.0v|
   | ICE27C020,ICE27LC020| ICE              |   32 |            | UV-EPROM    | 13.0v|
   | ICE27C512,ICE27LC512| ICE              |   28 |            | UV-EPROM    | 13.0v|
@@ -986,12 +1033,12 @@
   | 27CX256             | ICMIC            |   28 | 0x0110     | UV-EPROM    | 12.0v|
   | 27CX010             | ICT              |   32 | 0x010E     | UV-EPROM    | 12.0v|
   | 27CX256             | ICT              |   28 | 0x0110     | UV-EPROM    | 12.0v|
-  | IM29F001B           | IMT              |   32 | 0x7FA3     | Flash/EEPROM| 12.0v|
-  | IM29F001T           | IMT              |   32 | 0x7FA0     | Flash/EEPROM| 12.0v|
-  | IM29F002B           | IMT              |   32 | 0x7FA2     | Flash/EEPROM| 12.0v|
-  | IM29F002T           | IMT              |   32 | 0x7FA1     | Flash/EEPROM| 12.0v|
-  | IM29LV004B          | IMT              |   32 | 0x7FA8     | Flash/EEPROM| 12.0v|
-  | IM29LV004T          | IMT              |   32 | 0x7FA7     | Flash/EEPROM| 12.0v|
+  | IM29F001B           | IMT              |   32 | 0x7FA3     | Flash/EEPROM| -    |
+  | IM29F001T           | IMT              |   32 | 0x7FA0     | Flash/EEPROM| -    |
+  | IM29F002B           | IMT              |   32 | 0x7FA2     | Flash/EEPROM| -    |
+  | IM29F002T           | IMT              |   32 | 0x7FA1     | Flash/EEPROM| -    |
+  | IM29LV004B          | IMT              |   32 | 0x7FA8     | Flash/EEPROM| -    |
+  | IM29LV004T          | IMT              |   32 | 0x7FA7     | Flash/EEPROM| -    |
   | D27011              | INTEL            |   28 | 0x8985     | UV-EPROM    | 13.0v|
   | D27C011             | INTEL            |   28 | 0x8931     | UV-EPROM    | 13.0v|
   | 2732,2732A,M2732,M2…| INTEL            |   24 |            | UV-EPROM    | 25.0v|
@@ -1030,15 +1077,15 @@
   | LG28C010            | LINKAGE          |   32 |            | EEPROM      | 12.0v|
   | LG28C020            | LINKAGE          |   32 |            | EEPROM      | 12.0v|
   | LG28C040            | LINKAGE          |   32 |            | EEPROM      | 12.0v|
-  | LST28001            | LINKSMART        |   32 | 0x4001     | Flash/EEPROM| 12.0v|
-  | LST28002            | LINKSMART        |   32 | 0x4002     | Flash/EEPROM| 12.0v|
-  | LST28004            | LINKSMART        |   32 | 0x4003     | Flash/EEPROM| 12.0v|
+  | LST28001            | LINKSMART        |   32 | 0x4001     | Flash/EEPROM| -    |
+  | LST28002            | LINKSMART        |   32 | 0x4002     | Flash/EEPROM| -    |
+  | LST28004            | LINKSMART        |   32 | 0x4003     | Flash/EEPROM| -    |
   | MX26C1000           | MACRONIX(MXIC)   |   32 | 0xC2D2     | EEPROM      | 12.0v|
   | MX26C2000           | MACRONIX(MXIC)   |   32 | 0xC2C3     | EEPROM      | 12.0v|
   | MX26C4000           | MACRONIX(MXIC)   |   32 | 0xC2C0     | EEPROM      | 12.0v|
-  | MX26LV004B          | MACRONIX(MXIC)   |   32 | 0xC2B6     | Flash/EEPROM| 12.0v|
-  | MX26LV004T          | MACRONIX(MXIC)   |   32 | 0xC2B5     | Flash/EEPROM| 12.0v|
-  | MX26LV040           | MACRONIX(MXIC)   |   32 | 0xC24F     | Flash/EEPROM| 12.0v|
+  | MX26LV004B          | MACRONIX(MXIC)   |   32 | 0xC2B6     | Flash/EEPROM| -    |
+  | MX26LV004T          | MACRONIX(MXIC)   |   32 | 0xC2B5     | Flash/EEPROM| -    |
+  | MX26LV040           | MACRONIX(MXIC)   |   32 | 0xC24F     | Flash/EEPROM| -    |
   | MX27C1000           | MACRONIX(MXIC)   |   32 | 0xC20E     | UV-EPROM    | 13.0v|
   | MX27C1000A          | MACRONIX(MXIC)   |   32 | 0xC2CA     | UV-EPROM    | 13.0v|
   | MX27C2000           | MACRONIX(MXIC)   |   32 | 0xC220     | UV-EPROM    | 13.0v|
@@ -1057,24 +1104,24 @@
   | MX28F1000P          | MACRONIX(MXIC)   |   32 | 0xC21A     | Flash/EEPROM| 12.0v|
   | MX28F2000P          | MACRONIX(MXIC)   |   32 | 0xC22A     | Flash/EEPROM| 12.0v|
   | MX28F2000T          | MACRONIX(MXIC)   |   32 | 0xC23C     | Flash/EEPROM| 12.0v|
-  | MX29F001B           | MACRONIX(MXIC)   |   32 | 0xC219     | Flash/EEPROM| 12.0v|
-  | MX29F001T           | MACRONIX(MXIC)   |   32 | 0xC218     | Flash/EEPROM| 12.0v|
-  | MX29F002B           | MACRONIX(MXIC)   |   32 | 0xC234     | Flash/EEPROM| 12.0v|
-  | MX29F002NB          | MACRONIX(MXIC)   |   32 | 0xC234     | Flash/EEPROM| 12.0v|
-  | MX29F002NT          | MACRONIX(MXIC)   |   32 | 0xC2B0     | Flash/EEPROM| 12.0v|
-  | MX29F002T           | MACRONIX(MXIC)   |   32 | 0xC2B0     | Flash/EEPROM| 12.0v|
-  | MX29F004B           | MACRONIX(MXIC)   |   32 | 0xC246     | Flash/EEPROM| 12.0v|
-  | MX29F004T           | MACRONIX(MXIC)   |   32 | 0xC245     | Flash/EEPROM| 12.0v|
-  | MX29F022B           | MACRONIX(MXIC)   |   32 | 0xC237     | Flash/EEPROM| 12.0v|
-  | MX29F022NB          | MACRONIX(MXIC)   |   32 | 0xC237     | Flash/EEPROM| 12.0v|
-  | MX29F022NT          | MACRONIX(MXIC)   |   32 | 0xC236     | Flash/EEPROM| 12.0v|
-  | MX29F022T           | MACRONIX(MXIC)   |   32 | 0xC236     | Flash/EEPROM| 12.0v|
-  | MX29F040,MX29F040C  | MACRONIX(MXIC)   |   32 | 0xC2A4     | Flash/EEPROM| 12.0v|
-  | MX29LV002CB         | MACRONIX(MXIC)   |   32 | 0xC25A     | Flash/EEPROM| 12.0v|
-  | MX29LV002NCB        | MACRONIX(MXIC)   |   32 | 0xC25A     | Flash/EEPROM| 12.0v|
-  | MX29LV002NCT        | MACRONIX(MXIC)   |   32 | 0xC259     | Flash/EEPROM| 12.0v|
-  | MX29LV002CT         | MACRONIX(MXIC)   |   32 | 0xC259     | Flash/EEPROM| 12.0v|
-  | 28C010,28C010T,28C0…| MAXWELL          |   32 |            | Flash/EEPROM| 12.0v|
+  | MX29F001B           | MACRONIX(MXIC)   |   32 | 0xC219     | Flash/EEPROM| -    |
+  | MX29F001T           | MACRONIX(MXIC)   |   32 | 0xC218     | Flash/EEPROM| -    |
+  | MX29F002B           | MACRONIX(MXIC)   |   32 | 0xC234     | Flash/EEPROM| -    |
+  | MX29F002NB          | MACRONIX(MXIC)   |   32 | 0xC234     | Flash/EEPROM| -    |
+  | MX29F002NT          | MACRONIX(MXIC)   |   32 | 0xC2B0     | Flash/EEPROM| -    |
+  | MX29F002T           | MACRONIX(MXIC)   |   32 | 0xC2B0     | Flash/EEPROM| -    |
+  | MX29F004B           | MACRONIX(MXIC)   |   32 | 0xC246     | Flash/EEPROM| -    |
+  | MX29F004T           | MACRONIX(MXIC)   |   32 | 0xC245     | Flash/EEPROM| -    |
+  | MX29F022B           | MACRONIX(MXIC)   |   32 | 0xC237     | Flash/EEPROM| -    |
+  | MX29F022NB          | MACRONIX(MXIC)   |   32 | 0xC237     | Flash/EEPROM| -    |
+  | MX29F022NT          | MACRONIX(MXIC)   |   32 | 0xC236     | Flash/EEPROM| -    |
+  | MX29F022T           | MACRONIX(MXIC)   |   32 | 0xC236     | Flash/EEPROM| -    |
+  | MX29F040,MX29F040C  | MACRONIX(MXIC)   |   32 | 0xC2A4     | Flash/EEPROM| -    |
+  | MX29LV002CB         | MACRONIX(MXIC)   |   32 | 0xC25A     | Flash/EEPROM| -    |
+  | MX29LV002NCB        | MACRONIX(MXIC)   |   32 | 0xC25A     | Flash/EEPROM| -    |
+  | MX29LV002NCT        | MACRONIX(MXIC)   |   32 | 0xC259     | Flash/EEPROM| -    |
+  | MX29LV002CT         | MACRONIX(MXIC)   |   32 | 0xC259     | Flash/EEPROM| -    |
+  | 28C010,28C010T,28C0…| MAXWELL          |   32 |            | Flash/EEPROM| -    |
   | 27C128              | MICROCHIP memory |   28 | 0x2983     | UV-EPROM    | 13.0v|
   | 27C256,27LV256      | MICROCHIP memory |   28 | 0x298C     | UV-EPROM    | 13.0v|
   | 27C32A              | MICROCHIP memory |   24 |            | UV-EPROM    | 12.0v|
@@ -1083,40 +1130,40 @@
   | 27C64,27LV64        | MICROCHIP memory |   28 | 0x2902     | UV-EPROM    | 13.0v|
   | 27HC256,27HC256L    | MICROCHIP memory |   28 | 0x2994     | UV-EPROM    | 13.0v|
   | 27HC64              | MICROCHIP memory |   28 | 0x2991     | UV-EPROM    | 13.0v|
-  | 2804                | MICROCHIP memory |   24 |            | EEPROM      | 12.0v|
-  | 2816                | MICROCHIP memory |   24 |            | EEPROM      | 12.0v|
-  | 2817                | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
-  | 28C04A              | MICROCHIP memory |   24 |            | EEPROM      | 12.0v|
-  | 28C04AF             | MICROCHIP memory |   24 |            | EEPROM      | 12.0v|
-  | 28C16A              | MICROCHIP memory |   24 |            | EEPROM      | 12.0v|
-  | 28C16AF             | MICROCHIP memory |   24 |            | EEPROM      | 12.0v|
-  | 28C17A              | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
-  | 28C17AF             | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
-  | 28C256,28C256F      | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
-  | 28C64A              | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
-  | 28C64AF             | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
-  | 28C64B              | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
-  | 28LV64A             | MICROCHIP memory |   28 |            | EEPROM      | 12.0v|
+  | 2804                | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 2816                | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 2817                | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C04A              | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C04AF             | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C16A              | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C16AF             | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C17A              | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C17AF             | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C256,28C256F      | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C64A              | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C64AF             | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C64B              | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28LV64A             | MICROCHIP memory |   28 |            | EEPROM      | -    |
   | M5L27256K           | MITSUBISHI       |   28 |            | UV-EPROM    | 12.0v|
   | M5M27C101K          | MITSUBISHI       |   32 | 0x1C83     | UV-EPROM    | 12.5v|
   | M5M27C128           | MITSUBISHI       |   28 |            | UV-EPROM    | 18.0v|
   | M5M27C256K          | MITSUBISHI       |   28 |            | UV-EPROM    | 12.0v|
   | M5M28F101,M5M28F101A| MITSUBISHI       |   32 | 0x1CD0     | Flash/EEPROM| 12.0v|
-  | V29C31001B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| 12.0v|
-  | V29C31001T          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| 12.0v|
-  | V29C31002B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| 12.0v|
-  | V29C31002T          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| 12.0v|
-  | V29C31004B          | MOSEL VITELIC    |   32 | 0x4073     | Flash/EEPROM| 12.0v|
-  | V29C31004T          | MOSEL VITELIC    |   32 | 0x4063     | Flash/EEPROM| 12.0v|
-  | V29C51001B          | MOSEL VITELIC    |   32 | 0x40A1     | Flash/EEPROM| 12.0v|
-  | V29C51001T          | MOSEL VITELIC    |   32 | 0x4001     | Flash/EEPROM| 12.0v|
-  | V29C51002B          | MOSEL VITELIC    |   32 | 0x40A2     | Flash/EEPROM| 12.0v|
-  | V29C51002T          | MOSEL VITELIC    |   32 | 0x4002     | Flash/EEPROM| 12.0v|
-  | V29C51004B          | MOSEL VITELIC    |   32 | 0x40A3     | Flash/EEPROM| 12.0v|
-  | V29C51004T          | MOSEL VITELIC    |   32 | 0x4003     | Flash/EEPROM| 12.0v|
-  | V29LC51000          | MOSEL VITELIC    |   32 | 0x4020     | Flash/EEPROM| 12.0v|
-  | V29LC51001          | MOSEL VITELIC    |   32 | 0x4060     | Flash/EEPROM| 12.0v|
-  | V29LC51002          | MOSEL VITELIC    |   32 | 0x4082     | Flash/EEPROM| 12.0v|
+  | V29C31001B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31001T          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31002B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31002T          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31004B          | MOSEL VITELIC    |   32 | 0x4073     | Flash/EEPROM| -    |
+  | V29C31004T          | MOSEL VITELIC    |   32 | 0x4063     | Flash/EEPROM| -    |
+  | V29C51001B          | MOSEL VITELIC    |   32 | 0x40A1     | Flash/EEPROM| -    |
+  | V29C51001T          | MOSEL VITELIC    |   32 | 0x4001     | Flash/EEPROM| -    |
+  | V29C51002B          | MOSEL VITELIC    |   32 | 0x40A2     | Flash/EEPROM| -    |
+  | V29C51002T          | MOSEL VITELIC    |   32 | 0x4002     | Flash/EEPROM| -    |
+  | V29C51004B          | MOSEL VITELIC    |   32 | 0x40A3     | Flash/EEPROM| -    |
+  | V29C51004T          | MOSEL VITELIC    |   32 | 0x4003     | Flash/EEPROM| -    |
+  | V29LC51000          | MOSEL VITELIC    |   32 | 0x4020     | Flash/EEPROM| -    |
+  | V29LC51001          | MOSEL VITELIC    |   32 | 0x4060     | Flash/EEPROM| -    |
+  | V29LC51002          | MOSEL VITELIC    |   32 | 0x4082     | Flash/EEPROM| -    |
   | UPD27128            | NEC              |   28 |            | UV-EPROM    | 12.0v|
   | UPD27256            | NEC              |   28 |            | UV-EPROM    | 12.0v|
   | UPD27512            | NEC              |   28 |            | UV-EPROM    | 12.0v|
@@ -1128,10 +1175,10 @@
   | UPD27C4001          | NEC              |   32 |            | UV-EPROM    | 12.0v|
   | UPD27C512           | NEC              |   28 |            | UV-EPROM    | 12.0v|
   | UPD27C8001          | NEC              |   32 |            | UV-EPROM    | 12.0v|
-  | UPD28C04            | NEC              |   24 |            | EEPROM      | 12.0v|
-  | UPD28C256           | NEC              |   28 |            | EEPROM      | 12.0v|
-  | UPD28C64            | NEC              |   28 |            | EEPROM      | 12.0v|
-  | NX29F010            | NEXFLASH         |   32 | 0x0120     | Flash/EEPROM| 12.0v|
+  | UPD28C04            | NEC              |   24 |            | EEPROM      | -    |
+  | UPD28C256           | NEC              |   28 |            | EEPROM      | -    |
+  | UPD28C64            | NEC              |   28 |            | EEPROM      | -    |
+  | NX29F010            | NEXFLASH         |   32 | 0x0120     | Flash/EEPROM| -    |
   | NM27C010            | NSC              |   32 | 0x8F86     | UV-EPROM    | 13.0v|
   | NM27C020            | NSC              |   32 | 0x8F07     | UV-EPROM    | 13.0v|
   | NM27C040            | NSC              |   32 | 0x8F08     | UV-EPROM    | 13.0v|
@@ -1161,13 +1208,13 @@
   | 27C040              | PHILIPS          |   32 | 0xF53E     | UV-EPROM    | 12.0v|
   | 27C256              | PHILIPS          |   28 |            | UV-EPROM    | 12.0v|
   | 27C512              | PHILIPS          |   28 |            | UV-EPROM    | 12.0v|
-  | PM29F002T           | PMC              |   32 | 0x9D1D     | Flash/EEPROM| 12.0v|
-  | PM29F002B           | PMC              |   32 | 0x9D2D     | Flash/EEPROM| 12.0v|
-  | PM29F004T           | PMC              |   32 | 0x9D1E     | Flash/EEPROM| 12.0v|
-  | PM29F004B           | PMC              |   32 | 0x9D2E     | Flash/EEPROM| 12.0v|
-  | PM39F010            | PMC              |   32 | 0x9D1C     | Flash/EEPROM| 12.0v|
-  | PM39F020            | PMC              |   32 | 0x9D4D     | Flash/EEPROM| 12.0v|
-  | PM39F040            | PMC              |   32 | 0x9D4E     | Flash/EEPROM| 12.0v|
+  | PM29F002T           | PMC              |   32 | 0x9D1D     | Flash/EEPROM| -    |
+  | PM29F002B           | PMC              |   32 | 0x9D2D     | Flash/EEPROM| -    |
+  | PM29F004T           | PMC              |   32 | 0x9D1E     | Flash/EEPROM| -    |
+  | PM29F004B           | PMC              |   32 | 0x9D2E     | Flash/EEPROM| -    |
+  | PM39F010            | PMC              |   32 | 0x9D1C     | Flash/EEPROM| -    |
+  | PM39F020            | PMC              |   32 | 0x9D4D     | Flash/EEPROM| -    |
+  | PM39F040            | PMC              |   32 | 0x9D4E     | Flash/EEPROM| -    |
   | PT28C010            | PTC              |   32 |            | EEPROM      | 12.0v|
   | PT28C020            | PTC              |   32 |            | EEPROM      | 12.0v|
   | PT28C040            | PTC              |   32 |            | EEPROM      | 12.0v|
@@ -1176,8 +1223,8 @@
   | FM16W08             | RAMTRON          |   28 |            | SRAM        | -    |
   | FM1808,FM1808B,FM18…| RAMTRON          |   28 |            | SRAM        | -    |
   | FM18L08             | RAMTRON          |   28 |            | SRAM        | -    |
-  | KM28C64             | SAMSUNG          |   28 |            | EEPROM      | 12.0v|
-  | KM28C64A,KM28C65A   | SAMSUNG          |   28 |            | EEPROM      | 12.0v|
+  | KM28C64             | SAMSUNG          |   28 |            | EEPROM      | -    |
+  | KM28C64A,KM28C65A   | SAMSUNG          |   28 |            | EEPROM      | -    |
   | ETC2716,M2716       | SGS-THOMSON      |   24 |            | UV-EPROM    | 25.0v|
   | ETC2732             | SGS-THOMSON      |   24 |            | UV-EPROM    | 18.0v|
   | M23C1001            | SGS-THOMSON      |   32 |            | UV-EPROM    | 12.0v|
@@ -1196,20 +1243,20 @@
   | M27C512,M27V512     | SGS-THOMSON      |   28 | 0x203D     | UV-EPROM    | 13.0v|
   | M27C64A             | SGS-THOMSON      |   28 | 0x9B08     | UV-EPROM    | 12.0v|
   | M27C801             | SGS-THOMSON      |   32 | 0x2042     | UV-EPROM    | 13.0v|
-  | M28010              | SGS-THOMSON      |   32 |            | Flash/EEPROM| 12.0v|
-  | M28C64,M28C64A      | SGS-THOMSON      |   28 |            | EEPROM      | 12.0v|
-  | M28C64-xxW          | SGS-THOMSON      |   28 |            | EEPROM      | 12.0v|
+  | M28010              | SGS-THOMSON      |   32 |            | Flash/EEPROM| -    |
+  | M28C64,M28C64A      | SGS-THOMSON      |   28 |            | EEPROM      | -    |
+  | M28C64-xxW          | SGS-THOMSON      |   28 |            | EEPROM      | -    |
   | M28F101             | SGS-THOMSON      |   32 | 0x2007     | Flash/EEPROM| 12.0v|
   | M28F201             | SGS-THOMSON      |   32 | 0x20F4     | Flash/EEPROM| 12.0v|
   | M28F256             | SGS-THOMSON      |   32 | 0x20A8     | Flash/EEPROM| 12.0v|
   | M28F512,M28F512B,M2…| SGS-THOMSON      |   32 | 0x2002     | Flash/EEPROM| 12.0v|
-  | M29F002B,M29F002BB  | SGS-THOMSON      |   32 | 0x2034     | Flash/EEPROM| 12.0v|
-  | M29F002BT,M29F002T  | SGS-THOMSON      |   32 | 0x20B0     | Flash/EEPROM| 12.0v|
-  | M29F002BNT,M29F002NT| SGS-THOMSON      |   32 | 0x20B0     | Flash/EEPROM| 12.0v|
-  | M29F002BNB          | SGS-THOMSON      |   32 | 0x2034     | Flash/EEPROM| 12.0v|
-  | M29F010B            | SGS-THOMSON      |   32 | 0x2020     | Flash/EEPROM| 12.0v|
-  | M29F040B            | SGS-THOMSON      |   32 | 0x20E2     | Flash/EEPROM| 12.0v|
-  | M29F512B            | SGS-THOMSON      |   32 | 0x2024     | Flash/EEPROM| 12.0v|
+  | M29F002B,M29F002BB  | SGS-THOMSON      |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F002BT,M29F002T  | SGS-THOMSON      |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNT,M29F002NT| SGS-THOMSON      |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNB          | SGS-THOMSON      |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F010B            | SGS-THOMSON      |   32 | 0x2020     | Flash/EEPROM| -    |
+  | M29F040B            | SGS-THOMSON      |   32 | 0x20E2     | Flash/EEPROM| -    |
+  | M29F512B            | SGS-THOMSON      |   32 | 0x2024     | Flash/EEPROM| -    |
   | M87C257             | SGS-THOMSON      |   28 | 0x2080     | UV-EPROM    | 13.0v|
   | M87C257(8D)         | SGS-THOMSON      |   28 | 0x208D     | UV-EPROM    | 13.0v|
   | ST27128A            | SGS-THOMSON      |   28 | 0x2089     | UV-EPROM    | 12.0v|
@@ -1227,15 +1274,15 @@
   | M48T128V,M48T129V,M…| SGS-THOMSON      |   32 |            | SRAM        | -    |
   | M48T512Y,M48T513Y,M…| SGS-THOMSON      |   32 |            | SRAM        | -    |
   | M48T512V,M48T513V,M…| SGS-THOMSON      |   32 |            | SRAM        | -    |
-  | AM29F002B,AM29F002BB| SPANSION(1)      |   32 | 0x0134     | Flash/EEPROM| 12.0v|
-  | AM29F002BT,AM29F002T| SPANSION(1)      |   32 | 0x01B0     | Flash/EEPROM| 12.0v|
-  | AM29F002NB,AM29F002…| SPANSION(1)      |   32 | 0x0134     | Flash/EEPROM| 12.0v|
-  | AM29F002NBT,AM29F00…| SPANSION(1)      |   32 | 0x01B0     | Flash/EEPROM| 12.0v|
-  | AM29F010,AM29F010B  | SPANSION(1)      |   32 | 0x0120     | Flash/EEPROM| 12.0v|
-  | AM29F040,AM29F040B  | SPANSION(1)      |   32 | 0x01A4     | Flash/EEPROM| 12.0v|
-  | MBM29F002B          | SPANSION(1)      |   32 | 0x0434     | Flash/EEPROM| 12.0v|
-  | MBM29F002T          | SPANSION(1)      |   32 | 0x04B0     | Flash/EEPROM| 12.0v|
-  | MBM29F040           | SPANSION(1)      |   32 | 0x04A4     | Flash/EEPROM| 12.0v|
+  | AM29F002B,AM29F002BB| SPANSION(1)      |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002BT,AM29F002T| SPANSION(1)      |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F002NB,AM29F002…| SPANSION(1)      |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002NBT,AM29F00…| SPANSION(1)      |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F010,AM29F010B  | SPANSION(1)      |   32 | 0x0120     | Flash/EEPROM| -    |
+  | AM29F040,AM29F040B  | SPANSION(1)      |   32 | 0x01A4     | Flash/EEPROM| -    |
+  | MBM29F002B          | SPANSION(1)      |   32 | 0x0434     | Flash/EEPROM| -    |
+  | MBM29F002T          | SPANSION(1)      |   32 | 0x04B0     | Flash/EEPROM| -    |
+  | MBM29F040           | SPANSION(1)      |   32 | 0x04A4     | Flash/EEPROM| -    |
   | SST27SF010          | SST              |   32 | 0xBFA5     | EEPROM      | 12.0v|
   | SST27SF020          | SST              |   32 | 0xBFA6     | EEPROM      | 12.0v|
   | SST27SF256          | SST              |   28 | 0xBFA3     | EEPROM      | 12.0v|
@@ -1246,33 +1293,33 @@
   | SST27VF512          | SST              |   28 | 0xBFA8     | EEPROM      | 12.0v|
   | SST28LF040,SST28LF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| 12.0v|
   | SST28SF040,SST28SF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| 12.0v|
-  | SST29EE010          | SST              |   32 | 0xBF07     | Flash/EEPROM| 12.0v|
-  | SST29EE020          | SST              |   32 | 0xBF10     | Flash/EEPROM| 12.0v|
-  | SST29EE512          | SST              |   32 | 0xBF5D     | Flash/EEPROM| 12.0v|
-  | SST29LE010,SST29VE0…| SST              |   32 | 0xBF08     | Flash/EEPROM| 12.0v|
-  | SST29LE020,SST29VE0…| SST              |   32 | 0xBF12     | Flash/EEPROM| 12.0v|
-  | SST29LE512,SST29VE5…| SST              |   32 | 0xBF3D     | Flash/EEPROM| 12.0v|
-  | SST29SF010          | SST              |   32 | 0xBF22     | Flash/EEPROM| 12.0v|
-  | SST29SF020          | SST              |   32 | 0xBF24     | Flash/EEPROM| 12.0v|
-  | SST29SF040          | SST              |   32 | 0xBF13     | Flash/EEPROM| 12.0v|
-  | SST29SF512          | SST              |   32 | 0xBF20     | Flash/EEPROM| 12.0v|
-  | SST29VF010          | SST              |   32 | 0xBF23     | Flash/EEPROM| 12.0v|
-  | SST29VF020          | SST              |   32 | 0xBF25     | Flash/EEPROM| 12.0v|
-  | SST29VF040          | SST              |   32 | 0xBF14     | Flash/EEPROM| 12.0v|
-  | SST29VF512          | SST              |   32 | 0xBF21     | Flash/EEPROM| 12.0v|
+  | SST29EE010          | SST              |   32 | 0xBF07     | Flash/EEPROM| -    |
+  | SST29EE020          | SST              |   32 | 0xBF10     | Flash/EEPROM| -    |
+  | SST29EE512          | SST              |   32 | 0xBF5D     | Flash/EEPROM| -    |
+  | SST29LE010,SST29VE0…| SST              |   32 | 0xBF08     | Flash/EEPROM| -    |
+  | SST29LE020,SST29VE0…| SST              |   32 | 0xBF12     | Flash/EEPROM| -    |
+  | SST29LE512,SST29VE5…| SST              |   32 | 0xBF3D     | Flash/EEPROM| -    |
+  | SST29SF010          | SST              |   32 | 0xBF22     | Flash/EEPROM| -    |
+  | SST29SF020          | SST              |   32 | 0xBF24     | Flash/EEPROM| -    |
+  | SST29SF040          | SST              |   32 | 0xBF13     | Flash/EEPROM| -    |
+  | SST29SF512          | SST              |   32 | 0xBF20     | Flash/EEPROM| -    |
+  | SST29VF010          | SST              |   32 | 0xBF23     | Flash/EEPROM| -    |
+  | SST29VF020          | SST              |   32 | 0xBF25     | Flash/EEPROM| -    |
+  | SST29VF040          | SST              |   32 | 0xBF14     | Flash/EEPROM| -    |
+  | SST29VF512          | SST              |   32 | 0xBF21     | Flash/EEPROM| -    |
   | SST37VF010          | SST              |   32 | 0xBFC5     | EEPROM      | 12.0v|
   | SST37VF020          | SST              |   32 | 0xBFC6     | EEPROM      | 12.0v|
   | SST37VF040          | SST              |   32 | 0xBFC2     | EEPROM      | 12.0v|
   | SST37VF512          | SST              |   32 | 0xBFC4     | EEPROM      | 12.0v|
-  | SST39LH010,SST39VF0…| SST              |   32 | 0xBFD5     | Flash/EEPROM| 12.0v|
-  | SST39LH020,SST39VF0…| SST              |   32 | 0xBFD6     | Flash/EEPROM| 12.0v|
-  | SST39LH040          | SST              |   32 | 0xBFD7     | Flash/EEPROM| 12.0v|
-  | SST39LH512,SST39VF5…| SST              |   32 | 0xBFD4     | Flash/EEPROM| 12.0v|
-  | SST39SF010,SST39SF0…| SST              |   32 | 0xBFB5     | Flash/EEPROM| 12.0v|
-  | SST39SF020,SST39SF0…| SST              |   32 | 0xBFB6     | Flash/EEPROM| 12.0v|
-  | SST39SF040          | SST              |   32 | 0xBFB7     | Flash/EEPROM| 12.0v|
-  | SST39SF512,SST39SF5…| SST              |   32 | 0xBFB4     | Flash/EEPROM| 12.0v|
-  | SST39VF040,SST39VF0…| SST              |   32 | 0xBFD7     | Flash/EEPROM| 12.0v|
+  | SST39LH010,SST39VF0…| SST              |   32 | 0xBFD5     | Flash/EEPROM| -    |
+  | SST39LH020,SST39VF0…| SST              |   32 | 0xBFD6     | Flash/EEPROM| -    |
+  | SST39LH040          | SST              |   32 | 0xBFD7     | Flash/EEPROM| -    |
+  | SST39LH512,SST39VF5…| SST              |   32 | 0xBFD4     | Flash/EEPROM| -    |
+  | SST39SF010,SST39SF0…| SST              |   32 | 0xBFB5     | Flash/EEPROM| -    |
+  | SST39SF020,SST39SF0…| SST              |   32 | 0xBFB6     | Flash/EEPROM| -    |
+  | SST39SF040          | SST              |   32 | 0xBFB7     | Flash/EEPROM| -    |
+  | SST39SF512,SST39SF5…| SST              |   32 | 0xBFB4     | Flash/EEPROM| -    |
+  | SST39VF040,SST39VF0…| SST              |   32 | 0xBFD7     | Flash/EEPROM| -    |
   | ETC2716,M2716       | ST               |   24 |            | UV-EPROM    | 25.0v|
   | ETC2732             | ST               |   24 |            | UV-EPROM    | 18.0v|
   | M27128A             | ST               |   28 | 0x2089     | UV-EPROM    | 12.0v|
@@ -1288,22 +1335,22 @@
   | M27C512,M27V512,M27…| ST               |   28 | 0x203D     | UV-EPROM    | 13.0v|
   | M27C64A             | ST               |   28 | 0x9B08     | UV-EPROM    | 12.0v|
   | M27C801             | ST               |   32 | 0x2042     | UV-EPROM    | 13.0v|
-  | M28010              | ST               |   32 |            | Flash/EEPROM| 12.0v|
-  | M28256              | ST               |   28 |            | EEPROM      | 12.0v|
-  | M28C64,M28C64A      | ST               |   28 |            | EEPROM      | 12.0v|
-  | M28C64-xxW          | ST               |   28 |            | EEPROM      | 12.0v|
+  | M28010              | ST               |   32 |            | Flash/EEPROM| -    |
+  | M28256              | ST               |   28 |            | EEPROM      | -    |
+  | M28C64,M28C64A      | ST               |   28 |            | EEPROM      | -    |
+  | M28C64-xxW          | ST               |   28 |            | EEPROM      | -    |
   | M28F101             | ST               |   32 | 0x2007     | Flash/EEPROM| 12.0v|
   | M28F201             | ST               |   32 | 0x20F4     | Flash/EEPROM| 12.0v|
   | M28F256             | ST               |   32 | 0x20A8     | Flash/EEPROM| 12.0v|
   | M28F512,M28F512B,M2…| ST               |   32 | 0x2002     | Flash/EEPROM| 12.0v|
-  | M28LV64             | ST               |   28 |            | EEPROM      | 12.0v|
-  | M29F002B,M29F002BB  | ST               |   32 | 0x2034     | Flash/EEPROM| 12.0v|
-  | M29F002BT,M29F002T  | ST               |   32 | 0x20B0     | Flash/EEPROM| 12.0v|
-  | M29F002BNT,M29F002NT| ST               |   32 | 0x20B0     | Flash/EEPROM| 12.0v|
-  | M29F002BNB          | ST               |   32 | 0x2034     | Flash/EEPROM| 12.0v|
-  | M29F010B            | ST               |   32 | 0x2020     | Flash/EEPROM| 12.0v|
-  | M29F040B            | ST               |   32 | 0x20E2     | Flash/EEPROM| 12.0v|
-  | M29F512B            | ST               |   32 | 0x2024     | Flash/EEPROM| 12.0v|
+  | M28LV64             | ST               |   28 |            | EEPROM      | -    |
+  | M29F002B,M29F002BB  | ST               |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F002BT,M29F002T  | ST               |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNT,M29F002NT| ST               |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNB          | ST               |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F010B            | ST               |   32 | 0x2020     | Flash/EEPROM| -    |
+  | M29F040B            | ST               |   32 | 0x20E2     | Flash/EEPROM| -    |
+  | M29F512B            | ST               |   32 | 0x2024     | Flash/EEPROM| -    |
   | M87C257             | ST               |   28 | 0x2080     | UV-EPROM    | 13.0v|
   | M87C257(8D)         | ST               |   28 | 0x208D     | UV-EPROM    | 13.0v|
   | ST27128A            | ST               |   28 | 0x2089     | UV-EPROM    | 12.0v|
@@ -1322,21 +1369,21 @@
   | M48T128V,M48T129V   | ST               |   32 |            | SRAM        | -    |
   | M48T512Y,M48T513Y   | ST               |   32 |            | SRAM        | -    |
   | M48T512V,M48T513V   | ST               |   32 |            | SRAM        | -    |
-  | F29C31004B,S29C3100…| SYNCMOS          |   32 | 0x4073     | Flash/EEPROM| 12.0v|
-  | F29C31004T,S29C3100…| SYNCMOS          |   32 | 0x4063     | Flash/EEPROM| 12.0v|
-  | F29C51001B,S29C5100…| SYNCMOS          |   32 | 0x40A1     | Flash/EEPROM| 12.0v|
-  | F29C51001T,S29C5100…| SYNCMOS          |   32 | 0x4001     | Flash/EEPROM| 12.0v|
-  | F29C51002B,S29C5100…| SYNCMOS          |   32 | 0x40A2     | Flash/EEPROM| 12.0v|
-  | F29C51002T,S29C5100…| SYNCMOS          |   32 | 0x4002     | Flash/EEPROM| 12.0v|
-  | F29C51004B,S29C5100…| SYNCMOS          |   32 | 0x40A3     | Flash/EEPROM| 12.0v|
-  | F29C51004T,S29C5100…| SYNCMOS          |   32 | 0x4003     | Flash/EEPROM| 12.0v|
-  | F29LC51000          | SYNCMOS          |   32 | 0x4020     | Flash/EEPROM| 12.0v|
-  | F29LC51001          | SYNCMOS          |   32 | 0x4060     | Flash/EEPROM| 12.0v|
-  | F29LC51002          | SYNCMOS          |   32 | 0x4082     | Flash/EEPROM| 12.0v|
-  | S29C31001B          | SYNCMOS          |   32 |            | Flash/EEPROM| 12.0v|
-  | S29C31001T          | SYNCMOS          |   32 |            | Flash/EEPROM| 12.0v|
-  | S29C31002B          | SYNCMOS          |   32 |            | Flash/EEPROM| 12.0v|
-  | S29C31002T          | SYNCMOS          |   32 |            | Flash/EEPROM| 12.0v|
+  | F29C31004B,S29C3100…| SYNCMOS          |   32 | 0x4073     | Flash/EEPROM| -    |
+  | F29C31004T,S29C3100…| SYNCMOS          |   32 | 0x4063     | Flash/EEPROM| -    |
+  | F29C51001B,S29C5100…| SYNCMOS          |   32 | 0x40A1     | Flash/EEPROM| -    |
+  | F29C51001T,S29C5100…| SYNCMOS          |   32 | 0x4001     | Flash/EEPROM| -    |
+  | F29C51002B,S29C5100…| SYNCMOS          |   32 | 0x40A2     | Flash/EEPROM| -    |
+  | F29C51002T,S29C5100…| SYNCMOS          |   32 | 0x4002     | Flash/EEPROM| -    |
+  | F29C51004B,S29C5100…| SYNCMOS          |   32 | 0x40A3     | Flash/EEPROM| -    |
+  | F29C51004T,S29C5100…| SYNCMOS          |   32 | 0x4003     | Flash/EEPROM| -    |
+  | F29LC51000          | SYNCMOS          |   32 | 0x4020     | Flash/EEPROM| -    |
+  | F29LC51001          | SYNCMOS          |   32 | 0x4060     | Flash/EEPROM| -    |
+  | F29LC51002          | SYNCMOS          |   32 | 0x4082     | Flash/EEPROM| -    |
+  | S29C31001B          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
+  | S29C31001T          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
+  | S29C31002B          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
+  | S29C31002T          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
   | 6116                | Standard SRAM    |   24 |            | SRAM        | -    |
   | 6164,6264           | Standard SRAM    |   28 |            | SRAM        | -    |
   | 61256,62256         | Standard SRAM    |   28 |            | SRAM        | -    |
@@ -1381,25 +1428,25 @@
   | TC54256AF,TC54256AP | TOSHIBA/KIOXIA   |   28 | 0x98C4     | UV-EPROM    | 12.0v|
   | TC57256D            | TOSHIBA/KIOXIA   |   28 | 0x9845     | UV-EPROM    | 13.0v|
   | TC57512AD           | TOSHIBA/KIOXIA   |   28 | 0x9885     | UV-EPROM    | 13.0v|
-  | WE128K8             | WED              |   32 |            | Flash/EEPROM| 12.0v|
-  | WE256K8             | WED              |   32 |            | Flash/EEPROM| 12.0v|
-  | WE512K8             | WED              |   32 |            | Flash/EEPROM| 12.0v|
-  | WME128K8            | WED              |   32 |            | Flash/EEPROM| 12.0v|
+  | WE128K8             | WED              |   32 |            | Flash/EEPROM| -    |
+  | WE256K8             | WED              |   32 |            | Flash/EEPROM| -    |
+  | WE512K8             | WED              |   32 |            | Flash/EEPROM| -    |
+  | WME128K8            | WED              |   32 |            | Flash/EEPROM| -    |
   | W27C01,W27C010,W27E…| WINBOND          |   32 | 0xDA01     | EEPROM      | 12.0v|
   | W27C02,W27C020,W27E…| WINBOND          |   32 | 0xDA85     | EEPROM      | 12.0v|
   | W27C04,W27C040,W27E…| WINBOND          |   32 | 0xDA86     | EEPROM      | 12.0v|
   | W27C257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   | W27C512,W27E512     | WINBOND          |   28 | 0xDA08     | EEPROM      | 12.0v|
   | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 13.5v|
-  | W29C010,W29C011,W29…| WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| 12.0v|
-  | W29C020,W29C020C,W2…| WINBOND          |   32 | 0xDA45     | Flash/EEPROM| 12.0v|
-  | W29C040,W29C042     | WINBOND          |   32 | 0xDA46     | Flash/EEPROM| 12.0v|
-  | W29C512,W29EE512    | WINBOND          |   32 | 0xDAC8     | Flash/EEPROM| 12.0v|
-  | W29EE011            | WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| 12.0v|
-  | W39F010             | WINBOND          |   32 | 0xDAA1     | Flash/EEPROM| 12.0v|
-  | W39L040A            | WINBOND          |   32 | 0xDAD6     | Flash/EEPROM| 12.0v|
-  | W49F002,W49F002A,W4…| WINBOND          |   32 | 0xDA0B     | Flash/EEPROM| 12.0v|
-  | W49F020             | WINBOND          |   32 | 0xDA8C     | Flash/EEPROM| 12.0v|
+  | W29C010,W29C011,W29…| WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| -    |
+  | W29C020,W29C020C,W2…| WINBOND          |   32 | 0xDA45     | Flash/EEPROM| -    |
+  | W29C040,W29C042     | WINBOND          |   32 | 0xDA46     | Flash/EEPROM| -    |
+  | W29C512,W29EE512    | WINBOND          |   32 | 0xDAC8     | Flash/EEPROM| -    |
+  | W29EE011            | WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| -    |
+  | W39F010             | WINBOND          |   32 | 0xDAA1     | Flash/EEPROM| -    |
+  | W39L040A            | WINBOND          |   32 | 0xDAD6     | Flash/EEPROM| -    |
+  | W49F002,W49F002A,W4…| WINBOND          |   32 | 0xDA0B     | Flash/EEPROM| -    |
+  | W49F020             | WINBOND          |   32 | 0xDA8C     | Flash/EEPROM| -    |
   | W24010              | WINBOND          |   32 |            | SRAM        | -    |
   | W24020              | WINBOND          |   32 |            | SRAM        | -    |
   | W24040              | WINBOND          |   32 |            | SRAM        | -    |
@@ -1414,15 +1461,15 @@
   | WS27C64             | WSI              |   28 |            | UV-EPROM    | 12.0v|
   | WS57C128FB          | WSI              |   28 |            | UV-EPROM    | 13.0v|
   | WS57C256F           | WSI              |   28 | 0x23E0     | UV-EPROM    | 12.0v|
-  | X2804A,X2804AI      | XICOR            |   24 |            | EEPROM      | 12.0v|
-  | X2816A              | XICOR            |   24 |            | EEPROM      | 12.0v|
-  | X2816B,X2816C       | XICOR            |   24 |            | EEPROM      | 12.0v|
-  | X28256,X28C256      | XICOR            |   28 |            | EEPROM      | 12.0v|
-  | X2864AP             | XICOR            |   28 |            | EEPROM      | 12.0v|
-  | X28C010             | XICOR            |   32 |            | Flash/EEPROM| 12.0v|
-  | X28C64,X28HC64      | XICOR            |   28 |            | EEPROM      | 12.0v|
-  | X28C64(NonStandard)…| XICOR            |   28 |            | EEPROM      | 12.0v|
-  | X88C64P,X88C64S     | XICOR            |   24 |            | EEPROM      | 12.0v|
+  | X2804A,X2804AI      | XICOR            |   24 |            | EEPROM      | -    |
+  | X2816A              | XICOR            |   24 |            | EEPROM      | -    |
+  | X2816B,X2816C       | XICOR            |   24 |            | EEPROM      | -    |
+  | X28256,X28C256      | XICOR            |   28 |            | EEPROM      | -    |
+  | X2864AP             | XICOR            |   28 |            | EEPROM      | -    |
+  | X28C010             | XICOR            |   32 |            | Flash/EEPROM| -    |
+  | X28C64,X28HC64      | XICOR            |   28 |            | EEPROM      | -    |
+  | X28C64(NonStandard)…| XICOR            |   28 |            | EEPROM      | -    |
+  | X88C64P,X88C64S     | XICOR            |   24 |            | EEPROM      | -    |
   +---------------------+------------------+------+------------+-------------+------+
   
   '''

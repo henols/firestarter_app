@@ -19,6 +19,7 @@ from typing import Any
 
 from firestarter.config import get_local_database, get_local_pin_maps
 from firestarter.constants import FLAG_CAN_ERASE
+from firestarter.erase_support import erase_accepted
 
 PROTOCOL_MAP = {
     0x05: "FLASH_AMD_STD",
@@ -572,11 +573,13 @@ class EpromDatabase:
         #
         # Restoring the flag does NOT make `write` erase implicitly -- erase stays a
         # standalone step.
+        #
+        # The rule is `erase_support.erase_accepted`. The `info` "Can be erased" line uses the
+        # same function.
         simple_flags = 0
         algo = programmer_data["algorithm"]  # already computed above from protocol-id
-        if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):
-            if algo not in (5,):
-                simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
+        if erase_accepted(full_eprom_data.get("electrical-type", ""), algo):
+            simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 
         return programmer_data

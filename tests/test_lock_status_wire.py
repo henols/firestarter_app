@@ -3,9 +3,7 @@
 Uses `conftest.py`'s existing frame-level harness -- `build_frame`, the
 `fake_serial` fixture, and the `make_comm` factory -- exactly as it already
 exists for `test_serial_comm.py`/`test_serial_characterization.py`. No new
-harness is built here, and the deliberately-incomplete firmware-*source*
-fixture directory that stands in for `tests/fw_presence.py` (not a device)
-is not used.
+harness is built here.
 
 Six legs:
   1. The outgoing command frame carries `COMMAND_LOCK_STATUS`.
