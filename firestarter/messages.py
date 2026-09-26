@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 82
+Total messages: 83
 """
 
 from dataclasses import dataclass
@@ -91,6 +91,7 @@ MSG_WARN_FL4_BOOT_BLOCK_LOCKED = 0x85
 MSG_WARN_SDP_UNLOCK_SKIPPED = 0x86
 MSG_WARN_SDP_TBLC_EXCEEDED = 0x87
 MSG_WARN_VCC_IMPLAUSIBLE = 0x88
+MSG_WARN_NOT_CALIBRATED = 0x89
 MSG_ERR_BAD_JSON = 0xA0
 MSG_ERR_NO_CMD = 0xA1
 MSG_ERR_SETUP = 0xA2
@@ -495,6 +496,15 @@ CATALOG: dict[int, MessageDef] = {
         format="Internal VCC reads %u mV, which the board cannot run at. The voltage readings are not trustworthy.",
         params=(("u16", "dec"),),
         param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x89: MessageDef(
+        id=0x89,
+        name="MSG_WARN_NOT_CALIBRATED",
+        severity=SEVERITY_WARN,
+        format="Voltage readings are uncalibrated on this board. Run 'firestarter cal' to make them trustworthy.",
+        params=(),
+        param_bytes=0,
         wire_format="id_frame",
     ),
     0xA0: MessageDef(
