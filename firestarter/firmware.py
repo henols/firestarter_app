@@ -39,6 +39,7 @@ from firestarter.exceptions import (
     ProgrammerNotFoundError,
     SerialError,
 )
+from firestarter.fw_release_gate import require_installable_release
 from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Firmware")
@@ -767,6 +768,9 @@ class FirmwareManager:
         pinned_version: str | None = None,
         usb_id: str | None = None,
         board_explicit: bool = False,
+        *,
+        allow_newer_firmware: bool = False,
+        app_version: str | None = None,
     ) -> bool:
         """
         Manages the firmware update process: checks version, prompts user, and installs if needed.
@@ -833,6 +837,33 @@ class FirmwareManager:
 
         latest_version, download_url = self.fetch_release_info(
             channel=channel, version=pinned_version, board=board_to_use
+        )
+
+        # Guard the release tag where it is BORN, not on each branch that
+        # flashes it. --force, --install, the interactive Confirm.ask and the
+        # blind-install branch are four routes to this one value, so a check
+        # here makes "a refused release reaches the flasher" unrepresentable
+        # rather than merely covered. It also runs before Confirm.ask, so the
+        # operator is never asked "Update now?" and then refused the yes.
+        #
+        # Deliberately ABOVE the is_up_to_date short-circuit: a board already
+        # running a feature version this host cannot drive must refuse, not
+        # report "already up to date".
+        #
+        # `_maybe_auto_route_to_pre` in cli_handlers.py steers a pre-release CLI
+        # onto the pre channel, which is the channel most likely to be ahead of
+        # it. That raises how often this refusal fires. Do not "fix" the auto
+        # route to avoid the refusal -- the refusal is the point.
+        if app_version is None:
+            # Dereferenced at call time, not bound at import, so a test can
+            # monkeypatch firestarter.__version__ without reloading this module.
+            import firestarter as _pkg
+
+            app_version = _pkg.__version__
+        require_installable_release(
+            app_version,
+            latest_version,
+            allow_newer=allow_newer_firmware,
         )
 
         force_install = flags & FLAG_FORCE

@@ -50,7 +50,7 @@ dependencies = [
     "packaging>=21.0",
 ]
 
-urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
+urls = { "Homepage" = "https://github.com/henols/firestarter_app", "Changelog" = "https://github.com/henols/firestarter_app/blob/main/CHANGELOG.md", "Documentation" = "https://github.com/henols/firestarter/wiki" }
 
 [project.optional-dependencies]
 dev = [
