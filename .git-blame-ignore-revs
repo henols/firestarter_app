@@ -1,0 +1,5 @@
+# Whole-tree ruff format commit (Phase 37 D-02, 2026-05-27)
+# Preserves git blame across the mechanical reformat.
+# Contributor setup: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub honors this file automatically when present in the repo root.
+87f32c8cdc2bb10db90ad278accd241adfe06bb9

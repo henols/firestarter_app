@@ -1,9 +1,7 @@
 
 [build-system]
-requires = ['setuptools>=45', "setuptools_scm[toml]>=6.2"]
+requires = ['setuptools>=45']
 build-backend = "setuptools.build_meta"
-
-[tool.setuptools_scm]
 
 [project]
 authors = [{ name = "Henrik Olsson", email = "henols@gmail.com" }]
@@ -11,7 +9,7 @@ name = "firestarter"
 description = "EPROM programmer software for the Relatively Universal ROM Programmer"
 readme = { file = "README.md", content-type = "text/markdown" }
 dynamic = ["version"]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 keywords = [
     "firestarter",
     "eprom",
@@ -36,8 +34,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
@@ -49,11 +45,36 @@ dependencies = [
     "pyserial>=3.5",
     "requests>=2.20",
     "tqdm>=4.60",
-    "argcomplete>=3.6.2",
+    "click>=8.1",
     "rich>=14.0",
+    "packaging>=21.0",
 ]
 
-urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
+urls = { "Homepage" = "https://github.com/henols/firestarter_app", "Changelog" = "https://github.com/henols/firestarter_app/blob/main/CHANGELOG.md", "Documentation" = "https://github.com/henols/firestarter/wiki" }
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+# USB DFU firmware install for the PY32F071 board target. Optional because it is
+# only needed for that board, and because pyusb pulls in a libusb backend that
+# AVR users (avrdude over serial) never touch.
+# Floor raised to 1.3.1 (HOST-07 / D-19): the current pyusb release at plan
+# time, Requires-Python >=3.9.0.
+# Upper bound <2 refuses a future major that could reorder ctrl_transfer's
+# parameters, which Plan 127-06's API-surface test pins against 1.3.1's shape.
+py32 = [
+    "pyusb>=1.3.1,<2",
+]
+test = [
+    "pytest>=8.0",
+    "syrupy>=5.0,<7",
+    # Phase 37 additions:
+    "ruff>=0.15.14",
+    "mypy>=2.1.0,<3",
+    "pytest-cov>=7.1.0",
+    "types-pyserial>=3.5.0.20260519",
+]
 
 [project.scripts]
 firestarter = "firestarter.main:main"
@@ -63,10 +84,126 @@ include-package-data = true
 packages = ["firestarter"]
 [tool.setuptools.package-data]
 "firestarter" = [
-    "data/database_generated.json",
+    "data/chip_database.json",
     "data/database_overrides.json",
-    "data/pin-maps.json",
+    "data/pinouts.json",
 ]
 
 [tool.setuptools.dynamic]
 version = { attr = "firestarter.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+# extend-exclude (not exclude, to keep ruff's built-in defaults):
+# (2) tests/fixtures/ holds deliberately-violating planted source for the
+#     source-scan gates -- it is fixture input, never project source, and
+#     Phase 121 adds the first Python files to that directory.
+extend-exclude = ["tests/golden", "tests/fixtures"]
+
+[tool.ruff.lint]
+# E: pycodestyle errors (style violations that ruff-format does not fix)
+# F: pyflakes (undefined names, unused imports)
+# I: isort (import ordering)
+# UP: pyupgrade
+# No select = ["ALL"] — broadening to B/SIM/C4 deferred to Phase 42.
+# E501 excluded: ruff-format enforces line length; including E501 causes a
+# noqa-adds-noqa-on-long-lines cycle (443 violations pre-format → 3 post-format).
+select = ["E", "F", "I", "UP"]
+extend-ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
+disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
+check_untyped_defs = false
+# Phase 137 plan 137-02 (CLOSE-03): tests/fixtures/ holds deliberately-
+# violating planted source for the source-scan gates -- fixture input,
+# never project source (mirrors ruff's own extend-exclude above, same
+# rationale, same directory). This plan is the first to add a genuinely
+# UNPARSABLE fixture (tests/fixtures/planted_unparsable.py, a real Python
+# SyntaxError) -- without this exclude, mypy's directory walk over `tests/`
+# aborts with exit 2 ("errors prevented further checking") on that single
+# file, invalidating the entire run rather than reporting a normal
+# per-file error. None of the 6 prior tests/fixtures/*.py files (all
+# syntactically valid) ever contributed an error, so this exclude changes
+# only the checked-file count, never the error count.
+exclude = ["^tests/fixtures/"]
+# mypy_error_watermark = 35   # Updated Phase 71-07: floor after 71-06 added test_validate_family_cmd.py (6 AppContext mock-type errors). Prior: 29 (Phase 69-03).
+
+[[tool.mypy.overrides]]
+# Phase 36 test modules — strict-island: check bodies of untyped test functions.
+# "Strict" here means check_untyped_defs = true, NOT disallow_untyped_defs = true
+# (the latter would require -> None on every test function and would break the suite).
+module = [
+    "tests.test_characterization",
+    "tests.test_serial_characterization",
+    "tests.test_bug_characterization",
+    "tests.test_eprom_database",
+    "tests.test_revision_constants_parity",
+    "tests.test_decoder",
+]
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Phase 42 D-06: strict-island for the 8 modules touched in v1.8, plus a
+# ninth added by Phase 132 D-02 (RETIRE-03): the new sdp_honesty module
+# joins from birth, as a deliberate strengthening -- it is not an analog
+# of firestarter.sdp_capability, which is NOT in this list. Phase 202-01
+# D-01 adds a tenth, firestarter.compare, which also joins from birth for
+# the same reason sdp_honesty did: a new import-light module should never
+# accrue untyped defs it has to be retrofitted later. jumper_table,
+# vpp_display and erase_support join from birth for the same reason.
+# eprom_operations.py DELIBERATELY EXCLUDED per D-07 (GATE-1.8d read-path ring-fence; deferred to v1.9 post-RCA).
+module = [
+    "firestarter.main",
+    "firestarter.cli_handlers",
+    "firestarter.chip_resolver",
+    "firestarter.frame_parser",
+    "firestarter.codec",
+    "firestarter.address_parser",
+    "firestarter.exceptions",
+    "firestarter.serial_comm",
+    "firestarter.sdp_honesty",
+    "firestarter.log_capture",
+    "firestarter.compare",
+    "firestarter.jumper_table",
+    "firestarter.vpp_display",
+    "firestarter.erase_support",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Phase 42 D-06 / D-07: non-strict modules — silence transitively-imported
+# errors so `mypy <strict-list>` exits 0.
+module = [
+    "firestarter.eprom_operations",
+    "firestarter.firmware",
+    "firestarter.hardware",
+    "firestarter.database",
+    "firestarter.config",
+    "firestarter.ic_layout",
+    "firestarter.eprom_info",
+    "firestarter.utils",
+    "firestarter.logging_utils",
+    "firestarter.avr_tool",
+]
+follow_imports = "silent"
+
+[tool.coverage.run]
+source = ["firestarter"]
+# Phase 42 D-13: avr_tool.py omitted — subprocess wrapper for avrdude;
+# meaningful coverage would require real avrdude binary in CI.
+omit = ["firestarter/data/*", "firestarter/avr_tool.py"]
+
+[tool.coverage.report]
+show_missing = true

@@ -5,14 +5,16 @@ Copyright (c) 2025 Henrik Olsson
 Permission is hereby granted under MIT license.
 AVRdude Tool Wrapper Module
 """
+
+import logging
 import os
 import re
 import time
-import logging
-import serial
-from subprocess import Popen, PIPE, CalledProcessError, TimeoutExpired
 from pathlib import Path
 from shutil import which
+from subprocess import PIPE, CalledProcessError, Popen, TimeoutExpired  # noqa: F401
+
+import serial
 
 logger = logging.getLogger("Avrdude")
 
@@ -30,6 +32,7 @@ class Avrdude:
     retrieving its version, and executing commands for flashing firmware
     or testing connections to AVR microcontrollers.
     """
+
     def __init__(
         self,
         partno,
@@ -115,7 +118,7 @@ class Avrdude:
             serial.Serial(port=self.port, baudrate=1200).close()
             time.sleep(2)
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: F841
             logger.warning(f"Failed to trigger reset: {self.port}")
             return False
 

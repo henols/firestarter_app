@@ -14,7 +14,7 @@ EPROM_NAME=${1:-W27C512}
 # DEFAULT_ARGS="-f"
 VERBOSE=0
 
-JSON_FILE='./firestarter/data/database_generated.json'
+JSON_FILE='./firestarter/data/chip_database.json'
 TEMP_DIR="./test_data"
 
 # Ensure the temp directory exists, if not create it
@@ -32,12 +32,13 @@ rm -f "$TEMP_DIR"/*
 # Convert TARGET_NAME to uppercase
 EPROM_NAME=$(echo "$EPROM_NAME" | tr '[:lower:]' '[:upper:]')
 
-# Use jq to parse JSON and match name, retrieving the corresponding memory-size
+# Use jq to parse JSON and match part_number, retrieving the corresponding size_bytes
+# Schema: chip_database.json is {manufacturer: [chip_records, ...]} — flatten across both levels.
 MEMORY_SIZE_HEX=$(jq -e --arg target_name "$EPROM_NAME" -r '
-  .[] | 
-  .[] | 
-  select(.name == $target_name) | 
-  .["memory-size"]
+  .[] |
+  .[] |
+  select(.part_number == $target_name) |
+  .electrical.size_bytes
 ' "$JSON_FILE")
 
 # Exit if no match is found (MEMORY_SIZE_HEX will be null if no match)

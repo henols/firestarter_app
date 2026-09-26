@@ -1,0 +1,2183 @@
+"""
+Project Name: Firestarter
+Copyright (c) 2024 Henrik Olsson
+
+Permission is hereby granted under MIT license.
+
+Unit tests for firestarter.submit (v1.21 Phase 113).
+
+No PATH, network, or browser is ever touched -- every seam (`which_fn`,
+`run_fn`) is injected with a `Mock`.
+
+Phase 121 Plan 11 (DEVTEST-05/06) added: `find_prior_report`/`comment_via_gh`
+unit legs (D-09/D-11); `submit_report`'s dedup-first/always-ask/comment-on-
+duplicate behavioural legs (D-09/D-10/D-11); and a deny-set widening of the
+negative-argv idiom covering both `gh` paths' short forms (DEVTEST-06,
+RESEARCH Pitfall 6) -- see the "Task 3: deny-set negative argv" section
+below for the deliberate-break proof demonstrating the single-flag
+assertion it replaces would have missed the short `-l` form.
+"""
+
+from __future__ import annotations
+
+import re
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from firestarter import submit
+
+# sanitize_dict -- one test per leak vector (A3 fails-open discipline)
+
+
+def test_sanitize_home_dir_path():
+    d = {"reason": "failed reading /home/alice/scratch/file.bin"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert "/home/<user>/scratch/file.bin" in out["reason"]
+    assert "alice" not in out["reason"]
+
+
+def test_sanitize_users_path():
+    d = {"reason": "failed at /Users/alice/Desktop/dump.bin"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert "/Users/<user>/Desktop/dump.bin" in out["reason"]
+    assert "alice" not in out["reason"]
+
+
+def test_sanitize_windows_users_path():
+    d = {"reason": r"temp file at C:\Users\alice\AppData\Local\Temp\x.bin"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert r"C:\Users\<user>\AppData\Local\Temp\x.bin" in out["reason"]
+    assert "alice" not in out["reason"]
+
+
+def test_sanitize_windows_users_path_case_insensitive_drive():
+    d = {"reason": r"temp file at c:\Users\alice\AppData"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert "alice" not in out["reason"]
+    assert "<user>" in out["reason"]
+
+
+def test_sanitize_dev_tty_acm():
+    d = {"reason": "no response from /dev/ttyACM0"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert out["reason"] == "no response from /dev/tty<redacted>"
+
+
+def test_sanitize_dev_tty_usb():
+    d = {"reason": "port /dev/ttyUSB1 timed out"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert "/dev/tty<redacted>" in out["reason"]
+    assert "ttyUSB1" not in out["reason"]
+
+
+def test_sanitize_dev_tty_macos():
+    d = {"reason": "port /dev/tty.usbserial-A1 timed out"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert "/dev/tty<redacted>" in out["reason"]
+    assert "usbserial-A1" not in out["reason"]
+
+
+def test_sanitize_com_port():
+    d = {"reason": "no response from COM3"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert out["reason"] == "no response from COM<redacted>"
+
+
+def test_sanitize_tmp_path():
+    d = {"reason": "wrote scratch file to /tmp/firestarter-xyz123/dump.bin"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert out["reason"] == "wrote scratch file to /tmp/<redacted>"
+
+
+def test_sanitize_username():
+    d = {"reason": "run by alicetest on this machine"}
+    out = submit.sanitize_dict(d, user="alicetest")
+    assert out["reason"] == "run by <user> on this machine"
+
+
+def test_sanitize_username_too_short_not_scrubbed():
+    # len(user) < 3 -- guard against over-scrubbing a short/common token.
+    d = {"reason": "the value is ab and stays ab"}
+    out = submit.sanitize_dict(d, user="ab")
+    assert out["reason"] == "the value is ab and stays ab"
+
+
+def test_sanitize_bytes_leaf_base64_encoded():
+    d = {"raw": b"\x00\x01\x02binary"}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert isinstance(out["raw"], str)
+    assert out["raw"] == "AAECYmluYXJ5"
+
+
+def test_sanitize_clean_value_passes_through():
+    d = {"chip": "W27C512", "count": 3, "flag": True, "nothing": None}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert out == d
+
+
+def test_sanitize_nested_structure():
+    d = {
+        "steps": [
+            {"op": "read", "reason": "ok at /home/alice/x"},
+            {"op": "write", "reason": "port /dev/ttyACM0 gone"},
+        ],
+        "nested": {"deep": {"path": "/tmp/scratch.bin"}},
+    }
+    out = submit.sanitize_dict(d, user="alice")
+    assert out["steps"][0]["reason"] == "ok at /home/<user>/x"
+    assert out["steps"][1]["reason"] == "port /dev/tty<redacted> gone"
+    assert out["nested"]["deep"]["path"] == "/tmp/<redacted>"
+
+
+def test_sanitize_does_not_mutate_input():
+    original = {"reason": "path /home/alice/x", "steps": [{"reason": "COM3 gone"}]}
+    snapshot = {"reason": "path /home/alice/x", "steps": [{"reason": "COM3 gone"}]}
+    submit.sanitize_dict(original, user="alice")
+    assert original == snapshot
+
+
+def test_sanitize_uses_getpass_default_when_user_omitted(monkeypatch):
+    monkeypatch.setattr(submit.getpass, "getuser", lambda: "ciuser")
+    d = {"reason": "run by ciuser here"}
+    out = submit.sanitize_dict(d)
+    assert out["reason"] == "run by <user> here"
+
+
+def test_sanitize_leaves_the_rail_reading_disclosure_byte_identical():
+    """ATTR-06 / T-178-01: `rail_reading_disclosure` rides `to_dict()`, the
+    only input the sanitizer deep-scrubs -- proving the new string key
+    contains none of the scrubbable vectors (no home dir, no device path, no
+    username) that `_SCRUBS` would otherwise have had to rewrite."""
+    from firestarter.diagnostic_report import _RAIL_READING_DISCLOSURE
+
+    d = {"rail_reading_disclosure": _RAIL_READING_DISCLOSURE}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert out["rail_reading_disclosure"] == _RAIL_READING_DISCLOSURE
+
+
+# overall_verdict / build_title / build_body / build_issue_url
+
+
+def _step(
+    op: str,
+    verdict: str,
+    fingerprint_cls: str | None = None,
+    *,
+    status: str | None = None,
+):
+    fp = SimpleNamespace(classification=fingerprint_cls) if fingerprint_cls else None
+    kwargs = {"op": op, "verdict": verdict, "fingerprint": fp}
+    if status is not None:
+        kwargs["status"] = status
+    return SimpleNamespace(**kwargs)
+
+
+def test_overall_verdict_all_ok_is_pass():
+    results = [_step("id", "OK"), _step("read", "OK")]
+    assert submit.overall_verdict(results) == "PASS"
+
+
+def test_overall_verdict_marginal_is_inconclusive():
+    results = [_step("id", "OK"), _step("write", "marginal")]
+    assert submit.overall_verdict(results) == "INCONCLUSIVE"
+
+
+def test_overall_verdict_bad_dominates_marginal():
+    results = [_step("write", "marginal"), _step("verify", "BAD")]
+    assert submit.overall_verdict(results) == "FAIL"
+
+
+def test_overall_verdict_bad_alone_is_fail():
+    results = [_step("id", "BAD")]
+    assert submit.overall_verdict(results) == "FAIL"
+
+
+def test_overall_verdict_error_status_is_inconclusive_harness():
+    results = [_step("id", "BAD"), _step("read", "OK", status="ERROR")]
+    assert submit.overall_verdict(results) == "INCONCLUSIVE (harness)"
+
+
+def test_overall_verdict_defaults_to_complete_for_a_status_less_result():
+    assert submit.overall_verdict([_step("id", "OK"), _step("read", "OK")]) == "PASS"
+    assert (
+        submit.overall_verdict([_step("id", "OK"), _step("write", "marginal")])
+        == "INCONCLUSIVE"
+    )
+    assert (
+        submit.overall_verdict([_step("write", "marginal"), _step("verify", "BAD")])
+        == "FAIL"
+    )
+    assert submit.overall_verdict([_step("id", "BAD")]) == "FAIL"
+
+
+_TITLE_RE = re.compile(r"^\[dev test\]\s+(?P<chip>\S+)\s+[—-]\s+(?P<verdict>[A-Za-z]+)")
+
+
+def test_build_title_for_a_transport_fault_is_not_fail():
+    report = Mock()
+    report.to_dict.return_value = {"dedup_fingerprint": "abc123def456"}
+    report.results = [_step("id", "SKIPPED", status="ERROR")]
+    title = submit.build_title(report, "sst27sf512")
+    match = _TITLE_RE.match(title)
+    assert match is not None, title
+    assert match.group("verdict") == "INCONCLUSIVE", title
+
+
+def test_a_transport_fault_reason_survives_the_markdown_reason_cell():
+    assert submit._reason_text("SKIPPED", "half-seated cable") == "half-seated cable"
+
+
+def test_is_submittable_is_unchanged_by_the_status_axis():
+    """D-11: `is_submittable` is left byte-unchanged. The milestone
+    research (`.planning/research/SUMMARY.md:132`, `FEATURES.md:348`)
+    listed a run-validity term on `is_submittable` as a Phase 178
+    deliverable (T3); ATTR-05 and ROADMAP criterion 4 forbid it. ATTR-05
+    wins and T3 is recorded VOID here: its source mentions none of the
+    four run-validity tokens, and its truth table is unchanged -- True only
+    when `chip`, `protocol` and `host_version` are all truthy, irrespective
+    of the report's status axis (which `is_submittable` never even
+    receives -- it takes only `AutoCapture`)."""
+    import inspect
+
+    from firestarter.diagnostic_report import AutoCapture, is_submittable
+
+    source = inspect.getsource(is_submittable)
+    for token in ("status", "run_status", "STATUS_ERROR", "run_valid"):
+        assert token not in source, token
+
+    full = AutoCapture(host_version="1", chip="x", protocol="7")
+    assert is_submittable(full) is True
+    assert is_submittable(AutoCapture(host_version="1", chip="", protocol="7")) is False
+    assert is_submittable(AutoCapture(host_version="1", chip="x", protocol="")) is False
+    assert is_submittable(AutoCapture(host_version="", chip="x", protocol="7")) is False
+
+
+def test_a_transport_faulted_report_still_reaches_the_confirm_prompt():
+    """D-11/ATTR-05: a transport-faulted report still reaches `confirm_fn`
+    -- auto-classification changes the title and disposition only, never
+    the offer to file. Calling `submit_report` a SECOND time on the same
+    report reaches a fresh `confirm_fn` mock once again (the idempotency
+    edge): nothing in the status axis is consumed, cached, or one-shot."""
+    report = _make_report()
+    report.run_status = "ERROR"
+    report.results = [_step("id", "SKIPPED", status="ERROR")]
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    confirm_fn = Mock(return_value=False)
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+    confirm_fn.assert_called_once()
+
+    second_confirm_fn = Mock(return_value=False)
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=second_confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+    second_confirm_fn.assert_called_once()
+
+    title = submit.build_title(report, "W27C512")
+    assert "INCONCLUSIVE (harness)" in title
+
+
+def test_title_contains_shorthash_and_chip():
+    report = Mock()
+    report.to_dict.return_value = {"dedup_fingerprint": "abc123def456"}
+    report.results = [_step("id", "OK")]
+    title = submit.build_title(report, "W27C512")
+    assert "abc123def456" in title
+    assert "W27C512" in title
+    assert "[dev test]" in title
+    assert "PASS" in title
+
+
+def test_title_reflects_fail_verdict():
+    report = Mock()
+    report.to_dict.return_value = {"dedup_fingerprint": "deadbeef0000"}
+    report.results = [_step("verify", "BAD")]
+    title = submit.build_title(report, "AM27C020")
+    assert "FAIL" in title
+    assert "deadbeef0000" in title
+
+
+def test_title_shows_the_canonical_part_number_when_it_differs_from_the_raw_token():
+    """RPT-F1/D-01/D-03: when `auto_capture.canonical_part_number` is set
+    and differs from the raw `chip` argument, the title shows the
+    canonical, not the raw token -- single-sourced off `report.to_dict()`,
+    never re-selected."""
+    report = Mock()
+    report.to_dict.return_value = {
+        "dedup_fingerprint": "abc123def456",
+        "auto_capture": {"canonical_part_number": "W27C020"},
+    }
+    report.results = [_step("id", "OK")]
+    title = submit.build_title(report, "w27c020")
+    assert "W27C020" in title
+    assert "w27c020" not in title
+
+
+def test_build_body_table_from_sanitized_steps():
+    sanitized = {
+        "steps": [
+            {
+                "op": "id",
+                "verdict": "OK",
+                "reason": "",
+                "duration_s": 0.03,
+                "run_count": 1,
+            },
+            {
+                "op": "write",
+                "verdict": "BAD",
+                "reason": "port /dev/tty<redacted> gone",
+                "duration_s": 41.875,
+                # The N>=2 repeat policy's own number, reaching the filed
+                # body for the first time (schema 1.7): a triager can tell
+                # this write ran twice without unfolding the JSON block.
+                "run_count": 2,
+            },
+            # Neither a `duration_s` NOR a `run_count` key: a pre-1.5 /
+            # pre-1.7 report replayed through build_body must not KeyError,
+            # it must render `-` in both columns.
+            {"op": "erase", "verdict": "NA", "reason": ""},
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    assert "| Step | Verdict | Runs | Took | Reason |" in body
+    assert "| id | OK | 1 | 0.03s | - |" in body
+    assert "| write | BAD | 2 | 41.9s | port /dev/tty<redacted> gone |" in body
+    assert "| erase | NA | - | - | - |" in body
+    assert "```json" not in body
+
+
+@pytest.mark.parametrize(
+    "verdict,reason,expected",
+    [
+        ("NA", "SDP lock/unlock applies only to protocol 0x0D", "-"),
+        ("NA", "", "-"),
+        ("NA", None, "-"),
+        ("SKIPPED", "no target resolved", "no target resolved"),
+        ("BAD", "port gone", "port gone"),
+        ("OK", "", "-"),
+        (None, "", "-"),
+    ],
+)
+def test_reason_text_verdict_keyed_suppression(verdict, reason, expected):
+    assert submit._reason_text(verdict, reason) == expected
+
+
+def test_build_body_na_row_reason_absent_everywhere_skipped_retains_it():
+    """Quick task 260822-gxx, operator reversal mid-run ("Actually if a step
+    is NA no reason shall never be reported in any place"): this test used
+    to prove the ORIGINAL D-2 -- an NA row's reason suppressed in the table
+    half but retained verbatim in the fenced JSON half. That guarantee is
+    now the opposite; do not "restore" it as a regression fix.
+
+    Suppression for an NA row now happens one layer up, in
+    `DiagnosticReport._step_dict()` (`firestarter/diagnostic_report.py`) --
+    `submit.build_body` receives an ALREADY-sanitized dict and never sees
+    `REASON_WRONG_PROTOCOL` at all by the time it runs, in either half. This
+    fixture is built to match that real upstream shape (`reason: ""` on the
+    NA step) rather than a hand-authored prose string, so it does not
+    misrepresent what the pipeline actually hands `build_body` post-gxx.
+    `build_body` itself received NO code change in this delta -- this test
+    exists to pin that its existing "empty reason renders `-`" contract
+    (already covered for a `reason: ""` NA row by
+    `test_build_body_table_from_sanitized_steps`) still holds when combined
+    with a SKIPPED row that must NOT be suppressed (D-1's non-vacuity proof,
+    still locked)."""
+    from firestarter.sdp_capability import REASON_WRONG_PROTOCOL
+
+    sanitized = {
+        "steps": [
+            {
+                "op": "sdp-lock",
+                "verdict": "NA",
+                # Reflects real `_step_dict()` output post-260822-gxx: an
+                # NA step's reason is suppressed to "" before it ever
+                # reaches `sanitized_dict`/`build_body`.
+                "reason": "",
+                "duration_s": None,
+                "run_count": 0,
+            },
+            {
+                "op": "read",
+                "verdict": "SKIPPED",
+                "reason": "no target resolved",
+                "duration_s": None,
+                "run_count": 0,
+            },
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=True)
+    table_half, json_half = body.split("```json", 1)
+
+    assert "| sdp-lock | NA | - | - | - |" in table_half
+    assert "| read | SKIPPED | - | - | no target resolved |" in table_half
+    assert REASON_WRONG_PROTOCOL not in table_half, (
+        "an NA row's reason prose must not reach the table half"
+    )
+    assert REASON_WRONG_PROTOCOL not in json_half, (
+        "260822-gxx: the fenced JSON block must not carry it either -- it "
+        "never reached build_body's input in the first place"
+    )
+
+
+def test_build_body_includes_json_by_default():
+    sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": ""}], "chip": "X"}
+    body = submit.build_body(sanitized, [])
+    assert "```json" in body
+    assert '"chip": "X"' in body
+
+
+def test_error_text_resolves_the_catalog_name_for_a_known_code():
+    assert submit._error_text("BAD", 183, None) == "MSG_ERR_OP_TIMEOUT (183)"
+
+
+def test_error_text_returns_placeholder_for_no_code():
+    assert submit._error_text("OK", None, None) == "-"
+
+
+def test_error_cells_returns_none_when_every_cell_is_the_placeholder():
+    rows = [("OK", None, None), ("NA", 183, None)]
+    assert submit._error_cells(rows) is None
+
+
+def test_error_cells_returns_the_full_list_when_any_cell_is_real():
+    rows = [("OK", None, None), ("BAD", 183, None)]
+    assert submit._error_cells(rows) == ["-", "MSG_ERR_OP_TIMEOUT (183)"]
+
+
+def test_build_body_emits_the_error_column_when_a_step_carries_a_code():
+    sanitized = {
+        "steps": [
+            {
+                "op": "id",
+                "verdict": "OK",
+                "reason": "",
+                "duration_s": 0.03,
+                "run_count": 1,
+            },
+            {
+                "op": "write",
+                "verdict": "BAD",
+                "reason": "op timed out",
+                "duration_s": 41.875,
+                "run_count": 2,
+                "error_code": 183,
+            },
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    assert "| Step | Verdict | Runs | Took | Error | Reason |" in body
+    assert "| id | OK | 1 | 0.03s | - | - |" in body
+    assert (
+        "| write | BAD | 2 | 41.9s | MSG_ERR_OP_TIMEOUT (183) | op timed out |" in body
+    )
+
+
+@pytest.mark.parametrize(
+    "verdict,error_code,expected",
+    [
+        ("NA", 183, "-"),
+        ("SKIPPED", 176, "MSG_ERR_NOT_BLANK (176)"),
+        ("BAD", 175, "MSG_ERR_VERIFY (175)"),
+        ("BAD", 185, "MSG_ERR_CHIP_ID_MISMATCH (185)"),
+    ],
+)
+def test_error_text_verdict_policy(verdict, error_code, expected):
+    assert submit._error_text(verdict, error_code, None) == expected
+
+
+def test_error_text_unknown_code_degrades_to_the_bare_decimal():
+    from firestarter.messages import CATALOG
+
+    unknown_code = 153
+    assert unknown_code not in CATALOG, (
+        "fixture setup error: the chosen id must genuinely not be a "
+        "CATALOG key for this test to be non-vacuous"
+    )
+    assert submit._error_text("BAD", unknown_code, None) == "153"
+
+
+@pytest.mark.parametrize(
+    "malformed_code",
+    ["not-a-code", float("nan"), float("inf"), object()],
+)
+def test_error_text_malformed_code_degrades_without_raising(malformed_code):
+    assert submit._error_text("BAD", malformed_code, None) == "-"
+
+
+def test_error_text_explicit_error_name_wins_over_catalog_resolution():
+    assert submit._error_text("BAD", 183, "CUSTOM_NAME") == "CUSTOM_NAME (183)"
+
+
+def test_error_text_strips_pipe_and_newline_characters_from_a_hostile_name():
+    hostile = "EVIL | injected\r\nrow"
+    cell = submit._error_text("BAD", 183, hostile)
+    assert "|" not in cell
+    assert "\n" not in cell
+    assert "\r" not in cell
+
+
+def test_error_text_hostile_name_cannot_add_a_table_row():
+    sanitized = {
+        "steps": [
+            {
+                "op": "write",
+                "verdict": "BAD",
+                "reason": "op timed out",
+                "error_code": 183,
+                "error_name": "EVIL | injected\r\nrow | extra",
+            }
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    table_lines = [line for line in body.splitlines() if line.startswith("| write")]
+    assert len(table_lines) == 1
+    assert table_lines[0].count("|") == 7
+
+
+def test_error_text_truncates_a_name_longer_than_the_cap():
+    long_name = "X" * 100
+    cell = submit._error_text("BAD", 183, long_name)
+    name_part = cell.rsplit(" (", 1)[0]
+    assert len(name_part) == 64
+    assert name_part == "X" * 64
+
+
+def test_build_body_column_omission_is_render_layer_only():
+    sanitized = {
+        "steps": [{"op": "id", "verdict": "OK", "reason": "", "error_code": None}]
+    }
+    body = submit.build_body(sanitized, [], include_json=True)
+    table_half, json_half = body.split("```json", 1)
+    assert "| Step | Verdict | Runs | Took | Reason |" in table_half
+    assert "Error" not in table_half.split("\n")[3]
+
+
+def test_build_body_column_omission_still_carries_error_code_in_the_json_block():
+    sanitized = {
+        "steps": [
+            {"op": "id", "verdict": "OK", "reason": "", "error_code": None},
+            {"op": "sdp-lock", "verdict": "NA", "reason": "", "error_code": 183},
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=True)
+    table_half, json_half = body.split("```json", 1)
+    assert "Error" not in table_half
+    assert '"error_code": 183' in json_half
+
+
+def test_build_issue_url_targets_hardcoded_repo():
+    url = submit.build_issue_url("My Title", "My Body")
+    assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")
+
+
+def test_build_issue_url_percent_encodes():
+    url = submit.build_issue_url("a b", "c&d")
+    assert "a%20b" in url
+    assert "c%26d" in url
+
+
+def test_build_issue_url_has_no_labels_param():
+    url = submit.build_issue_url("t", "b")
+    assert "labels=" not in url
+
+
+def test_build_issue_url_not_derived_from_git_remote():
+    url = submit.build_issue_url("t", "b")
+    assert submit.SUBMIT_REPO in url
+    # Literal on purpose: the project-wide tracker per firestarter_prom#6,
+    # NOT the repo this code lives in. A silent retarget must fail here.
+    assert submit.SUBMIT_REPO == "henols/firestarter"
+
+
+# gh_available + submit_via_gh (list argv, stdin body)
+
+
+def test_gh_tier_available_when_present_and_authed():
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(return_value=Mock(returncode=0))
+    assert submit.gh_available(which_fn=which_fn, run_fn=run_fn) is True
+    run_fn.assert_called_once_with(
+        ["gh", "auth", "status"], capture_output=True, text=True, check=False
+    )
+
+
+def test_gh_tier_absent_short_circuits_no_run_fn_call():
+    which_fn = Mock(return_value=None)
+    run_fn = Mock()
+    assert submit.gh_available(which_fn=which_fn, run_fn=run_fn) is False
+    run_fn.assert_not_called()
+
+
+def test_gh_tier_present_but_not_authed():
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(return_value=Mock(returncode=1))
+    assert submit.gh_available(which_fn=which_fn, run_fn=run_fn) is False
+
+
+def test_submit_via_gh_exact_argv_and_stdin_body():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter/issues/1\n",
+        )
+    )
+    result = submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    run_fn.assert_called_once_with(
+        [
+            "gh",
+            "issue",
+            "create",
+            "--repo",
+            submit.SUBMIT_REPO,
+            "--title",
+            "My Title",
+            "--body-file",
+            "-",
+        ],
+        input="My Body",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result == "https://github.com/henols/firestarter/issues/1"
+
+
+def test_submit_via_gh_returns_none_on_failure():
+    run_fn = Mock(return_value=Mock(returncode=1, stdout="", stderr=""))
+    result = submit.submit_via_gh("t", "b", run_fn=run_fn)
+    assert result is None
+
+
+def test_submit_via_gh_argv_carries_nothing_permission_gated():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert argv[0] == "gh"
+    assert "--label" not in argv
+    assert submit.GSD_INBOX_LABEL not in argv
+    assert "gsd-inbox" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+def test_submit_via_gh_argv_targets_the_project_wide_tracker():
+    # 120-12: a repo-target-specific negative leg (Idiom B). A mocked run_fn
+    # cannot prove GitHub actually accepts issues at henols/firestarter_prom
+    # -- that requires a live create against the real API. What it CAN
+    # honestly prove is that the create-path argv never carries the wrong
+    # repo slug (`henols/firestarter_app`, the repo this code lives in, per
+    # firestarter_prom#6) and always carries `--repo henols/firestarter_prom`
+    # immediately adjacent, with no `shell=True` escape hatch alongside it.
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    repo_idx = argv.index("--repo")
+    assert argv[repo_idx + 1] == "henols/firestarter"
+    assert "henols/firestarter_app" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+def test_submit_via_gh_failure_prints_captured_stderr():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=1,
+            stdout="",
+            stderr="GraphQL: Resource not accessible by personal access token",
+        )
+    )
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+    result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
+    assert result is None
+    assert any(
+        "GraphQL: Resource not accessible by personal access token" in m
+        for m in printed
+    )
+
+
+def test_submit_via_gh_failure_with_blank_stderr_still_reports():
+    run_fn = Mock(return_value=Mock(returncode=3, stdout="", stderr=""))
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+    result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
+    assert result is None
+    assert any(m.strip() and "3" in m for m in printed)
+    assert not any("Mock" in m for m in printed)
+
+
+def test_submit_via_gh_success_prints_nothing():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter/issues/1\n",
+        )
+    )
+    console = Mock()
+    submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
+    console.print.assert_not_called()
+
+
+def test_gsd_inbox_label_constant_retained():
+    assert submit.GSD_INBOX_LABEL == "gsd-inbox"
+
+
+_CREATE_DENY_SET = [
+    "-l",
+    "--label",
+    "-a",
+    "--assignee",
+    "-m",
+    "--milestone",
+    "-p",
+    "--project",
+]
+
+_COMMENT_DENY_SET = [
+    "--delete-last",
+    "--edit-last",
+    "--yes",
+    "-w",
+    "--web",
+    "-e",
+    "--editor",
+]
+
+
+@pytest.mark.parametrize("flag", _CREATE_DENY_SET)
+def test_gh_create_argv_carries_no_permission_gated_flag(flag):
+    # Deny-set, not equality: an equality assertion against a fixed expected
+    # argv silently stops protecting the moment someone updates that list.
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert flag not in argv
+    # The retained value-absence + list-argv + no-shell assertions (the
+    # pre-existing idiom this widens).
+    assert submit.GSD_INBOX_LABEL not in argv
+    assert "gsd-inbox" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+@pytest.mark.parametrize("flag", _COMMENT_DENY_SET)
+def test_gh_comment_argv_carries_no_mutating_flag(flag):
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert flag not in argv
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+def test_gh_comment_argv_targets_the_project_wide_tracker():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    repo_idx = argv.index("--repo")
+    assert argv[repo_idx + 1] == submit.SUBMIT_REPO
+
+
+def test_gh_comment_body_arrives_on_stdin():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert "--body-file" in argv
+    body_idx = argv.index("--body-file")
+    assert argv[body_idx + 1] == "-"
+    # Body arrives on stdin (`input=`), never as an inline argument.
+    assert "My Body" not in argv
+    assert run_fn.call_args.kwargs["input"] == "My Body"
+
+
+def test_dedup_query_argv_is_read_only():
+    # Keeps a future edit from turning the read-only dedup probe into
+    # something that writes: no create/edit/comment/close/delete
+    # subcommand token, and no write-gated flag from either deny-set.
+    run_fn = Mock(return_value=Mock(returncode=0, stdout="[]"))
+    submit.find_prior_report("abc123def456", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    for mutating_token in ("create", "edit", "comment", "close", "delete"):
+        assert mutating_token not in argv
+    for flag in _CREATE_DENY_SET + _COMMENT_DENY_SET:
+        assert flag not in argv
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+@pytest.mark.parametrize(
+    "returncode,stdout,expected",
+    [
+        (
+            0,
+            '[{"number": 18, "title": "t", "url": "https://x/18"}]',
+            ("https://x/18", True),
+        ),
+        (0, "[]", (None, True)),
+        (4, "", (None, False)),
+        (1, "", (None, False)),
+    ],
+    ids=[
+        "duplicate-found",
+        "no-duplicate",
+        "unauthenticated-exit-4",
+        "generic-nonzero-exit-1",
+    ],
+)
+def test_dedup_distinguishes_all_three_signals(returncode, stdout, expected):
+    # Pins that the exit code alone is NEVER the discriminator: exit 0
+    # covers both "duplicate found" and "no duplicate" -- only the parsed
+    # payload tells them apart.
+    run_fn = Mock(return_value=Mock(returncode=returncode, stdout=stdout))
+    result = submit.find_prior_report("abc123def456", run_fn=run_fn)
+    assert result == expected
+
+
+def test_every_interactive_run_asks_even_when_the_check_fails():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    confirm_fn = Mock(return_value=False)
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    assert any("could not run" in m.lower() for m in printed)
+
+
+def _small_body() -> str:
+    return submit.build_body(
+        {"steps": [{"op": "id", "verdict": "OK", "reason": "-"}], "chip": "X"},
+        [],
+    )
+
+
+def test_browser_tier_small_body_opens_once():
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    url = submit.submit_via_browser(
+        "My Title", _small_body(), saved, browser_open=browser_open
+    )
+    browser_open.assert_called_once_with(url)
+    assert url is not None
+    assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")
+
+
+def test_browser_tier_under_cap_returns_the_url():
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    url = submit.submit_via_browser(
+        "t", _small_body(), saved, browser_open=browser_open
+    )
+    assert url == browser_open.call_args[0][0]
+
+
+def _oversize_json_only_body(repeats: int = 183) -> str:
+    # A "payload" key lives ONLY in the JSON block (build_body's table is
+    # sourced from "steps", never other top-level keys) -- so dropping the
+    # fenced JSON removes essentially all of the bulk. Space-heavy content
+    # is used because a space percent-encodes to `%20` (3 bytes for 1 raw
+    # char), which is what pushes the ENCODED url over the escalate
+    # threshold while the RAW body char count stays comfortably under it
+    # -- proving the measurement keys on the encoded URL, not the raw body
+    # (Pitfall 3).
+    sanitized = {
+        "steps": [{"op": "id", "verdict": "OK", "reason": "-"}],
+        "payload": "a b c d e f g h i j " * repeats,
+    }
+    return submit.build_body(sanitized, [], include_json=True)
+
+
+def test_oversize_drops_json_past_escalate_threshold():
+    body = _oversize_json_only_body()
+    assert len(body) < submit._URL_ESCALATE_BYTES  # fits by raw char count
+    full_url = submit.build_issue_url("t", body)
+    assert len(full_url.encode("utf-8")) > submit._URL_ESCALATE_BYTES  # but not encoded
+
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    url = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+
+    assert url is not None
+    browser_open.assert_called_once_with(url)
+    # decode back to confirm the JSON block itself is gone from the sent body
+    from urllib.parse import parse_qs, urlparse
+
+    sent_body = parse_qs(urlparse(url).query)["body"][0]
+    assert "```json" not in sent_body
+    assert "a b c d" not in sent_body
+
+
+def test_oversize_note_names_filename_not_full_path():
+    from pathlib import Path
+
+    body = _oversize_json_only_body()
+    saved = Path("/home/alice/.firestarter/reports/dev-test-x.json")
+    browser_open = Mock()
+    url = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+
+    from urllib.parse import parse_qs, urlparse
+
+    sent_body = parse_qs(urlparse(url).query)["body"][0]
+    assert "dev-test-x.json" in sent_body
+    assert "/home/alice" not in sent_body
+    assert str(saved) not in sent_body
+
+
+def test_oversize_hard_stop_no_open_past_cap(capsys):
+    # Neither the table nor the (would-be-dropped) JSON fits under the hard
+    # cap even after escalation -- the browser must never open.
+    huge_reason = "r" * 9000
+    sanitized = {
+        "steps": [{"op": "id", "verdict": "OK", "reason": huge_reason}],
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    result = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+
+    assert result is None
+    browser_open.assert_not_called()
+    captured = capsys.readouterr()
+    assert "dev-test-x.json" in captured.out or str(saved) in captured.out
+    assert "gh" in captured.out.lower()
+
+
+def test_oversize_hard_stop_uses_console_when_given():
+    huge_reason = "r" * 9000
+    sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": huge_reason}]}
+    body = submit.build_body(sanitized, [], include_json=False)
+    browser_open = Mock()
+    console = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    result = submit.submit_via_browser(
+        "t", body, saved, browser_open=browser_open, console=console
+    )
+    assert result is None
+    browser_open.assert_not_called()
+    console.print.assert_called_once()
+
+
+def test_oversize_hard_stop_no_json_fence_still_hard_stops():
+    # No fenced JSON block exists at all -- the escalation branch has
+    # nothing to drop, but the hard-stop must still fire on a huge table.
+    huge_reason = "q" * 9000
+    sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": huge_reason}]}
+    body = submit.build_body(sanitized, [], include_json=False)
+    assert "```json" not in body
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    result = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+    assert result is None
+    browser_open.assert_not_called()
+
+
+def test_browser_unreachable_returns_none_and_prints_url_and_local_path():
+    from pathlib import Path
+
+    browser_open = Mock(return_value=False)
+    saved = Path("/home/alice/.firestarter/reports/dev-test-x.json")
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    result = submit.submit_via_browser(
+        "My Title", _small_body(), saved, browser_open=browser_open, console=console
+    )
+
+    browser_open.assert_called_once()
+    assert result is None
+    joined = "\n".join(printed)
+    assert "issues/new" in joined
+    assert str(saved) in joined
+
+
+def test_browser_reachable_true_returns_the_url():
+    browser_open = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-x.json")
+    console = Mock()
+    url = submit.submit_via_browser(
+        "t", _small_body(), saved, browser_open=browser_open, console=console
+    )
+    assert url is not None
+    assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")
+    console.print.assert_not_called()
+
+
+def _make_report(*, chip="W27C512", protocol="7", host_version="3.0.0b11", pii=None):
+    auto_capture = SimpleNamespace(
+        chip=chip,
+        protocol=protocol,
+        host_version=host_version,
+        fw_board_identity=None,
+        hw_revision=None,
+        chip_id_expected=None,
+        chip_id_actual=None,
+        chip_id_mismatch_reason=None,
+    )
+    reason = pii if pii is not None else "-"
+    results = [_step("id", "OK")]
+    steps_dict = [{"op": "id", "verdict": "OK", "reason": reason}]
+    to_dict_value = {
+        "dedup_fingerprint": "abc123def456",
+        "steps": steps_dict,
+        "auto_capture": {
+            "chip": chip,
+            "protocol": protocol,
+            "host_version": host_version,
+        },
+    }
+    report = SimpleNamespace(
+        auto_capture=auto_capture,
+        results=results,
+        to_dict=lambda: to_dict_value,
+    )
+    return report
+
+
+def test_refuse_missing_protocol_prints_field_and_does_not_send():
+    report = _make_report(protocol=None)
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    isatty_fn = Mock(return_value=True)
+    confirm_fn = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+    )
+
+    assert any("protocol" in m for m in printed)
+    which_fn.assert_not_called()
+    run_fn.assert_not_called()
+    browser_open.assert_not_called()
+    confirm_fn.assert_not_called()
+    isatty_fn.assert_not_called()
+
+
+def test_refuse_missing_chip_names_chip():
+    report = _make_report(chip=None)
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+    submit.submit_report(
+        report,
+        "",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=console,
+    )
+    assert any("chip" in m for m in printed)
+
+
+def test_offtty_prints_url_not_body_and_never_sends():
+    """Retargeted by quick task 260821-spg: `submit_report` used to echo
+    the sanitized body to the console off-TTY; that echo is gone. This
+    test now asserts the INVERSE -- the markdown table line the body
+    carries never reaches anything printed -- which is meaningful rather
+    than vacuous because `build_body` is still called and `body` still
+    reaches `build_issue_url` below (proven by the URL assertion staying):
+    the test proves the ECHO went, not that the body stopped being built.
+    """
+    report = _make_report()
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock()
+    isatty_fn = Mock(return_value=False)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert not any("| id | OK |" in m for m in printed)
+    assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in printed)
+    find_prior_report_fn.assert_called_once()
+    browser_open.assert_not_called()
+    run_fn.assert_not_called()
+    confirm_fn.assert_not_called()
+    which_fn.assert_not_called()
+
+
+def test_tty_prints_no_body_before_the_confirm_prompt():
+    """The second removed echo (quick task 260821-spg): on the interactive
+    path, `submit_report` used to print the sanitized body before reaching
+    the filing confirm prompt. No existing test covered that echo's
+    absence -- this one does: the confirm prompt is still reached (and
+    declined, so nothing is filed), but the body's markdown table line is
+    never printed."""
+    report = _make_report()
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=False)
+    isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert not any("| id | OK |" in m for m in printed)
+    confirm_fn.assert_called_once()
+    browser_open.assert_not_called()
+    run_fn.assert_not_called()
+
+
+def test_tty_decline_aborts_without_sending():
+    report = _make_report()
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=False)
+    isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    browser_open.assert_not_called()
+    run_fn.assert_not_called()
+
+
+def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
+    report = _make_report()
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(
+                returncode=0,
+                stdout="https://github.com/henols/firestarter/issues/9\n",
+            ),  # gh issue create
+        ]
+    )
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert run_fn.call_count == 2
+    browser_open.assert_not_called()
+
+
+def test_tty_confirm_gh_success_echoes_the_created_issue_url():
+    # Step 6: the URL submit_via_gh returns must reach the tester. Before this,
+    # a successful submission printed nothing -- indistinguishable from a
+    # failed one (proven live: firestarter_prom#18 was filed with no output).
+    report = _make_report()
+    created = f"https://github.com/{submit.SUBMIT_REPO}/issues/18"
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(returncode=0, stdout=created + "\n"),  # gh issue create
+        ]
+    )
+    browser_open = Mock()
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="dev-test-w27c512.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=console,
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+
+    assert any(created in m for m in printed)
+    # A success must never be narrated as a degradation.
+    assert not any("degrad" in m.lower() for m in printed)
+    browser_open.assert_not_called()
+
+
+def test_tty_confirm_gh_success_with_blank_stdout_still_confirms():
+    # returncode 0 means gh created it; blank stdout must not read as silence.
+    report = _make_report()
+    run_fn = Mock(
+        side_effect=[Mock(returncode=0), Mock(returncode=0, stdout="  \n")],
+    )
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="dev-test-w27c512.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=console,
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+
+    assert any(submit.SUBMIT_REPO in m and "filed" in m.lower() for m in printed)
+
+
+def test_tty_confirm_gh_unavailable_dispatches_to_browser():
+    report = _make_report()
+    which_fn = Mock(return_value=None)
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    browser_open.assert_called_once()
+    run_fn.assert_not_called()
+
+
+def test_tty_confirm_gh_create_fails_falls_back_to_browser():
+    report = _make_report()
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status: authed
+            Mock(returncode=1, stdout=""),  # gh issue create: fails
+        ]
+    )
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    browser_open.assert_called_once()
+    assert run_fn.call_count == 2
+
+
+def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
+    # Honest ordering: the stderr-narrating print from Task 1's gh-failure
+    # path, plus submit_report's own degradation statement, must both
+    # appear BEFORE the browser_open fallback call -- not merely alongside
+    # it. A single shared `printed` list (fed by both console.print AND a
+    # browser_open side_effect sentinel) is the only way a mocked test can
+    # honestly prove ordering across two different injected seams.
+    report = _make_report()
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status: authed
+            Mock(
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: Resource not accessible by personal access token",
+            ),  # gh issue create: fails
+        ]
+    )
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    def _browser_open_sentinel(url):
+        printed.append("BROWSER_OPEN_SENTINEL")
+        return True
+
+    browser_open = Mock(side_effect=_browser_open_sentinel)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    stderr_idx = next(
+        i
+        for i, m in enumerate(printed)
+        if "GraphQL: Resource not accessible by personal access token" in m
+    )
+    degrade_idx = next(
+        i for i, m in enumerate(printed) if "degrad" in m.lower() and "GraphQL" not in m
+    )
+    sentinel_idx = printed.index("BROWSER_OPEN_SENTINEL")
+
+    assert stderr_idx < sentinel_idx
+    assert degrade_idx < sentinel_idx
+
+
+def test_tty_body_sent_to_gh_is_sanitized():
+    # A PII vector present in a step reason must never reach the seam
+    # unscrubbed (end-to-end sanitize integration).
+    report = _make_report(pii="failed reading /home/alice/scratch/file.bin")
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),
+            Mock(returncode=0, stdout="https://github.com/x/y/issues/1\n"),
+        ]
+    )
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+    create_call = run_fn.call_args_list[1]
+    sent_body = create_call.kwargs["input"]
+    assert "alice" not in sent_body
+    assert "/home/<user>/scratch/file.bin" in sent_body
+
+
+def test_tty_body_sent_to_browser_is_sanitized():
+    report = _make_report(pii="port /dev/ttyACM0 gone")
+    browser_open = Mock()
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value=None),
+        run_fn=Mock(),
+        browser_open=browser_open,
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+    )
+    from urllib.parse import parse_qs, urlparse
+
+    sent_url = browser_open.call_args[0][0]
+    sent_body = parse_qs(urlparse(sent_url).query)["body"][0]
+    assert "ttyACM0" not in sent_body
+    assert "/dev/tty<redacted>" in sent_body
+
+
+def test_refuse_never_calls_isatty():
+    report = _make_report(host_version=None)
+    isatty_fn = Mock(return_value=True)
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=isatty_fn,
+        confirm_fn=Mock(),
+        console=Mock(),
+    )
+    isatty_fn.assert_not_called()
+
+
+def test_dedup_seam_invoked_before_confirm_fn_on_every_ask_path():
+    report = _make_report()
+    order: list[str] = []
+    find_prior_report_fn = Mock(
+        side_effect=lambda *a, **k: (order.append("dedup"), (None, True))[1]
+    )
+    confirm_fn = Mock(side_effect=lambda *a, **k: (order.append("confirm"), True)[1])
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value=None),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert order == ["dedup", "confirm"]
+
+
+def test_no_duplicate_asks_once_and_dispatches_to_create_on_yes():
+    report = _make_report()
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(
+                returncode=0,
+                stdout="https://github.com/henols/firestarter/issues/9\n",
+            ),  # gh issue create
+        ]
+    )
+    confirm_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    comment_via_gh_fn = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    ask_text = confirm_fn.call_args[0][0]
+    assert "Submit this report" in ask_text
+    comment_via_gh_fn.assert_not_called()
+    assert run_fn.call_count == 2
+
+
+def test_duplicate_found_asks_comment_question_and_dispatches_to_comment_on_yes():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
+    confirm_fn = Mock(return_value=True)
+    run_fn = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    ask_text = confirm_fn.call_args[0][0]
+    assert prior_url in ask_text
+    assert "comment" in ask_text.lower()
+    comment_via_gh_fn.assert_called_once()
+    assert comment_via_gh_fn.call_args[0][0] == prior_url
+    # No new-issue create call is ever made on the duplicate branch.
+    run_fn.assert_not_called()
+
+
+def test_duplicate_comment_decline_does_not_comment():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock()
+    confirm_fn = Mock(return_value=False)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    comment_via_gh_fn.assert_not_called()
+
+
+def test_duplicate_comment_fails_falls_back_to_browser_on_existing_issue():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=None)
+    browser_open = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(),
+        browser_open=browser_open,
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    browser_open.assert_called_once()
+
+
+def test_dedup_check_failed_still_asks_and_prints_could_not_run_line():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    confirm_fn = Mock(return_value=False)
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value=None),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    ask_text = confirm_fn.call_args[0][0]
+    assert "Submit this report" in ask_text
+    assert any("could not run" in m.lower() for m in printed)
+
+
+def test_off_tty_names_existing_issue_when_duplicate_found():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=False),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert any(prior_url in m for m in printed)
+
+
+def test_off_tty_prints_could_not_run_line_when_dedup_check_failed():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=False),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert any("could not run" in m.lower() for m in printed)
+
+
+def test_comment_body_sent_is_sanitized():
+    # A PII vector present in a step reason must never reach comment_via_gh
+    # unscrubbed (mirrors test_tty_body_sent_to_gh_is_sanitized for the
+    # duplicate-comment branch).
+    report = _make_report(pii="failed reading /home/alice/scratch/file.bin")
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    sent_body = comment_via_gh_fn.call_args[0][1]
+    assert "alice" not in sent_body
+    assert "/home/<user>/scratch/file.bin" in sent_body
+
+
+def test_auto_submit_default_is_unchanged_on_a_tty():
+    """Called without `auto_submit`, behavior is byte-identical to today on
+    a TTY: the confirm prompt is still reached."""
+    report = _make_report()
+    confirm_fn = Mock(return_value=False)
+    isatty_fn = Mock(return_value=True)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+
+    isatty_fn.assert_called_once()
+    confirm_fn.assert_called_once()
+
+
+def test_auto_submit_default_is_unchanged_off_a_tty():
+    """Called without `auto_submit`, behavior is byte-identical to today off
+    a TTY: `isatty_fn` is consulted and nothing is filed."""
+    report = _make_report()
+    run_fn = Mock()
+    browser_open = Mock()
+    isatty_fn = Mock(return_value=False)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=Mock(),
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+
+    isatty_fn.assert_called_once()
+    run_fn.assert_not_called()
+    browser_open.assert_not_called()
+
+
+def test_auto_submit_never_calls_isatty_on_a_tty():
+    report = _make_report()
+    isatty_fn = Mock(return_value=True)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(
+            side_effect=[
+                Mock(returncode=0),  # gh auth status
+                Mock(
+                    returncode=0,
+                    stdout="https://github.com/henols/firestarter/issues/9\n",
+                ),
+            ]
+        ),
+        browser_open=Mock(),
+        isatty_fn=isatty_fn,
+        confirm_fn=Mock(),
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+        auto_submit=True,
+    )
+
+    isatty_fn.assert_not_called()
+
+
+def test_auto_submit_never_calls_isatty_off_a_tty():
+    report = _make_report()
+    isatty_fn = Mock(return_value=False)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(
+            side_effect=[
+                Mock(returncode=0),  # gh auth status
+                Mock(
+                    returncode=0,
+                    stdout="https://github.com/henols/firestarter/issues/9\n",
+                ),
+            ]
+        ),
+        browser_open=Mock(),
+        isatty_fn=isatty_fn,
+        confirm_fn=Mock(),
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+        auto_submit=True,
+    )
+
+    isatty_fn.assert_not_called()
+
+
+def test_auto_submit_never_calls_confirm_fn():
+    report = _make_report()
+    confirm_fn = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(
+            side_effect=[
+                Mock(returncode=0),
+                Mock(
+                    returncode=0,
+                    stdout="https://github.com/henols/firestarter/issues/9\n",
+                ),
+            ]
+        ),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+        auto_submit=True,
+    )
+
+    confirm_fn.assert_not_called()
+
+
+def test_auto_submit_still_refuses_on_a_missing_field():
+    report = _make_report(protocol=None)
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    find_prior_report_fn = Mock()
+    comment_via_gh_fn = Mock()
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+        auto_submit=True,
+    )
+
+    assert any("protocol" in m for m in printed)
+    which_fn.assert_not_called()
+    run_fn.assert_not_called()
+    browser_open.assert_not_called()
+    find_prior_report_fn.assert_not_called()
+    comment_via_gh_fn.assert_not_called()
+
+
+def test_auto_submit_prior_issue_comments_and_files_nothing_new():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
+    run_fn = Mock()
+    browser_open = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+        auto_submit=True,
+    )
+
+    comment_via_gh_fn.assert_called_once()
+    assert comment_via_gh_fn.call_args[0][0] == prior_url
+    run_fn.assert_not_called()
+    browser_open.assert_not_called()
+
+
+def test_auto_submit_prior_issue_comment_failure_states_reason_no_browser():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=None)
+    browser_open = Mock()
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=browser_open,
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+        auto_submit=True,
+    )
+
+    assert any("failed" in m.lower() for m in printed)
+    browser_open.assert_not_called()
+
+
+def test_auto_submit_dedup_check_could_not_run_files_anyway_with_disclosure():
+    """OP-2: the dedup check failing does not block filing under consent --
+    it files anyway, and discloses that fact both on the console and in
+    the body handed to `gh`."""
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(
+                returncode=0, stdout="https://github.com/henols/firestarter/issues/20\n"
+            ),
+        ]
+    )
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+        auto_submit=True,
+    )
+
+    assert any("could not run" in m.lower() for m in printed)
+    create_call = run_fn.call_args_list[1]
+    body_sent = create_call.kwargs["input"]
+    assert "could not run" in body_sent.lower()
+
+
+def test_auto_submit_dedup_ran_clean_body_carries_no_disclosure():
+    """The disclosure sentence is added ONLY on the dedup-could-not-run
+    branch -- every other path's body stays exactly what `build_body`
+    returned."""
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, True))
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),
+            Mock(
+                returncode=0, stdout="https://github.com/henols/firestarter/issues/21\n"
+            ),
+        ]
+    )
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        auto_submit=True,
+    )
+
+    create_call = run_fn.call_args_list[1]
+    body_sent = create_call.kwargs["input"]
+    assert "could not run" not in body_sent.lower()
+
+
+def test_auto_submit_gh_unavailable_prints_url_states_nothing_filed_no_browser():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, True))
+    browser_open = Mock()
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value=None),
+        run_fn=Mock(),
+        browser_open=browser_open,
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+        auto_submit=True,
+    )
+
+    assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in printed)
+    assert any("nothing was filed" in m.lower() for m in printed)
+    browser_open.assert_not_called()
+
+
+def test_auto_submit_successful_file_prints_created_url():
+    report = _make_report()
+    created = f"https://github.com/{submit.SUBMIT_REPO}/issues/22"
+    find_prior_report_fn = Mock(return_value=(None, True))
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),
+            Mock(returncode=0, stdout=created + "\n"),
+        ]
+    )
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+        auto_submit=True,
+    )
+
+    assert any(created in m for m in printed)
+
+
+def test_auto_submit_create_argv_carries_no_permission_gated_flag():
+    """The create argv must carry no `--label` -- `gh issue create --label`
+    aborts unless the label pre-exists and the caller has write access, and
+    a community tester has neither."""
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, True))
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),
+            Mock(
+                returncode=0, stdout="https://github.com/henols/firestarter/issues/23\n"
+            ),
+        ]
+    )
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(),
+        confirm_fn=Mock(),
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        auto_submit=True,
+    )
+
+    create_argv = run_fn.call_args_list[1].args[0]
+    assert "--label" not in create_argv
+    assert "-l" not in create_argv
+    assert create_argv[create_argv.index("--repo") + 1] == submit.SUBMIT_REPO

@@ -1,0 +1,117 @@
+# Host CI: ruff, pytest with coverage, and an entry-point smoke test. release.yml and publish.yml are tag/PyPI-only.
+# Phase 37 (D-06): pull_request trigger drops branches filter — runs on all PRs (v1.8-app-cleanup included).
+# Phase 37 (D-07): install uses .[test] extra; gate steps: ruff check, ruff format --check, pytest --cov.
+# Phase 127 (D-01/D-02): adds a manual dispatch trigger and a second, isolated
+# ci-py32 job that installs the [py32] extra and runs the real-pyusb API
+# surface tests. No automatic trigger changed.
+# CI runs on EVERY branch. The push trigger used to be main-only, so a push to
+# a milestone or fix branch ran no gate at all -- ruff and the coverage floor
+# were only enforced once a PR existed or once work reached main. Nothing in
+# this workflow publishes: it produces no release, no tag and
+# no PyPI upload, so there is no publish boundary to guard here. Artefact
+# publishing lives in release.yml (main), beta-release.yml (beta) and
+# publish.yml (release:published), and none of those triggers is touched.
+name: Host CI
+on:
+  push:
+    # '**' matches every BRANCH but no tags. A bare `push:` would also fire on
+    # tag pushes; milestone-close tag pushes must keep firing zero CI.
+    branches: ['**']
+    paths-ignore:
+    - '**.md'
+    - '.gitignore'
+    - 'docs/**'
+    - '.vscode/**'
+    - '.editorconfig'
+  pull_request:
+    paths-ignore:
+    - '**.md'
+    - '.gitignore'
+    - 'docs/**'
+    - '.vscode/**'
+    - '.editorconfig'
+  workflow_dispatch:
+
+# A same-repo PR branch now matches both `push` and `pull_request`, so
+# supersede stale runs per ref instead of queueing both to completion.
+# main/beta are excluded from cancellation: their runs are what the
+# publishing workflows are judged against, and a cancelled gate reads as a
+# failed gate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package + test deps
+        run: pip install -e .[test]
+
+      - name: ruff lint
+        run: ruff check firestarter/ tests/
+
+      - name: ruff format check
+        run: ruff format --check firestarter/ tests/
+
+      - name: Run pytest with coverage
+        # FIRESTARTER_DEV_TOOLS=1 because roughly fifty tests drive `dev`
+        # subcommands that channel.py registers only on a pre-release build.
+        # Until 3.1.0 every branch carried a pre-release version, so the suite
+        # passed without this and the dependency was invisible. On a stable
+        # version string those commands are correctly absent and the tests fail
+        # on a premise, not a defect. The env var is the documented escape and
+        # fails CLOSED -- it enables them only when set to exactly "1".
+        #
+        # This does not blind the channel gates. Board gating (BETA_ONLY_BOARDS,
+        # e.g. py32f071) keys on is_prerelease_build(), which this does not
+        # touch, and the tests that assert stable-build behaviour set the
+        # version they are testing explicitly rather than inheriting it.
+        env:
+          FIRESTARTER_DEV_TOOLS: "1"
+        run: pytest tests/ --cov=firestarter --cov-report=term-missing --cov-fail-under=70
+
+      - name: Smoke test - firestarter entry point and --help
+        # CLI-04 SC#4 (Phase 41 D-16): prove the pip-installed `firestarter`
+        # console script resolves cleanly and renders Click's --help output
+        # without raising. Non-zero exit fails the build.
+        run: pip install -e . && firestarter --help
+
+  # Phase 127 (HOST-04 / D-01 / D-02): a separate, isolated leg that installs
+  # the [py32] extra and genuinely imports pyusb -- distinct from the
+  # primary `ci` job's `.[test]`-only install. Deliberately NOT a matrix
+  # dimension on `ci`, so a pyusb or libusb break here cannot take down the
+  # primary gate. Runs no ruff/ruff-format/coverage/codegen-drift step:
+  # the primary `ci` job already gates all of those over the whole tree.
+  ci-py32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package + test + py32 deps
+        run: pip install -e .[test,py32]
+
+      - name: Prove pyusb genuinely imports, and record its resolved version
+        run: python3 -c "import usb.core, importlib.metadata; print('pyusb', importlib.metadata.version('pyusb'))"
+
+      # This invocation names the gated module explicitly (by its path
+      # below), so tests/conftest.py's collect_ignore (which does not
+      # suppress a path named directly on the command line) cannot let this
+      # job pass by running zero tests: a failed `.[test,py32]` install
+      # surfaces as a collection error, a renamed module as pytest's
+      # file-not-found, and a wrongly-armed collect_ignore as pytest's
+      # nothing-collected.
+      - name: Run the real-pyusb API surface tests
+        run: pytest tests/test_pyusb_api_surface.py -q
