@@ -2252,6 +2252,46 @@ if _DEV_TOOLS_ENABLED:
 
 if _DEV_TOOLS_ENABLED:
 
+    @dev.command(name="adc")
+    @click.pass_obj
+    @map_typed_errors
+    def dev_adc(app: AppContext) -> None:
+        """Read the raw ADC counts behind the VPP and VPE readings.
+
+        Sweeps three rail states in one pass -- rails off, VPP and VPE -- so
+        all three are measured at one potentiometer setting. Prints the raw
+        divider and bandgap counts alongside the millivolt figures, which the
+        vpp and vpe commands cannot show: their wire format carries only
+        tenths of a volt.
+
+        Use it with a multimeter to find how far this board's readings are
+        from the real voltages. Measure the 5 V pin and compare it with the
+        VCC figure to size the reference error; measure the rail and compare
+        it with the V figure to size the divider error.
+
+        No high voltage reaches the socket, so a chip may stay seated.
+        """
+        frames = app.hardware_manager.read_adc_raw()
+        if not frames:
+            click.echo(
+                "Could not read the ADC. Check that the firmware is a beta build."
+            )
+            sys.exit(1)
+        mode_names = {0: "rails off", 1: "VPP", 2: "VPE"}
+        for frame in frames:
+            name = mode_names.get(frame["mode"], f"mode {frame['mode']}")
+            click.echo(
+                f"{name:>9}: divider {frame['divider_adc']:>4} counts, "
+                f"bandgap {frame['bandgap_adc']:>4} counts, "
+                f"V {frame['voltage_mv']:>6} mV, VCC {frame['vcc_mv']:>5} mV"
+            )
+        first = frames[0]
+        click.echo(f"Calibration in use: R1 {first['r1']}, R2 {first['r2']}")
+        sys.exit(0)
+
+
+if _DEV_TOOLS_ENABLED:
+
     @dev.command(name="lock-status")
     @click.argument("eprom", shell_complete=_complete_eprom)
     @click.option(

@@ -512,3 +512,62 @@ def test_voltage_format_pin() -> None:
     match_vpe = re.search(pattern, rendered_vpe)
     assert match_vpe is not None
     assert match_vpe.groups() == ("21", "0")
+
+
+def test_read_adc_raw_parses_three_frames(hw_config, make_comm, fake_serial) -> None:
+    """`read_adc_raw()` decodes the three MSG_DATA_ADC_RAW (0xE7) frames the
+    firmware emits in one sweep, as full integers.
+
+    This is the whole reason the message exists: MSG_DATA_VPP_VOLTAGE carries
+    only tenths of a volt, so no calibration measurement can be taken through
+    it. Every field here must survive the round trip exactly.
+    """
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    # mode, divider_adc, bandgap_adc, voltage_mv, vcc_mv, r1, r2
+    rows = [
+        (0, 0, 205, 0, 5495, 270000, 44000),
+        (1, 344, 205, 13173, 5495, 270000, 44000),
+        (2, 400, 205, 15313, 5495, 270000, 44000),
+    ]
+    for row in rows:
+        fake_serial.feed(build_frame(0xE7, struct.pack(">BHHHHII", *row)))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        frames = hw.read_adc_raw()
+
+    assert frames is not None
+    assert len(frames) == 3
+    assert frames[0] == {
+        "mode": 0,
+        "divider_adc": 0,
+        "bandgap_adc": 205,
+        "voltage_mv": 0,
+        "vcc_mv": 5495,
+        "r1": 270000,
+        "r2": 44000,
+    }
+    assert frames[1]["voltage_mv"] == 13173
+    assert frames[2]["mode"] == 2
+    # All three carry the same bandgap count: one sweep, one pot setting.
+    assert {f["bandgap_adc"] for f in frames} == {205}
+
+
+def test_read_adc_raw_returns_none_when_nothing_parses(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """Non-vacuity: with no ADC frame on the wire the method returns None, an
+    honest 'not measured', never a fabricated zero-filled reading."""
+    fake_serial.feed(_ok_frame_bytes())
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        assert hw.read_adc_raw() is None

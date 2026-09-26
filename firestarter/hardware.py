@@ -15,6 +15,7 @@ from typing import NamedTuple, Tuple  # noqa: UP035
 from firestarter.config import ConfigManager
 from firestarter.constants import (
     COMMAND_CONFIG,
+    COMMAND_DEV_ADC,
     COMMAND_HW_VERSION,
     COMMAND_READ_VPE,
     COMMAND_READ_VPP,
@@ -434,6 +435,67 @@ class HardwareManager:
                 comm.disconnect()
 
         return int(statistics.median(samples)) if samples else None
+
+    _ADC_RAW_RE = re.compile(
+        r"ADC mode (\d+): divider (\d+), bandgap (\d+), V (\d+) mV, "
+        r"VCC (\d+) mV, R1 (\d+), R2 (\d+)"
+    )
+
+    def read_adc_raw(self, flags: int = 0) -> list[dict[str, int]] | None:
+        """Read the raw ADC diagnostic frames (dev-gated CMD_DEV_ADC).
+
+        The firmware sweeps three rail states in one command and emits one
+        MSG_DATA_ADC_RAW frame per state, so all three are sampled at a single
+        pot setting. Every field is a full integer, unlike the vpp/vpe
+        monitors whose wire format carries only tenths of a volt.
+
+        Returns one dict per frame with keys mode, divider_adc, bandgap_adc,
+        voltage_mv, vcc_mv, r1, r2 -- or None on any transport error or if no
+        frame could be parsed. Never a fabricated zero.
+        """
+        comm = None
+        frames: list[dict[str, int]] = []
+        command: dict[str, int] = {"state": COMMAND_DEV_ADC}
+        if flags:
+            command["flags"] = flags
+        try:
+            comm = SerialCommunicator.find_and_connect(command, self.config)
+            is_ok, _ = comm.expect_ack()
+            if not is_ok:
+                return None
+            for _ in range(3):
+                response = comm.get_response()
+                if response.type != "DATA":
+                    break
+                match = self._ADC_RAW_RE.search(response.message or "")
+                if match is None:
+                    continue
+                mode, divider, bandgap, voltage_mv, vcc_mv, r1, r2 = (
+                    int(g) for g in match.groups()
+                )
+                frames.append(
+                    {
+                        "mode": mode,
+                        "divider_adc": divider,
+                        "bandgap_adc": bandgap,
+                        "voltage_mv": voltage_mv,
+                        "vcc_mv": vcc_mv,
+                        "r1": r1,
+                        "r2": r2,
+                    }
+                )
+        except (
+            ProgrammerNotFoundError,
+            SerialError,
+            SerialTimeoutError,
+            HardwareOperationError,
+        ) as e:
+            logger.debug(f"Failed to read raw ADC: {e}")
+            return None
+        finally:
+            if comm:
+                comm.disconnect()
+        return frames or None
 
     def sample_vpp_mv(self, n: int = 3) -> int | None:
         """Value-returning sibling of read_vpp_voltage: median VPP mV over
