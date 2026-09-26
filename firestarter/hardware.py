@@ -319,6 +319,14 @@ class HardwareManager:
                         f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"  # noqa: E501
                     )
                     return True
+                elif response_type == "WARN":
+                    # A warning never ends a read. The firmware emits the
+                    # implausible-VCC warning once per command, ahead of the
+                    # DATA frame for that same sample, so do NOT ack here --
+                    # the reading this warning belongs to is still coming.
+                    # No log call: _log_response in serial_comm already
+                    # surfaces every WARN frame at logging.WARNING.
+                    print()
                 elif response_type == "ERROR":
                     print()
                     logger.error(f"Error reading {voltage_type_str}: {message}")
@@ -412,6 +420,11 @@ class HardwareManager:
 
             for _ in range(n):
                 response = comm.get_response()
+                if response.type == "WARN":
+                    # Same contract as _read_voltage_loop: a warning precedes
+                    # the DATA frame for its own sample and must not consume
+                    # this iteration's ack. serial_comm already logged it.
+                    response = comm.get_response()
                 if response.type != "DATA":
                     break
                 mv = self._parse_voltage_frame(response.message)
