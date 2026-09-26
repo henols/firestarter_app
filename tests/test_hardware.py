@@ -522,7 +522,9 @@ def test_read_adc_raw_parses_three_frames(hw_config, make_comm, fake_serial) -> 
     only tenths of a volt, so no calibration measurement can be taken through
     it. Every field here must survive the round trip exactly.
     """
-    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    # No ready handshake frame: find_and_connect is patched out below, and in
+    # production it is what consumes the firmware's MSG_OK_READY. The first
+    # thing this method sees on the wire is DATA frame 1.
     # mode, divider_adc, bandgap_adc, voltage_mv, vcc_mv, r1, r2
     rows = [
         (0, 0, 205, 0, 5495, 270000, 44000),
@@ -562,7 +564,6 @@ def test_read_adc_raw_returns_none_when_nothing_parses(
 ) -> None:
     """Non-vacuity: with no ADC frame on the wire the method returns None, an
     honest 'not measured', never a fabricated zero-filled reading."""
-    fake_serial.feed(_ok_frame_bytes())
     comm = make_comm()
 
     hw = HardwareManager(hw_config)

@@ -459,10 +459,12 @@ class HardwareManager:
         if flags:
             command["flags"] = flags
         try:
+            # No expect_ack() here. find_and_connect consumes the firmware's
+            # MSG_OK_READY as part of the handshake, and dt_read_adc sends no
+            # second ack -- it emits its three DATA frames and ends. An
+            # expect_ack() at this point eats those frames looking for an OK
+            # that never comes, then times out.
             comm = SerialCommunicator.find_and_connect(command, self.config)
-            is_ok, _ = comm.expect_ack()
-            if not is_ok:
-                return None
             for _ in range(3):
                 response = comm.get_response()
                 if response.type != "DATA":
