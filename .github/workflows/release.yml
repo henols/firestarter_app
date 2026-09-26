@@ -13,32 +13,82 @@ on:
     - '.vscode/**'
     - 'tools/**'
 
+# The version is READ from firestarter/__init__.py, never computed and pushed
+# back. This workflow used to run update_version.py and commit the bump to
+# main with git-auto-commit-action. That push is rejected -- main's ruleset
+# requires a pull request, GitHub Actions is not a bypass actor, and the
+# rejection (GH013) failed the step and aborted the job BEFORE the release was
+# ever cut. Nothing has been published from main by automation since
+# 2026-09-01; 2.0.9 was cut by hand twelve minutes after run 34784468070 died
+# exactly this way.
+#
+# So the version now lives in the pull request that promotes the release. Set
+# it there, and this workflow tags it, releases it and publishes it. main's
+# file and the release tag always agree, because one is read from the other.
+#
+# The pypi job is the second half of the fix. The stable path had no such job
+# and relied on publish.yml's `release: published` trigger, which GitHub does
+# NOT deliver for a release created by a bot. That is why 2.0.8 exists on
+# GitHub and never reached PyPI, silently. beta-release.yml already solved
+# this by calling publish.yml directly through workflow_call; this is the same
+# pattern.
+
 jobs:
   github:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      already_released: ${{ steps.version.outputs.already_released }}
 
     steps:
-      # - name: Install gh
-      #   run: apt update && apt install gh
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Create new patch release
+      - name: Read the version to release
         id: version
-        run: .github/scripts/update_version.py
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 -c "
+          import re, sys
+          rx = re.compile(r'^__version__ = \"(?P<v>[^\"]+)\"')
+          for line in open('firestarter/__init__.py'):
+              m = rx.match(line)
+              if m:
+                  print(m.group('v'))
+                  sys.exit(0)
+          sys.exit('no __version__ found in firestarter/__init__.py')
+          ")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version on main: $VERSION"
 
-      - name: Commit updated version
-        uses: stefanzweifel/git-auto-commit-action@v5
-        # env:
-        #   GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          # Idempotence. Not every push to main is a release: a source change
+          # that does not move the version must not try to re-cut an existing
+          # tag. Skip instead, and say so.
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "already_released=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag $VERSION already exists. Nothing to release." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "already_released=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Release
+        if: steps.version.outputs.already_released == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-  
+
+  pypi:
+    needs: github
+    if: needs.github.outputs.already_released == 'false'
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.github.outputs.version }}
+    secrets: inherit

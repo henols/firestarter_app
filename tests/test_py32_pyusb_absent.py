@@ -214,14 +214,23 @@ def _run_blocked_cli(argv: tuple[str, ...]) -> _BlockedCliResult:
 
 
 def test_fw_help_exits_zero_with_py32_options_advertised() -> None:
-    """`fw --help` exits 0, and its output contains `--board` and `--usb-id` --
-    a CLI carrying py32-only options still works with pyusb genuinely
-    unreachable. The real installed version is a pre-release, so the py32
-    surface is present here, which is the stronger claim."""
+    """`fw --help` exits 0 with pyusb genuinely unreachable.
+
+    Whether the py32 surface is ADVERTISED depends on the build channel, so
+    this asserts per channel rather than assuming one. `py32f071` is in
+    `channel.BETA_ONLY_BOARDS`, so a stable build hides `--usb-id` while a
+    pre-release build shows it. Either way the command must still work: that
+    is what this test is really about.
+    """
+    from firestarter.channel import is_prerelease_build
+
     result = _run_blocked_cli(("fw", "--help"))
     assert result.exit_code == 0
     assert "--board" in result.output
-    assert "--usb-id" in result.output
+    if is_prerelease_build():
+        assert "--usb-id" in result.output
+    else:
+        assert "--usb-id" not in result.output
 
 
 def test_fw_list_exits_zero_with_header_row() -> None:
@@ -260,8 +269,17 @@ def test_fw_dfu_probe_surfaces_the_install_hint_at_the_cli() -> None:
     message substrings -- proving `PyusbMissingError` reaches the CLI surface
     through `DfuError` -> `FirmwareOperationError` -> `ClickException`, not
     only the library API. No exact exit code is asserted."""
+    from firestarter.channel import is_prerelease_build
+
     result = _run_blocked_cli(("fw", "--dfu-probe"))
     assert result.exit_code != 0
+    if not is_prerelease_build():
+        # A stable build never registers --dfu-probe at all, because py32f071
+        # is beta-only, so Click rejects it at parse time and pyusb is never
+        # consulted. There is no install hint to surface on this channel, and
+        # the absence is the correct operator-facing behaviour.
+        assert "no such option: --dfu-probe" in result.output
+        return
     assert "pip install 'firestarter[py32]'" in result.output
     assert "libusb" in result.output
     assert "WinUSB" in result.output
