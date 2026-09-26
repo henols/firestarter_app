@@ -62,6 +62,20 @@ jobs:
         run: ruff format --check firestarter/ tests/
 
       - name: Run pytest with coverage
+        # FIRESTARTER_DEV_TOOLS=1 because roughly fifty tests drive `dev`
+        # subcommands that channel.py registers only on a pre-release build.
+        # Until 3.1.0 every branch carried a pre-release version, so the suite
+        # passed without this and the dependency was invisible. On a stable
+        # version string those commands are correctly absent and the tests fail
+        # on a premise, not a defect. The env var is the documented escape and
+        # fails CLOSED -- it enables them only when set to exactly "1".
+        #
+        # This does not blind the channel gates. Board gating (BETA_ONLY_BOARDS,
+        # e.g. py32f071) keys on is_prerelease_build(), which this does not
+        # touch, and the tests that assert stable-build behaviour set the
+        # version they are testing explicitly rather than inheriting it.
+        env:
+          FIRESTARTER_DEV_TOOLS: "1"
         run: pytest tests/ --cov=firestarter --cov-report=term-missing --cov-fail-under=70
 
       - name: Smoke test - firestarter entry point and --help

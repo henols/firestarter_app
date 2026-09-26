@@ -1,13 +1,28 @@
-<p align="left"><img src="https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="200"></p>
+<p align="left"><img src="images/branding/firestarter_logo_horizontal.png" alt="Firestarter EPROM Programmer" width="500"></p>
+
+----
 
 # Firestarter
 
+[![PyPI version](https://badge.fury.io/py/firestarter.svg)](https://badge.fury.io/py/firestarter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![ko-fi](https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/ko-fi.png)](https://ko-fi.com/E1E21I2WWW)
+
+---
 Command-line tool for the **Firestarter EPROM programmer** — an Arduino with a
 Relatively-Universal-ROM-Programmer (RURP) shield. It reads, writes, erases and verifies EPROM,
 EEPROM, Flash and SRAM chips, from a database of 746 parts across 59 manufacturers.
 
 **New here?** Start at [firestarter](https://github.com/henols/firestarter) — what
 Firestarter is, what hardware you need, and how to read your first chip.
+
+Firestarter is an application for the [Relatively-Universal-ROM-Programmer](https://github.com/AndersBNielsen/Relatively-Universal-ROM-Programmer) RURP Arduino shield ([get one here](https://www.imania.dk/samlesaet-hobbyelektronik-og-ic-er-relatively-universal-rom-programmer.htm)).
+
+Firestarter in action: [watch the video](https://youtu.be/JDHOKbyNnrE?si=0_iXKPZZwyyNGUTZ).
+
+Anders S Nielsen, creator of the Relatively-Universal-ROM-Programmer, talks about Firestarter: [watch the video](https://youtu.be/SZQ50XZlk5o?si=IKOqQUeG4Rms1cUs).
+
+Support and discussion forum on [Discord](https://discord.com/invite/kmhbxAjQc3).
 
 ## Table of contents
 
