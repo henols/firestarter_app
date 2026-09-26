@@ -7,33 +7,87 @@ Permission is hereby granted under MIT license.
 Serial Communication Module
 """
 
-import serial
-import serial.tools.list_ports
-import serial.serialutil
-import time
-import re
-import functools
-import operator
 import json
 import logging
-from collections import namedtuple
-from typing import Optional, Generator, Tuple, List
+import os
+import re
+import struct
+import time
+from typing import Any, Callable, Generator, List, Optional, Tuple  # noqa: UP035
 
-from firestarter.constants import *
+import serial
+import serial.serialutil
+import serial.tools.list_ports
+
+import firestarter.codec as codec
+import firestarter.transport_counters as transport_counters
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
+from firestarter.constants import (
+    BAUD_RATE,
+    COMMAND_FW_VERSION,
+    FLAG_CAN_ERASE,
+    FLAG_CHIP_ENABLE,
+    FLAG_FORCE,
+    FLAG_OUTPUT_ENABLE,
+    FLAG_SKIP_ERASE,
+    FLAG_VPE_AS_VPP,
+    REVISION_2_2,
+    REVISION_2_3,
+)
+from firestarter.exceptions import (
+    FirmwareOutdatedError,
+    HardwareRevisionUnsupportedError,
+    ProgrammerNotFoundError,
+    ProtocolNotImplementedError,
+    SerialError,
+    SerialTimeoutError,
+)
+
+# Re-exports for backward compatibility — test_decoder.py imports MAGIC_PREAMBLE,
+# LogMessage, Response, _crc8_ccitt directly from firestarter.serial_comm and must
+# keep passing UNCHANGED. The canonical definitions now live in
+# frame_parser.py. _decode_param is also pulled in so _format_message /
+# _decode_id_frame in this module resolve it via the new leaf.
+from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_decoder.py
+    MAGIC_PREAMBLE,
+    LogMessage,
+    Response,
+    _crc8_ccitt,
+    _decode_param,
+    cobs_encode,
+)
+from firestarter.messages import (
+    CATALOG,
+    MSG_ERR_EMPTY_INPUT,
+    MSG_ERR_PROTOCOL_NOT_IMPLEMENTED,
+    MSG_OK_READY,
+)
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
 
-# Define a structured object for responses to improve clarity over tuples.
-Response = namedtuple('Response', ['type', 'message'])
-
-# Compile regex for parsing prefixes once for efficiency
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
+# Plausibility ceiling for the firmware-advertised per-block write-time
+# budget decoded by _decode_id_frame's budget arm below. DERIVED,
+# not chosen: the largest value a legitimate firmware could compute is
+# ceil(max_pulses 25 * 65535 us * buffer 4096 B / 1e6) * 2 + 2 = 13424 s,
+# evaluated at the [1, 4096] buffer-size plausibility ceiling --
+# rounded up to 14400 s (4 h). A value outside [1, WRITE_BUDGET_MAX_S] leaves
+# write_block_budget_s unset so the write-path fallback applies, mirroring
+# the buffer-size field's own behaviour exactly. The clamp exists so a
+# malfunctioning or
+# mismatched board cannot wedge the host -- it is not a defense against an
+# adversarial one.
+WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
+GENERIC_FRAME_DECODE_ERROR_TEXT = CATALOG[MSG_ERR_EMPTY_INPUT].format
+SETUP_ACK_RECOVERY_TIMEOUT_S = 2.0
 
+# INIT/MAIN/END are absent here -- they arrive as ID frames via the catalog
+# severity-band lookup. OK + DATA remain until the firmware conversions
+# land; firmware still emits those two as text prefixes.
 EXPECTED_PREFIXES = [
     "OK",
     "INFO",
@@ -41,36 +95,20 @@ EXPECTED_PREFIXES = [
     "ERROR",
     "WARN",
     "DATA",
-    "MAIN",
-    "INIT",
-    "END",
 ]
-PREFIX_REGEX = re.compile(rf"\b({'|'.join(EXPECTED_PREFIXES)}):(.*)")
+# Prefix regex matches "<PREFIX>: <message>" anywhere in the line. The leading
+# word-boundary anchor was REMOVED because the Uno's USB-CDC bridge can prepend
+# garbage bytes to legitimate response lines: the firmware's data-bus writes
+# during programming toggle PD1 (which doubles as UART TX), and the bridge
+# captures those toggles as spurious UART frames. After the host's non-printable
+# filter, the garbage can leave digits or letters immediately before the real
+# prefix (e.g., "...80OK: Req data"), which the old `\b` anchor refused to match.
+# The combined `_parse_response_line` rightmost-match logic ensures we pick the
+# real prefix (which always appears at the end of the line, before \r\n) rather
+# than any false-positive embedded in the garbage.
+PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
-STATE_MACHINE_PREFIXES = ["INIT", "MAIN", "END"]
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
-class SerialError(Exception):
-    """Custom exception for serial communication errors."""
-
-    pass
-
-
-class SerialTimeoutError(SerialError):
-    """Custom exception for serial timeouts."""
-
-    pass
-
-
-class ProgrammerNotFoundError(SerialError):
-    """Custom exception when no programmer is found."""
-
-    pass
-
-
-class FirmwareOutdatedError(SerialError):
-    """Custom exception for outdated firmware."""
-
-    pass
 
 
 class SerialCommunicator:
@@ -82,17 +120,77 @@ class SerialCommunicator:
     across available serial ports.
     """
 
+    # Identity fields, declared at CLASS level on purpose. __init__ also
+    # assigns them, but plenty of call sites never run __init__ — conftest's
+    # make_comm builds instances via __new__, and several suites patch __init__
+    # to a no-op lambda to avoid opening a real port. _probe_port reads
+    # firmware_identity unconditionally, so an instance-only attribute turns
+    # every one of those into an AttributeError swallowed by the broad
+    # `except Exception` in _probe_port, which degrades to "no programmer
+    # found". Class defaults of None keep the gates fail-closed instead.
+    # The same ack also carries the firmware's advertised per-block
+    # write-time budget (write_block_budget_s below); the identical
+    # class-level-declaration reasoning applies to it.
+    firmware_identity: str | None = None
+    hw_revision: int | None = None
+    write_block_budget_s: int | None = None
+
     def __init__(
         self,
         port: str,
         baud_rate: int = int(BAUD_RATE),
         timeout: float = DEFAULT_SERIAL_TIMEOUT,
-    ):
+    ) -> None:
         self.port_name = port
         self.baud_rate = baud_rate
         self.timeout = timeout
-        self.connection: Optional[serial.Serial] = None
+        self.connection: serial.Serial | None = None
         self.programmer_info: str | None = None
+        # Fault-injection hook — None by default; production path is byte-identical.
+        # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
+        # getattr-guarded in send_json_command; this attribute is the formal default.
+        self._fault_inject_outgoing: Callable[[bytes], bytes] | None = None
+        # DEPRECATED: firmware_buffer_size was set by the earlier
+        # identity-string parse (3rd colon-field). That parse block is removed; capacity
+        # now comes from the MSG_OK_READY ack via firmware_max_chunk. Declaration kept
+        # so conftest.py make_comm factory mirrors __init__ without breakage.
+        self.firmware_buffer_size: int | None = None
+        # The firmware advertises effective MAIN-path decode capacity
+        # via the MSG_OK_READY operation-setup ack (2-byte big-endian u16 param).
+        # Populated by _decode_id_frame override; None until the first MSG_OK_READY
+        # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
+        # Uno floor) when None; never a FirmwareOutdatedError.
+        self.firmware_max_chunk: int | None = None
+        # The MSG_OK_READY ack extends past the 2-byte
+        # buffer-size region to also carry the effective hardware revision and
+        # the firmware identity string, so a single command exchange now yields
+        # everything the connect-time gates need. Both stay None against
+        # firmware that predates the extension (2-byte ack) — and None is a REJECT for
+        # the revision gate, never a pass. Populated by _decode_id_frame below.
+        #
+        # firmware_identity is the raw "<version>:<board>" string, matching what
+        # the retired CMD_FW_VERSION probe used to read off the wire; callers
+        # wanting the numeric part must strip the board suffix exactly as
+        # _probe_port does.
+        self.firmware_identity: str | None = None
+        self.hw_revision: int | None = None
+        # The firmware's advertised worst-case seconds for
+        # one write block. The firmware ALREADY pads this figure -- only it
+        # knows its own delay(500) VPE settle, the final full-block verify
+        # pass and the per-pulse settle -- so the host applies no multiplier
+        # of its own on top. None means "not advertised", and
+        # downstream that means a safe default applies, never an error and
+        # never a refusal (mirroring the buffer-size field's own reversal of
+        # FirmwareOutdatedError into a safe default). Populated by
+        # _decode_id_frame below. Consumed only on the write path.
+        self.write_block_budget_s: int | None = None
+        # Bounded record of every id frame
+        # successfully decoded on this connection. Populated by the
+        # _decode_id_frame override below. A set of integers only — nothing
+        # sized from frame content is ever allocated here, mirroring
+        # the defensive posture of the firmware_max_chunk plausibility clamp
+        # above. Per-connection instance state, not shared across connections.
+        self.seen_message_ids: set[int] = set()
 
         try:
             logger.debug(
@@ -115,42 +213,59 @@ class SerialCommunicator:
             raise SerialError(f"Could not connect to {self.port_name}: {e}") from e
 
     def is_connected(self) -> bool:
+        """Return True if the underlying serial port is open."""
         return self.connection is not None and self.connection.is_open
 
     def send_bytes(self, data_bytes: bytes) -> int:
+        """Write raw bytes to the serial port and return the byte count written."""
         if not self.is_connected():
             raise SerialError("Not connected.")
+        assert self.connection is not None  # narrow for mypy strict
         try:
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
             logger.debug(f"Sent {written_bytes} bytes to {self.port_name}.")
-            return written_bytes
+            # pyserial's write returns Optional[int]; treat None as 0 for our int contract.
+            return written_bytes if written_bytes is not None else 0
         except serial.SerialTimeoutException as e:
             raise SerialTimeoutError(f"Timeout writing to {self.port_name}: {e}") from e
         except serial.SerialException as e:
             raise SerialError(f"Serial error writing to {self.port_name}: {e}") from e
 
     def send_string(self, data_string: str, encoding: str = "ascii") -> int:
+        """Encode `data_string` and send it over the serial port."""
         logger.debug(f"Sending string: {data_string}")
         return self.send_bytes(data_string.encode(encoding))
 
     def send_json_command(self, command_dict: dict) -> int:
+        """Serialise ``command_dict`` as a COBS+CRC8 framed command and send it.
+
+        Frame layout (ADR §4.3):
+            COBS(json_bytes + CRC8(json_bytes)) + 0x00
+
+        Encode order is LOAD-BEARING: CRC8 is computed over the RAW json_bytes
+        FIRST, then the (json_bytes + crc_byte) stream is COBS-encoded as a unit.
+        Never COBS-encode first then CRC the body — that would silently break the
+        firmware's CRC8 verify (RESEARCH Pitfall 2).
+
+        The full frame is assembled as a single ``bytes`` object and passed to
+        ``send_bytes()`` in ONE call — a split write is forbidden.
+        """
         self._log_command_details(command_dict)
-        json_data = json.dumps(command_dict, separators=(",", ":"))
-        # json_data = json.dumps(command_dict)
-        return self.send_string(json_data)
+        json_bytes = json.dumps(command_dict, separators=(",", ":")).encode("ascii")
+        crc = _crc8_ccitt(json_bytes)
+        body = cobs_encode(json_bytes + bytes([crc]))
+        frame = body + b"\x00"
+        # FAULT INJECTION — only active when _fault_inject_outgoing is set.
+        # Production path: attribute is None by default → no-op.
+        # Hook is set only within fault_inject_cycle / dev fault-inject scope and
+        # cleared after the single corrupted transfer.
+        _hook = getattr(self, "_fault_inject_outgoing", None)
+        if _hook is not None:
+            frame = _hook(frame)
+        return self.send_bytes(frame)
 
-    def read_line_bytes(self) -> Optional[bytes]:
-        if not self.is_connected():
-            raise SerialError("Not connected.")
-        try:
-            if self.connection.in_waiting > 0:
-                return self.connection.readline()
-            return None
-        except serial.SerialException as e:
-            raise SerialError(f"Serial error reading from {self.port_name}: {e}") from e
-
-    def _parse_response_line(self, line_bytes: bytes) -> Optional[Response]:
+    def _parse_response_line(self, line_bytes: bytes) -> Response | None:
         """
         Parses a raw byte line from the serial port into a structured Response object.
         It filters non-printable characters and uses a regex to find a known prefix.
@@ -163,60 +278,283 @@ class SerialCommunicator:
         if not line_str:
             return None
 
-        match = PREFIX_REGEX.search(line_str)
-        if match:
-            # Found a known prefix, return a structured response
+        # Use the RIGHTMOST prefix occurrence — the real response always appears
+        # at the end of the line (followed by message + \r\n), and the Uno's
+        # USB-CDC bridge can prepend spurious bytes that the printable-ASCII
+        # filter doesn't fully strip. Without this, a legitimate "OK: Req data"
+        # at the end of a long noisy line can be missed if the garbage happens
+        # to contain an earlier "OK:"-like sequence.
+        matches = list(PREFIX_REGEX.finditer(line_str))
+        if matches:
+            match = matches[-1]
             return Response(type=match.group(1), message=match.group(2).strip())
 
         # No known prefix found, return the raw line as a message with no type
         return Response(type=None, message=line_str)
 
-    def _log_rurp_feedback(self, response: Response):
+    def _log_rurp_feedback(self, response: Response) -> None:
         """Logs feedback from the programmer based on the parsed Response object."""
         if not response or not response.type:
             return
 
         message = response.message
-        if response.type in STATE_MACHINE_PREFIXES:
-                message = "Done"
-
         level = logging.DEBUG
         if response.type == "ERROR":
             level = logging.ERROR
         elif response.type == "WARN":
             level = logging.WARNING
+        elif response.type == "INFO":
+            # Promote the INFO band to logging.INFO. Without this the whole band falls
+            # through to the DEBUG initialiser while the root logger sits at INFO, so
+            # unconditionally-emitted firmware report lines are silently discarded by the
+            # host.
+            #
+            # Scoped to the INFO label ONLY. OK, INIT, MAIN, END and DATA are
+            # protocol-phase frames and stay on DEBUG -- promoting them floods default
+            # output.
+            #
+            # Blast radius is six unconditionally-emitted INFO-band ids. Note 0x5B
+            # MSG_INFO_HW among them: it is emitted through an alias whose name says WARN
+            # but which expands to a plain unconditional log, while its catalog severity is
+            # INFO. That is the hard-fail-loud revision warning, visible at default
+            # verbosity because of this arm. Every other INFO id is FLAG_VERBOSE-gated in
+            # firmware.
+            #
+            # Side effect: under -v an INFO frame's prefix changes from `I:` to `INFO:`.
+            level = logging.INFO
 
         # Shorten prefix for debug, full for others
         log_prefix = (
             response.type[:1]
-            if rurp_logger.isEnabledFor(logging.DEBUG) and response.type in NON_RESPONSE_PREFIXES
+            if rurp_logger.isEnabledFor(logging.DEBUG)
+            and response.type in NON_RESPONSE_PREFIXES
             else response.type
         )
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
+    def _decode_id_frame(self, frame_len: int, body: bytes) -> LogMessage | None:
+        """Compatibility wrapper -- see codec.decode_id_frame.
+
+        CAP-01: on MSG_OK_READY with a 2-byte param region, extract the
+        big-endian u16 as firmware_max_chunk. A plausibility clamp rejects
+        values outside [1, 4096] so a corrupt or hostile ack cannot over-size
+        chunks. A 0-byte region leaves it unchanged.
+
+        Every successfully decoded id is recorded into seen_message_ids. A
+        firmware build that never emits a given id simply leaves it absent, and
+        that absence is exactly what callers key on. Bounded by construction:
+        it stores only the id integer, never anything sized from frame content.
+
+        CAP-03: a third length-discriminated field appended AFTER CAP-02's
+        variable-length identity tail, read at the COMPUTED ver_end -- never a
+        fixed index -- and clamped to a plausible range. Absent, truncated or
+        implausible values all leave it None, which downstream means "apply the
+        safe default", never an error.
+
+        The ring-fenced _read_and_parse_lines body is not touched; only this
+        override seam is used.
+        """
+        result = codec.decode_id_frame(frame_len, body)
+        if result is None:
+            transport_counters.record_decode_failure()
+        # body layout: [id_byte][params_bytes...][crc_byte]
+        if result is not None and len(body) >= 2:
+            msg_id = body[0]
+            # Record every successfully decoded id, bounded (set of ints).
+            self.seen_message_ids.add(msg_id)
+            if msg_id == MSG_OK_READY:
+                params_bytes = body[1:-1]  # strip id byte and trailing CRC
+                # The buffer size occupies the first 2 bytes in BOTH the
+                # legacy 2-byte ack and the extended ack, so the length
+                # test is >= 2 rather than == 2. Against extended-ack firmware the
+                # old == 2 form silently skipped this and fell back to the 512
+                # floor; widening it is what restores full-size chunking.
+                if len(params_bytes) >= 2:
+                    value = struct.unpack(">H", params_bytes[:2])[0]
+                    # Plausibility clamp: reject values outside [1, 4096].
+                    # No real board exceeds the 1024-byte Leonardo buffer; 4096
+                    # is a generous ceiling. Values outside this range leave
+                    # firmware_max_chunk unset so the 512 floor applies.
+                    if 1 <= value <= 4096:
+                        self.firmware_max_chunk = value
+                # Identity tail: [hw_revision u8][ver_len u8][ver bytes]. Absent
+                # on firmware that predates it, which leaves both attributes None —
+                # and None is a reject for the revision gate, never a pass.
+                # A truncated or malformed length prefix also leaves
+                # firmware_identity None rather than yielding a partial string,
+                # so a mangled ack degrades to "refuse", not to "probably fine".
+                if len(params_bytes) >= 4:
+                    self.hw_revision = params_bytes[2]
+                    ver_end = 4 + params_bytes[3]
+                    if ver_end <= len(params_bytes):
+                        self.firmware_identity = params_bytes[4:ver_end].decode(
+                            "ascii", errors="replace"
+                        )
+                        # The budget is appended AFTER the variable-length identity tail.
+                        # The offset MUST be the COMPUTED ver_end, never a fixed index: a
+                        # fixed index works on whichever board's identity string happens to
+                        # be that length and silently misreads on the next. Offsets 2 and 3
+                        # are already claimed, so a budget written there reads back as a
+                        # hardware revision and a version length.
+                        #
+                        # Nested past the ver_end guard because an ack with no identity tail
+                        # cannot carry this field. A truncated tail leaves it None rather
+                        # than yielding a partial value.
+                        if len(params_bytes) >= ver_end + 2:
+                            value = struct.unpack(
+                                ">H", params_bytes[ver_end : ver_end + 2]
+                            )[0]
+                            # Plausibility clamp, mirroring the [1, 4096] buffer-size one
+                            # in spirit: a hostile or corrupt ack
+                            # must not be able to install an unbounded host
+                            # timeout. Values outside this range leave
+                            # write_block_budget_s unset so the fallback
+                            # applies.
+                            if 1 <= value <= WRITE_BUDGET_MAX_S:
+                                self.write_block_budget_s = value
+        return result
+
+    # =================================================================
+    # DO NOT MODIFY — v1.9 RCA territory
+    # The body of this generator is the host-side baseline for v1.9's
+    # read-bug RCA. The v1.6 baseline binaries were
+    # captured against this exact body. Structural-only changes here
+    # (e.g. type hints on the signature) are OK; any change to the
+    # byte-by-byte read loop, the magic-preamble dispatch, the
+    # frame-length read, or the timeout reset semantics MUST be
+    # flagged and deferred to v1.9 alongside binary re-validation.
+    # =================================================================
     def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
         """
-        A generator that continuously reads lines from the serial port,
-        parses them, logs them, and yields them as Response objects.
-        Resets the timeout if any data is received.
+        [ring-fenced — v1.9 RCA territory; see header comment] Always-on byte-stream reader (Phase 6 D-05). A single generator
+        handles BOTH legacy text lines (terminated by 0x0A) AND binary
+        ID-encoded frames (4-byte magic preamble + length-authoritative
+        body + CRC + 0x0A re-sync anchor) through the same yield surface.
+
+        Each read of one byte is appended to a small accumulator. The
+        accumulator is dispatched on either:
+          - 4-byte tail matching MAGIC_PREAMBLE → flush any preceding
+            text via _parse_response_line, then consume `len + body
+            + terminator` as a binary frame and dispatch via
+            _decode_id_frame.
+          - byte 0x0A → flush the accumulator as a text line via
+            _parse_response_line.
+
+        Yields Response(type, message) for both paths so existing callers
+        (_log_rurp_feedback, expect_ack, get_response, consume_remaining_input)
+        require zero modification. LHOST-03 routing surface preserved.
+
+        Resets the timeout on any successfully parsed yield.
         """
         if not self.is_connected():
             raise SerialError("Not connected.")
 
+        accumulator = bytearray()
         start_time = time.time()
+        magic_len = len(MAGIC_PREAMBLE)
         while time.time() - start_time < timeout:
-            line_bytes = self.read_line_bytes()
-            if line_bytes:
-                response = self._parse_response_line(line_bytes)
-                if response:
+            try:
+                chunk = self.connection.read(1)  # type: ignore[union-attr]
+            except serial.SerialException as e:
+                raise SerialError(
+                    f"Serial error reading from {self.port_name}: {e}"
+                ) from e
+
+            if not chunk:
+                # Empty read — pyserial timeout. Do NOT reset start_time;
+                # the outer timeout window must still expire.
+                time.sleep(0.001)
+                continue
+
+            b = chunk[0]
+            accumulator.append(b)
+
+            # Magic-preamble match: dispatch preceding text (if any),
+            # then consume the binary frame.
+            if (
+                len(accumulator) >= magic_len
+                and bytes(accumulator[-magic_len:]) == MAGIC_PREAMBLE
+            ):
+                preceding = bytes(accumulator[:-magic_len])
+                accumulator.clear()
+                if preceding:
+                    text_response = self._parse_response_line(preceding)
+                    if text_response is not None:
+                        self._log_rurp_feedback(text_response)
+                        yield text_response
+                        start_time = time.time()
+
+                # Read length field (u16 big-endian, W-04: 2 bytes MSB then LSB).
+                try:
+                    len_bytes = self.connection.read(2)  # type: ignore[union-attr]
+                except serial.SerialException as e:
+                    raise SerialError(
+                        f"Serial error reading from {self.port_name}: {e}"
+                    ) from e
+                if len(len_bytes) < 2:
+                    logger.warning(
+                        "Magic preamble seen but length bytes not received "
+                        "before timeout — re-syncing."
+                    )
+                    transport_counters.record_resync_length_missing()
+                    continue
+                frame_len = struct.unpack_from(">H", len_bytes)[0]
+
+                # Read body (`frame_len` bytes: id + params + crc).
+                try:
+                    body = self.connection.read(frame_len)  # type: ignore[union-attr]
+                except serial.SerialException as e:
+                    raise SerialError(
+                        f"Serial error reading from {self.port_name}: {e}"
+                    ) from e
+                if len(body) != frame_len:
+                    logger.warning(
+                        f"Frame body truncated: expected {frame_len} bytes, "
+                        f"got {len(body)} — re-syncing."
+                    )
+                    transport_counters.record_resync_body_truncated()
+                    continue
+
+                # Consume the trailing terminator: an anchor, not a
+                # delimiter — present but its identity is not enforced.
+                try:
+                    _terminator = self.connection.read(1)  # type: ignore[union-attr]
+                except serial.SerialException as e:
+                    raise SerialError(
+                        f"Serial error reading from {self.port_name}: {e}"
+                    ) from e
+                # _terminator is intentionally not checked: the byte is a
+                # re-sync anchor, not a delimiter.
+
+                decoded = self._decode_id_frame(frame_len, body)
+                if decoded is not None:
+                    # Propagate raw-bytes payload for MSG_DATA_CHUNK (W-04);
+                    # Response.payload is None for all other message types.
+                    response = Response(
+                        type=decoded.severity,
+                        message=decoded.text,
+                        payload=decoded.payload,
+                        id=decoded.id,
+                    )
                     self._log_rurp_feedback(response)
                     yield response
-                    start_time = time.time()  # Reset timeout on any valid line
-            time.sleep(0.01)  # Prevent busy-waiting
+                    start_time = time.time()
+                continue
 
-    def get_response(
-        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Response:
+            # Newline → flush accumulator as a text line.
+            if b == 0x0A:
+                line_bytes = bytes(accumulator)
+                accumulator.clear()
+                text_resp = self._parse_response_line(line_bytes)
+                if text_resp is not None:
+                    self._log_rurp_feedback(text_resp)
+                    yield text_resp
+                    start_time = time.time()
+                continue
+
+            # Otherwise: keep accumulating; the byte is already appended.
+
+    def get_response(self, timeout: float = DEFAULT_RESPONSE_TIMEOUT) -> Response:
         """
         Waits for and returns the next significant (i.e., not INFO or DEBUG)
         response from the programmer.
@@ -225,7 +563,8 @@ class SerialCommunicator:
             if response.type and response.type not in NON_RESPONSE_PREFIXES:
                 return response
 
-        # If the generator finishes without yielding a significant response, it's a timeout.
+        # If the generator finishes without yielding a significant response, it's a timeout.  # noqa: E501
+        transport_counters.record_response_timeout()
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
             f"Timeout waiting for a significant response from {self.port_name}."
@@ -233,7 +572,7 @@ class SerialCommunicator:
 
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> Tuple[bool, str | None]:  # noqa: UP006
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
@@ -242,19 +581,24 @@ class SerialCommunicator:
             if response.type == "OK":
                 return True, response.message
             elif response.type == "ERROR":
+                if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
+                    raise ProtocolNotImplementedError(response.message)
                 return False, response.message
-            # Other significant responses are ignored by this loop, which is the intended behavior.
+            # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
-    def send_ack(self):
+    def send_ack(self) -> None:
+        """Send the 'OK' acknowledgement string to the programmer."""
         self.send_string("OK")
 
-    def send_done(self):
+    def send_done(self) -> None:
+        """Send the 'DONE' completion string to the programmer."""
         self.send_string("DONE")
 
-    def consume_remaining_input(self, timeout: float = 0.5):
+    def consume_remaining_input(self, timeout: float = 0.5) -> None:
         """Consumes and logs any pending input from the serial buffer."""
         if not self.is_connected():
             return
+        assert self.connection is not None  # narrow for mypy strict
 
         # Temporarily set a short timeout for the underlying serial read
         original_timeout = self.connection.timeout
@@ -266,11 +610,12 @@ class SerialCommunicator:
         finally:
             self.connection.timeout = original_timeout  # Restore original timeout
 
-    def disconnect(self):
+    def disconnect(self) -> None:
+        """Close the serial port and clear cached programmer info."""
         if self.is_connected():
             try:
                 self.consume_remaining_input()
-                self.connection.close()
+                self.connection.close()  # type: ignore[union-attr]
                 logger.debug(f"Disconnected from {self.port_name}.")
             except serial.SerialException as e:
                 logger.error(f"Error closing port {self.port_name}: {e}")
@@ -278,7 +623,7 @@ class SerialCommunicator:
                 self.connection = None
                 self.programmer_info = None
 
-    def _log_command_details(self, command_dict: dict):
+    def _log_command_details(self, command_dict: dict) -> None:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Sending command to programmer: {command_dict}")
             flags = command_dict.get("flags", 0)
@@ -290,8 +635,6 @@ class SerialCommunicator:
                     flag_details.append("CanErase")
                 if flags & FLAG_SKIP_ERASE:
                     flag_details.append("SkipErase")
-                if flags & FLAG_SKIP_BLANK_CHECK:
-                    flag_details.append("SkipBlankCheck")
                 if flags & FLAG_VPE_AS_VPP:
                     flag_details.append("VPEasVPP")
                 if flags & FLAG_CHIP_ENABLE:
@@ -305,10 +648,26 @@ class SerialCommunicator:
 
     @staticmethod
     def _list_potential_ports(
-        preferred_port: Optional[str] = None
-    ) -> List[str]:
+        preferred_port: str | None = None,
+        restrict_to_preferred: bool = False,
+    ) -> List[str]:  # noqa: UP006
+        """Candidate ports to probe, most preferred first.
+
+        `restrict_to_preferred` makes `preferred_port` the ONLY candidate. Set
+        it when the operator named the port on this invocation; leave it False
+        for a port merely remembered from a previous run.
+
+        Plain ordering was actively dangerous: when the named port failed to
+        answer -- old firmware, or a busy port -- probing continued and the
+        caller was handed a DIFFERENT board's identity, which the firmware
+        manager then combined with the originally-named port. Board A's release
+        asset aimed at port B, with only avrdude's part-signature check in
+        between -- and two boards sharing an MCU would not even get that.
+        """
         ports = []
         if preferred_port:
+            if restrict_to_preferred:
+                return [preferred_port]
             ports.append(preferred_port)
 
         system_ports = serial.tools.list_ports.comports()
@@ -329,19 +688,277 @@ class SerialCommunicator:
         return ports
 
     @staticmethod
-    def _is_version_sufficient(current_version_str: str, required_version_str: str) -> bool:
+    def _is_version_sufficient(
+        current_version_str: str, required_version_str: str
+    ) -> bool:
         """Compares two version strings. Returns True if current >= required."""
         if not current_version_str or not required_version_str:
             return False
         try:
             # Replace 'x' with a high number for comparison purposes
-            current = tuple(map(int, current_version_str.lower().replace('x', '999').split('.')))
-            required = tuple(map(int, required_version_str.lower().replace('x', '999').split('.')))
+            current = tuple(
+                map(int, current_version_str.lower().replace("x", "999").split("."))
+            )
+            required = tuple(
+                map(int, required_version_str.lower().replace("x", "999").split("."))
+            )
             return current >= required
         except (ValueError, AttributeError):
-            logger.warning(f"Could not parse version string for comparison: '{current_version_str}'")
-            return False # If parsing fails, assume it's not sufficient.
+            logger.warning(
+                f"Could not parse version string for comparison: '{current_version_str}'"  # noqa: E501
+            )
+            return False  # If parsing fails, assume it's not sufficient.
 
+    @staticmethod
+    def _validate_firmware_version(
+        version_str: str, allow_pre_v12: bool = False
+    ) -> None:
+        """Pure-policy version guard. Raises FirmwareOutdatedError on reject.
+
+        Owns the complete version-guard policy: strips trailing
+        alpha suffix (e.g. ``"3.0.0-dev"`` -> ``"3.0.0"``) per RESEARCH §7
+        Option A, parses the major version (``ValueError``/``IndexError`` ->
+        ``major=0``), refuses pre-v1.2 (``major < 3``) unless ``allow_pre_v12``,
+        then enforces the 2.0.0 floor via ``_is_version_sufficient``. Never
+        reads ``os.environ`` — env-var I/O is ``_probe_port``'s job.
+        """
+        # RESEARCH §7 Option A: strip trailing alpha suffix before parsing so
+        # direct callers (and future test harnesses) match production wire
+        # behavior, which is already handled by the _probe_port regex
+        # r"FW:\s*([\d.x]+)" stripping "-dev" before this method ever sees it.
+        version_str = re.sub(r"-.*$", "", version_str)
+        try:
+            major = int(version_str.split(".")[0])
+        except (ValueError, IndexError):
+            major = 0
+        if major < 3 and not allow_pre_v12:
+            raise FirmwareOutdatedError(
+                f"Firmware version {version_str} is pre-v1.2 (text-format logging). "  # noqa: E501
+                f"This host expects v1.2+ firmware emitting ID-encoded log frames. "  # noqa: E501
+                f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "  # noqa: E501
+                f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "  # noqa: E501
+                f'see PROJECT.md "Constraints".)'
+            )
+        if not SerialCommunicator._is_version_sufficient(version_str, "2.0.0"):
+            raise FirmwareOutdatedError(
+                f"Firmware version {version_str} is outdated. "
+                f"Version 2.0.0 or higher is required. "
+                f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+            )
+
+    # Bus line 11 is where socket pin 21 lands on the 24-pin RURP wiring, and
+    # it is the VPP line for exactly two pinouts — DIP24_2716 and DIP24_2532.
+    # Those parts need the 3-position JP4 header introduced on shield Rev 2.2;
+    # driving them on an earlier board is a chip-damage path.
+    _VPP_LINE_REQUIRING_REV_2_2 = 11
+    # ALLOWLIST, deliberately not a `>=` comparison. The REVISION_* bytes are
+    # not a version-ordered scale: REVISION_UNKNOWN is 0xFE, numerically ABOVE
+    # REVISION_2_2 (0x04), so `detected >= REVISION_2_2` would admit precisely
+    # the boards whose revision could not be determined. Membership fails
+    # closed for 0xFE, for the 0xFF override-absent sentinel, for the
+    # REVISION_2_0 broad bucket, and for None (pre-CAP-02 firmware).
+    _REVISIONS_WITH_3_POSITION_JP4 = (REVISION_2_2, REVISION_2_3)
+
+    @staticmethod
+    def _validate_hardware_revision(
+        command_to_send: dict, detected: int | None
+    ) -> None:
+        """Pure-policy shield-revision guard. Raises on reject, returns on pass.
+
+        Mirrors _validate_firmware_version's shape: no I/O, no environment
+        reads, no serial access — just the wire dict the host is about to act
+        on and the revision byte the firmware reported. That makes the policy
+        testable without a board and keeps _probe_port free of the reasoning.
+
+        Only chips whose bus-config routes VPP to bus line 11 are gated; every
+        other chip passes through untouched regardless of shield revision.
+
+        Note for operators hitting this: ADC detection collapses Rev 2.0, 2.1
+        and 2.2 into the single REVISION_2_0 bucket, so a genuine Rev 2.2 board
+        reports as 2.0-class until the EEPROM override is written. That is the
+        intended design — the operator has to look at the physical header and
+        assert it, and asserting it is the safety mechanism, not a workaround.
+        """
+        bus_config = command_to_send.get("bus-config") or {}
+        if bus_config.get("vpp-pin") != SerialCommunicator._VPP_LINE_REQUIRING_REV_2_2:
+            return
+        if detected in SerialCommunicator._REVISIONS_WITH_3_POSITION_JP4:
+            return
+
+        if detected is None:
+            reported = "nothing (firmware predates the revision-carrying ack)"
+        else:
+            reported = f"0x{detected:02X}"
+        raise HardwareRevisionUnsupportedError(
+            f"This chip routes VPP to socket pin 21, which needs the 3-position "
+            f"JP4 header introduced on RURP shield Rev 2.2. The programmer "
+            f"reported {reported}. Refusing to program — an earlier shield "
+            f"cannot route VPP there and attempting it can damage the EPROM.\n"
+            f"If this board really is a Rev 2.2 or 2.3, ADC detection cannot "
+            f"tell it apart from a Rev 2.0, so you must assert it once with "
+            f"'firestarter config --rev 4' (4 = Rev 2.2, 5 = Rev 2.3). Note "
+            f"that --rev takes the revision BYTE, not the silkscreen number: "
+            f"'--rev 2.2' truncates to 2 and selects the Rev 2.0 bucket.",
+            detected=detected,
+        )
+
+    def setup_command(
+        self,
+        command_to_send: dict,
+        config_manager: ConfigManager,
+        *,
+        allow_outdated_firmware: bool = False,
+    ) -> bool:
+        """
+        Send a setup command on this (already-open) link and validate its ack.
+
+        This is the half of the cold probe (`_probe_port`) that can
+        legitimately run again on an already-open link: the setup-command
+        send, the ack read (including the spurious-decode-error recovery
+        window bounded by `SETUP_ACK_RECOVERY_TIMEOUT_S`), and both the
+        firmware-version and hardware-revision gates. Those two gates are
+        part of this method BY CONSTRUCTION, never an optional extra a
+        future caller can skip -- a caller that reused a link and skipped
+        them would be driving firmware whose wire contract it had not
+        checked, which is the one genuine security consequence of a reused
+        link.
+
+        Returns `False` -- never raises for a merely-failed setup -- when
+        the ack is not OK, or (absent the waiver) when the firmware-version
+        gate refuses. It does NOT disconnect on a `False` return: whether
+        to tear the link down on a failed setup is a caller policy (the
+        port walk's "try the next port" for `_probe_port`; a lease's "drop
+        the link and cold-connect next time" for a leased setup site), not
+        something this shared setup-and-validate code decides for every
+        caller. A genuine transport failure during the send/read (a raised
+        `SerialError`) propagates unchanged for the same reason.
+
+        A call on a link that is not connected is a caller bug, and this
+        method asserts that precondition as its first statement
+        (206-REVIEW IN-02, 207.1 D-11), so the failure names this frame
+        instead of surfacing later as `send_bytes`'s not-connected
+        `SerialError`. The assert raises `AssertionError`, not
+        `SerialError`, so inside `_probe_port` it lands in the `except
+        Exception` arm, which logs an "Unexpected error while probing"
+        line and returns `None` while the port walk continues; `python -O`
+        strips it. Both production callers only ever invoke this on a link
+        they have just confirmed is open -- `_probe_port` on a
+        communicator it just constructed, and a lease's setup site on
+        `self.comm` after its own `is_connected()` check -- so neither is
+        affected.
+
+        ``allow_outdated_firmware`` waives the two firmware-*version*
+        refusals below — the missing-identity refusal and the version floor
+        — and NOTHING else. It is an explicit caller opt-in, never inferred
+        from the command dict, so a chip operation cannot acquire it by
+        accident or by crafting a command. See the block comment at the
+        version gate for why the firmware-update read path needs it and why
+        no chip operation can ever obtain it.
+        """
+        assert self.is_connected(), "setup_command requires an open link"
+        # Send the user's actual command straight away. The
+        # dedicated CMD_FW_VERSION pre-probe this replaces cost a full
+        # command exchange (2 acks) on every single connect; MSG_OK_READY
+        # now carries the firmware identity AND the effective hardware
+        # revision, so both gates run off the ack this command was going to
+        # produce anyway.
+        #
+        # Validating after the command is on the wire is safe by
+        # construction, not by luck. init_programmer_framed does run
+        # configure_memory before emitting MSG_OK_READY, but every
+        # configure_* handler is pure — it assigns function pointers and
+        # pulse defaults, nothing else. The VPP regulator is not engaged
+        # until firestarter_operation_init, which blocks on
+        # op_wait_for_ack(). Raising below means that ack is never sent, so
+        # the operation never starts and the rail stays down.
+        self.send_json_command(command_to_send)
+        is_ok, msg = self.expect_ack()
+
+        if msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+            logger.debug(
+                f"Port {self.port_name}: setup ack was a spurious "
+                f"{GENERIC_FRAME_DECODE_ERROR_TEXT!r} frame — Uno-class "
+                f"boards can emit one around a DTR reset. Reading past it "
+                f"for up to {SETUP_ACK_RECOVERY_TIMEOUT_S}s for the real ack."
+            )
+            setup_ack_deadline = time.time() + SETUP_ACK_RECOVERY_TIMEOUT_S
+            while msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+                remaining = setup_ack_deadline - time.time()
+                if remaining <= 0:
+                    break
+                is_ok, msg = self.expect_ack(timeout=remaining)
+
+        if not is_ok:
+            logger.debug(f"Port {self.port_name} responded but not with OK: {msg}")
+            return False
+
+        # Version gate. The POLICY is untouched — only its
+        # source moved, from the retired probe's "OK: FW: <ver>" text line
+        # to the identity field of the ack. Same [\d.x]+ extraction as the
+        # old regex performed, so _validate_firmware_version still receives
+        # "3.0.0" rather than the full "3.0.0:uno" identity (feeding it the
+        # board suffix would make int() choke and reject every board).
+        identity = self.firmware_identity
+        version_match = re.match(r"[\d.x]+", identity) if identity else None
+        #
+        # allow_outdated_firmware — the firmware-update read path's waiver.
+        #
+        # The version gate exists so this host never DRIVES firmware whose
+        # wire contract it does not share. Reading the version of firmware
+        # in order to replace it is not driving it: the only caller that
+        # sets this flag is FirmwareManager.check_current_firmware, whose
+        # command is {"state": COMMAND_FW_VERSION} — it engages no bus
+        # line and no VPP/VPE rail, reads one text ack and disconnects.
+        #
+        # Without the waiver the gate is a deadlock: firmware that predates
+        # the identity tail (every stable release, and every beta up
+        # to 3.0.0b1x) sends a bare 2-byte MSG_OK_READY, so `fw`,
+        # `fw --install` and `fw --force` all abort here — the one command
+        # whose job is to replace that firmware is blocked by its
+        # outdatedness, and the refusal text points the operator at
+        # `fw --install`, which hits this same line. The version IS
+        # obtainable: it arrives in the very next ack as
+        # "FW: <version>:<board>", which check_current_firmware already
+        # parses.
+        #
+        # The waiver is an explicit caller opt-in, never inferred from the
+        # command dict, so a chip operation cannot acquire it by accident
+        # or by crafting a command. It does NOT touch the shield-revision
+        # gate below, which still refuses (None is a reject there).
+        if version_match is None:
+            if not allow_outdated_firmware:
+                raise FirmwareOutdatedError(
+                    "Programmer did not report a firmware version in its "
+                    "operation-setup ack. This host requires firmware that "
+                    "carries the version and hardware revision in that ack. "
+                    "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                )
+            logger.debug(
+                f"{self.port_name}: ack carries no firmware identity "
+                f"(pre-CAP-02 firmware); proceeding because this is the "
+                f"firmware-update read path."
+            )
+        elif not allow_outdated_firmware:
+            # Refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
+            # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
+            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
+            SerialCommunicator._validate_firmware_version(
+                version_match.group(0),
+                allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
+            )
+
+        # Shield-revision gate — ordered after the version check because
+        # firmware old enough to fail that check cannot be trusted to have
+        # reported a revision at all, and before the caller is handed a
+        # connection it would immediately start driving.
+        SerialCommunicator._validate_hardware_revision(
+            command_to_send, self.hw_revision
+        )
+
+        self.programmer_info = msg
+        logger.debug(f"Programmer setup complete on {self.port_name}: {msg}")
+        config_manager.remember_port(self.port_name)  # never promotes a typed --port
+        return True
 
     @staticmethod
     def _probe_port(
@@ -349,70 +966,70 @@ class SerialCommunicator:
         baud_rate: int,
         command_to_send: dict,
         config_manager: ConfigManager,
+        fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
+        allow_outdated_firmware: bool = False,
     ) -> Optional["SerialCommunicator"]:
         """
         Attempts to connect to and validate a programmer on a single port.
         This is a helper for find_and_connect.
+
+        ``allow_outdated_firmware`` waives the two firmware-*version* refusals
+        below — the missing-identity refusal and the version floor — and
+        NOTHING else. See the block comment at the version gate for why the
+        firmware-update read path needs it and why no chip operation can ever
+        obtain it.
         """
         communicator = None
         try:
             logger.debug(f"Probing for programmer on {port_name}...")
             communicator = SerialCommunicator(port=port_name, baud_rate=baud_rate)
+            # Dev-only: arm the outgoing-frame fault BEFORE
+            # the first send_json_command below. Default None => production no-op.
+            if fault_inject_outgoing is not None:
+                communicator._fault_inject_outgoing = fault_inject_outgoing
             communicator.consume_remaining_input()
-            communicator.send_json_command(command_to_send)
-            is_ok, msg = communicator.expect_ack()
 
-            if is_ok:
-                # Firmware version check for all commands except firmware check itself.
-                exempt_cmds = [COMMAND_FW_VERSION]
-                command_code = command_to_send.get("state") or command_to_send.get("cmd")
-                if command_code not in exempt_cmds:
-                    try:
-                        # Expected format from new firmware: "FW: 2.0.x, HW: Rev2, ..."
-                        if msg and "FW:" in msg:
-                            match = re.search(r"FW:\s*([\d.x]+)", msg)
-                            if match:
-                                current_version = match.group(1).strip()
-                                if not SerialCommunicator._is_version_sufficient(current_version, "2.0.0"):
-                                    raise FirmwareOutdatedError(
-                                        f"Firmware version {current_version} is outdated. "
-                                        f"Version 2.0.0 or higher is required. "
-                                        f"Please upgrade the firmware using 'firestarter fw --install'."
-                                    )
-                            else:
-                                # "FW:" is present but version not found, treat as error
-                                raise FirmwareOutdatedError(
-                                    "Could not parse firmware version from programmer response. "
-                                    "Please upgrade the firmware using 'firestarter fw --install'."
-                                )
-                        else:
-                            # Response does not contain "FW:", assume it's an old firmware.
-                            raise FirmwareOutdatedError(
-                                "Firmware is outdated (pre-2.0.0). "
-                                "Please upgrade the firmware using 'firestarter fw --install'."
-                            )
-                    except (IndexError, AttributeError):
-                        # This case should be rare with the regex, but as a fallback.
-                        raise FirmwareOutdatedError(
-                            "Could not determine firmware version. "
-                            "Please upgrade the firmware using 'firestarter fw --install'."
-                        )
-
-                communicator.programmer_info = msg
-                logger.debug(f"Programmer found on {port_name}: {msg}")
-                config_manager.set_value("port", port_name)  # Save successful port
-                return communicator
-            else:
-                logger.debug(f"Port {port_name} responded but not with OK: {msg}")
+            # setup_command carries the send, the ack read (including the
+            # spurious-decode-error recovery window), and both validation
+            # gates. A falsy result here is a port-walk decision, not a
+            # setup decision: this probe disconnects and tries the next
+            # candidate port. setup_command itself never disconnects on a
+            # falsy result, precisely so a lease's second-and-later setup
+            # (which shares this method but is not a port walk) can decide
+            # its own policy instead.
+            if not communicator.setup_command(
+                command_to_send,
+                config_manager,
+                allow_outdated_firmware=allow_outdated_firmware,
+            ):
                 communicator.disconnect()
                 return None
 
+            logger.debug(
+                f"Programmer found on {port_name}: {communicator.programmer_info}"
+            )
+            return communicator
+
+        except HardwareRevisionUnsupportedError:
+            # MUST precede the SerialError clause below (it is a subclass) and
+            # MUST re-raise. Falling through to `return None` would surface a
+            # deliberate safety refusal as "no programmer found" — the worst
+            # possible message for an operator looking at a board that is
+            # plainly attached, and one that invites them to go hunting for a
+            # cable fault instead of reading the actual reason.
+            if communicator:
+                communicator.disconnect()
+            raise
         except (SerialError, FirmwareOutdatedError) as e:
             logger.debug(f"Probe failed for {port_name}: {e}")
             if communicator:
                 communicator.disconnect()
             if isinstance(e, FirmwareOutdatedError):
                 raise
+        except ProtocolNotImplementedError:
+            if communicator:
+                communicator.disconnect()
+            raise
         except Exception as e:
             logger.error(f"Unexpected error while probing {port_name}: {e}")
             if communicator:
@@ -424,16 +1041,57 @@ class SerialCommunicator:
         cls,
         command_to_send: dict,
         config_manager: ConfigManager,
-        preferred_port: Optional[str] = None,
+        preferred_port: str | None = None,
         baud_rate: int = int(BAUD_RATE),
+        fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
+        allow_outdated_firmware: bool = False,
+        restrict_to_port: bool | None = None,
     ) -> "SerialCommunicator":
         """
         Finds a compatible programmer by probing potential serial ports.
+
+        ``restrict_to_port`` decides whether the resolved port is the ONLY
+        candidate. None (the default) infers it from the config's transient
+        mark: `cli()` records a typed ``--port`` with persist=False, and every
+        command reads the port back out of the in-memory config, so that mark is
+        the only surviving evidence that the operator named a port on THIS run
+        rather than the app remembering one from a previous successful run. A
+        typed port is a command and is obeyed exactly; a remembered one yields
+        to discovery, or replugging a board would strand every later invocation.
+        The inference tests `is True` rather than truthiness so a config double
+        answering every call with a Mock falls to the permissive branch instead
+        of silently acquiring a restriction.
+
+        ``allow_outdated_firmware`` is forwarded verbatim to ``_probe_port``
+        and waives ONLY the firmware-version refusals there. It defaults to
+        False, so every caller that does not explicitly ask for it keeps the
+        strict gate; the single production caller that asks is
+        ``FirmwareManager.check_current_firmware``.
+
+        ``fault_inject_outgoing`` (dev-only) installs an
+        outgoing-frame mutation hook on each probed communicator BEFORE the first
+        ``send_json_command`` (the setup/handshake command). It defaults to None, so
+        the production path is byte-identical. It exists because a READ's
+        MAIN phase emits only plaintext acks (``send_string``) — the setup command
+        sent here is the ONLY corruptible host→fw command frame, so the outgoing
+        fault MUST be injected at connection time, not after setup.
         """
+        # Was the port named on THIS invocation, or merely remembered from a
+        # previous successful run? `cli()` records a typed --port with
+        # persist=False, and every command reads it back out of the in-memory
+        # config, so the transient mark is the only surviving evidence of which
+        # one it was. `is True` rather than a truthiness test on purpose: a
+        # config double that answers every call with a Mock must fall to the
+        # permissive branch, not silently acquire a restriction.
+        if restrict_to_port is None:
+            restrict_to_port = config_manager.is_transient("port") is True
+        port_named_this_run = restrict_to_port
         if not preferred_port:
             preferred_port = config_manager.get_value("port")
 
-        potential_ports = cls._list_potential_ports(preferred_port)
+        potential_ports = cls._list_potential_ports(
+            preferred_port, restrict_to_preferred=port_named_this_run
+        )
         if not potential_ports:
             raise ProgrammerNotFoundError("No potential serial ports found.")
 
@@ -446,59 +1104,94 @@ class SerialCommunicator:
 
         for port_name in potential_ports:
             try:
-                communicator = cls._probe_port(port_name, baud_rate, command_to_send, config_manager)
+                with transport_counters.probe_scope():
+                    communicator = cls._probe_port(
+                        port_name,
+                        baud_rate,
+                        command_to_send,
+                        config_manager,
+                        fault_inject_outgoing=fault_inject_outgoing,
+                        allow_outdated_firmware=allow_outdated_firmware,
+                    )
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
-                    # The "Programmer found on..." message is logged by _probe_port on a new line.
+                    # The "Programmer found on..." message is logged by _probe_port on a new line.  # noqa: E501
                     return communicator
-            except FirmwareOutdatedError as e:
+            except (
+                FirmwareOutdatedError,
+                HardwareRevisionUnsupportedError,
+                ProtocolNotImplementedError,
+            ) as e:
                 if status_update_active:
                     logger.info("Connecting... Failed  ", extra={"status": "end"})
-                # If firmware is outdated on a port, stop probing and raise the specific error.
+                # If firmware is outdated, the shield revision cannot safely
+                # drive this chip, or the protocol is not implemented, stop
+                # probing and raise the specific error (all three are
+                # stop-probing, surface-the-specific-error cases). Listing the
+                # revision error here is about closing the "Connecting..."
+                # status line — it already escapes the loop by not matching any
+                # clause, but it would leave that line dangling on the way out.
                 raise e
 
         # If the loop completes without finding a programmer, it's a failure.
         if status_update_active:
             logger.info("Connecting... Failed  ", extra={"status": "end"})
+        if preferred_port and port_named_this_run:
+            # Port was named, so the search was restricted to it. Say which port
+            # failed and name the most likely cause: firmware old enough that it
+            # cannot parse the current command framing answers the handshake with
+            # "Bad JSON" rather than an ack, so it can never be identified — but
+            # it CAN still be reflashed, because avrdude talks to the bootloader
+            # and not to the firmware.
+            raise ProgrammerNotFoundError(
+                f"No compatible programmer answered on {preferred_port}. If a "
+                "board is attached there, its firmware may predate the current "
+                "command framing, which makes it answer 'Bad JSON' instead of an "
+                "ack — every 2.x release, and 3.0.0 pre-releases before b8. Such "
+                "a board can still be reflashed directly: "
+                f"firestarter --port {preferred_port} fw --board <board> --install"
+            )
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
 
-    def read_data_block(self) -> bytes:
-        """Reads a specific number of bytes, typically after a DATA: response."""
-        if not self.is_connected():
-            raise SerialError("Not connected.")
-        try:
-            num_bytes = int.from_bytes(self.connection.read(2), "big")
-            checksum_rcvd = self.connection.read(1)
 
-            data = b''
-            bytes_to_read = num_bytes
-            while bytes_to_read > 0:
-                # read() will block until timeout or all bytes are received.
-                chunk = self.connection.read(bytes_to_read)
-                if not chunk:
-                    # Timeout occurred before all bytes were received
-                    break
-                data += chunk
-                bytes_to_read -= len(chunk)
+class FaultInjectingSerialCommunicator(SerialCommunicator):
+    """Dev-only subclass for fw→host fault injection.
 
-            checksum = functools.reduce(operator.xor, data, 0)
-            if checksum_rcvd[0] != checksum:
-                raise SerialError("Data corruption detected (checksum mismatch).")
+    NOT imported in production code. Used only within the dev fault-inject
+    subcommand scope. Overrides _decode_id_frame to corrupt the body bytes
+    before codec decode — exercising the host decoder's resync path (bounded-
+    desync + fail-fast).
 
-            if len(data) < num_bytes:
-                logger.warning(
-                    f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"
-                )
-            return data
-        except serial.SerialTimeoutException as e:
-            raise SerialTimeoutError(
-                f"Timeout reading data block from {self.port_name}: {e}"
-            ) from e
-        except serial.SerialException as e:
-            raise SerialError(
-                f"Serial error reading data block from {self.port_name}: {e}"
-            ) from e
+    The body of _read_and_parse_lines() is UNCHANGED (ring-fence preserved,
+    the ring fence). Only _decode_id_frame is overridden — this is the correct
+    injection point that does NOT touch the generator body (Pitfall 4 / T-53-04).
+
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        corrupt_incoming_once: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._corrupt_incoming_once = corrupt_incoming_once
+        self._fault_fired = False
+
+    def _decode_id_frame(self, frame_len: int, body: bytes) -> LogMessage | None:
+        """One-shot incoming-frame fault injection: flip last body byte exactly once.
+
+        After the first call, _fault_fired is set and subsequent calls pass
+        through unmodified (one-shot guard). This causes codec.decode_id_frame's
+        CRC8 check to fail on the first call, which surfaces as None →
+        _read_and_parse_lines re-syncs without touching its body.
+        """
+        if self._corrupt_incoming_once and not self._fault_fired:
+            self._fault_fired = True
+            # Flip last byte (CRC8 position) before decode — causes CRC8 mismatch.
+            body = body[:-1] + bytes([body[-1] ^ 0x01])
+        return super()._decode_id_frame(frame_len, body)
 
 
 # Example usage (for testing this module directly)
@@ -515,11 +1208,11 @@ if __name__ == "__main__":
     comm = None
     try:
         # To test, you might need to specify a port if auto-detection is tricky
-        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")
+        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")  # noqa: E501
         comm = SerialCommunicator.find_and_connect(test_command, config)
 
         logger.info(
-            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"
+            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"  # noqa: E501
         )
 
         # Example: Send another command after connection

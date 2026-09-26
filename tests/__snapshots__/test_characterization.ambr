@@ -1,0 +1,1582 @@
+# serializer version: 1
+# name: test_error_fw_pre_firmware_version_mutex
+  '''
+  Usage: firestarter fw [OPTIONS]
+  Try 'firestarter fw --help' for help.
+  
+  Error: --pre is mutually exclusive with --firmware-version.
+  
+  '''
+# ---
+# name: test_error_fw_pre_stable_mutex
+  '''
+  Usage: firestarter fw [OPTIONS]
+  Try 'firestarter fw --help' for help.
+  
+  Error: --pre is mutually exclusive with --stable.
+  
+  '''
+# ---
+# name: test_error_info_bad_chip
+  '''
+  EPROM 'NOTACHIP' not found in database.
+  
+  '''
+# ---
+# name: test_error_read_bad_address
+  '''
+  Invalid address format: not_hex
+  
+  '''
+# ---
+# name: test_error_read_bad_size
+  '''
+  Invalid size format: abc
+  
+  '''
+# ---
+# name: test_error_read_missing_eprom
+  '''
+  Usage: firestarter read [OPTIONS] EPROM [OUTPUT_FILE]
+  Try 'firestarter read --help' for help.
+  
+  Error: Missing argument 'EPROM'.
+  
+  '''
+# ---
+# name: test_error_unknown_command
+  '''
+  Usage: firestarter [OPTIONS] COMMAND [ARGS]...
+  Try 'firestarter --help' for help.
+  
+  Error: No such command 'foobar'.
+  
+  '''
+# ---
+# name: test_error_write_missing_args
+  '''
+  Usage: firestarter write [OPTIONS] EPROM INPUT_FILE
+  Try 'firestarter write --help' for help.
+  
+  Error: Missing argument 'EPROM'.
+  
+  '''
+# ---
+# name: test_help
+  '''
+  Usage: firestarter [OPTIONS] COMMAND [ARGS]...
+  
+    EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield.
+  
+  Options:
+    -v, --verbose    Enable verbose mode
+    -p, --port TEXT  Serial port to use (e.g. /dev/ttyXXX). Overrides the saved
+                     port in config.json for this invocation.
+    --version        Show the version and exit.
+    --help           Show this message and exit.
+  
+  Commands:
+    blank   Checks if an EPROM is blank.
+    config  Handles CONFIGURATION values.
+    dev     Development and diagnostic commands for the RURP shield.
+    erase   Erase an EPROM, if supported.
+    fw      Firmware version.
+    hw      Hardware revision.
+    id      Checks an EPROM, if supported.
+    info    EPROM info.
+    list    List all EPROMs in the database.
+    read    Reads the content from an EPROM.
+    search  Search for EPROMs in the database.
+    verify  Verifies the content of an EPROM.
+    vpe     VPE voltage.
+    vpp     VPP voltage.
+    write   Writes a binary file to an EPROM.
+  
+  '''
+# ---
+# name: test_help_blank
+  '''
+  Usage: firestarter blank [OPTIONS] EPROM
+  
+    Checks if an EPROM is blank.
+  
+    Exits 0 when blank, 1 when at least one byte is not blank, 2 on a transport,
+    hardware, setup, or region failure. The three are distinct: a transport
+    failure is not reported as a not-blank verdict, and a region refusal -- a
+    region running past the chip's end -- is reported before the serial port
+    ever opens.
+  
+    Without --size, the checked region is the whole chip; with it, --size wins.
+  
+  Options:
+    -a, --address TEXT  Blank check start address in dec/hex
+    -s, --size TEXT     Size of the data to blank check in dec/hex
+    -f, --force         Force, even if the VPP or chip id doesn't match.
+    --full              Report every non-blank range, not just the first.
+    --help              Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_config
+  '''
+  Usage: firestarter config [OPTIONS]
+  
+    Handles CONFIGURATION values.
+  
+  Options:
+    --rev FLOAT            WARNING Overrides hardware revision (0-2), only use
+                           with HW mods. -1 disables override.
+    -r1, --r16 INTEGER     Set R16 resistance, resistor connected to VPE
+    -r2, --r14r15 INTEGER  Set R14/R15 resistance, resistors connected to GND
+    --help                 Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_dev
+  '''
+  Usage: firestarter dev [OPTIONS] COMMAND [ARGS]...
+  
+    Development and diagnostic commands for the RURP shield.
+  
+    On a stable install, only `read` and `test` are available in this group --
+    both are fully supported for end users, despite living inside a group named
+    `dev`. The remaining subcommands are development and bench tooling,
+    available only on a pre-release install.
+  
+    USR button will break command and return.
+  
+  Options:
+    --help  Show this message and exit.
+  
+  Commands:
+    addr               Direct access to address lines and control register.
+    consistency-check  Read EPROM N consecutive times and report SHA-256...
+    fault-inject       Demonstrate COBS resync: inject a corrupted frame...
+    lock-status        Diagnostic read of a chip's write-protection state...
+    read               Reads the content from an EPROM and prints data to...
+    reg                Direct access to registers: MSB, LSB and control...
+    test               Run the community chip-validation sweep for CHIP.
+    validate-family    Run the per-family validation matrix Tier-3 runner.
+    write-cycle        Erase, write the source image, read back N times,...
+  
+  '''
+# ---
+# name: test_help_erase
+  '''
+  Usage: firestarter erase [OPTIONS] EPROM
+  
+    Erase an EPROM, if supported.
+  
+    ``-b``/``--blank-check`` requests a blank check performed **after** the
+    erase, through the same host-side engine ``blank`` uses. Note the inverted
+    sense against ``write``, whose ``-b``/``--no-blank-check`` skips a check
+    performed before it -- that inversion is unchanged.
+  
+    Without ``-b``, ``erase`` exits 0 when the erase succeeds and 1 when it does
+    not. With ``-b``, the exit code widens to three outcomes: 0 erased and
+    blank, 1 erased but not blank, 2 when the check itself fails on transport,
+    hardware or setup. The three are distinct -- a transport failure is never
+    reported as a not-blank chip verdict. It works on every part ``erase``
+    supports. The check reports the first non-blank address only; for every
+    coalesced mismatching range with a classification bucket, run ``firestarter
+    blank <chip> --full`` afterward.
+  
+    ``-s``/``--sector-address`` applies only to protocols that support a sector
+    erase; a whole-device chip erase ignores any sector address given for it.
+    ``-s`` and ``-b`` cannot be combined: the post-erase check is whole-device
+    and cannot follow a sector erase, and the host has no sector-size knowledge
+    to scope it with. That combination is refused, exit 2, before the erase
+    runs.
+  
+    An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
+    exit 0 instead, for scripting, while still printing the same line.
+  
+  Options:
+    -f, --force                   Force, even if the VPP or chip id doesn't
+                                  match.
+    -b, --blank-check             Do a blank check after erase.
+    -s, --sector-address ADDRESS  Sector address for sector erase (hex e.g.
+                                  0x10000). Omit for chip erase.
+    --ignore-unsupported          Exit 0 instead of 1 when erase is not
+                                  supported for this EPROM.
+    --help                        Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_fw[test_help_fw_prerelease]
+  '''
+  Usage: firestarter fw [OPTIONS]
+  
+    Firmware version.
+  
+    ``--pre``, ``--firmware-version`` and ``--stable`` are mutually exclusive;
+    passing more than one is refused before anything is installed.
+  
+  Options:
+    -i, --install                   Try to install the latest firmware.
+    --pre                           Fetch latest pre-release firmware (mirrors
+                                    pip install --pre).
+    --firmware-version VERSION      Pin exact firmware version (e.g. 3.1.0,
+                                    3.1.0b2, 3.1.0rc1).
+    --stable                        Explicitly select stable channel. With
+                                    --list, filters to stable releases only.
+    --list                          List available firmware releases for the
+                                    configured board.
+    -b, --board [uno|uno328pb|leonardo|py32f071]
+                                    Microcontroller board (optional), defaults
+                                    to 'uno'.
+    --usb-id VID:PID                Restrict USB DFU install to one device, e.g.
+                                    1a86:8012 (py32f071 only).
+    --dfu-probe                     List attached USB DFU devices and exit
+                                    (py32f071 bootloader discovery).
+    --avrdude-path TEXT             Full path to avrdude (optional), set if
+                                    avrdude is not found.
+    -c, --avrdude-config-path TEXT  Full path to avrdude config (optional), set
+                                    if avrdude version is 6.3 or not found.
+    -f, --force                     Will install firmware even if the version is
+                                    the same.
+    --allow-newer-firmware          Install firmware that is newer than this
+                                    CLI. The pairing is not tested.
+    --json                          Output --list results as JSON array (only
+                                    with --list).
+    --help                          Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_fw[test_help_fw_stable]
+  '''
+  Usage: firestarter fw [OPTIONS]
+  
+    Firmware version.
+  
+    ``--pre``, ``--firmware-version`` and ``--stable`` are mutually exclusive;
+    passing more than one is refused before anything is installed.
+  
+  Options:
+    -i, --install                   Try to install the latest firmware.
+    --pre                           Fetch latest pre-release firmware (mirrors
+                                    pip install --pre).
+    --firmware-version VERSION      Pin exact firmware version (e.g. 3.1.0,
+                                    3.1.0b2, 3.1.0rc1).
+    --stable                        Explicitly select stable channel. With
+                                    --list, filters to stable releases only.
+    --list                          List available firmware releases for the
+                                    configured board.
+    -b, --board [uno|uno328pb|leonardo]
+                                    Microcontroller board (optional), defaults
+                                    to 'uno'.
+    --avrdude-path TEXT             Full path to avrdude (optional), set if
+                                    avrdude is not found.
+    -c, --avrdude-config-path TEXT  Full path to avrdude config (optional), set
+                                    if avrdude version is 6.3 or not found.
+    -f, --force                     Will install firmware even if the version is
+                                    the same.
+    --allow-newer-firmware          Install firmware that is newer than this
+                                    CLI. The pairing is not tested.
+    --json                          Output --list results as JSON array (only
+                                    with --list).
+    --help                          Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_hw
+  '''
+  Usage: firestarter hw [OPTIONS]
+  
+    Hardware revision.
+  
+  Options:
+    --help  Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_id
+  '''
+  Usage: firestarter id [OPTIONS] EPROM
+  
+    Checks an EPROM, if supported.
+  
+  Options:
+    -f, --force  Force, even if the VPP is not correct.
+    --help       Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_info
+  '''
+  Usage: firestarter info [OPTIONS] EPROM
+  
+    EPROM info.
+  
+  Options:
+    -c, --config   Show EPROM config.
+    -a, --adapter  Show adapter pin wiring table.
+    --help         Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_list
+  '''
+  Usage: firestarter list [OPTIONS]
+  
+    List all EPROMs in the database.
+  
+  Options:
+    -v, --verified  Only shows verified EPROMs
+    --help          Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_read
+  '''
+  Usage: firestarter read [OPTIONS] EPROM [OUTPUT_FILE]
+  
+    Reads the content from an EPROM.
+  
+  Options:
+    -f, --force         Force, even if the chip id doesn't match.
+    -a, --address TEXT  Read start address in dec/hex
+    -s, --size TEXT     Size of the data to read in dec/hex
+    --help              Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_search
+  '''
+  Usage: firestarter search [OPTIONS] TEXT
+  
+    Search for EPROMs in the database.
+  
+  Options:
+    --help  Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_verify
+  '''
+  Usage: firestarter verify [OPTIONS] EPROM INPUT_FILE
+  
+    Verifies the content of an EPROM.
+  
+    Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, setup, or
+    region failure. The three are distinct: a transport failure is not reported
+    as a mismatch, and a region refusal -- an explicit --size longer than the
+    input file, or a region running past the chip's end -- is reported before
+    the serial port ever opens.
+  
+    Without --size, the compared region is the input file's own length; with it,
+    --size wins.
+  
+  Options:
+    -a, --address TEXT  Verify start address in dec/hex
+    -s, --size TEXT     Size of the data to verify in dec/hex
+    -f, --force         Force, even if the VPP or chip id doesn't match.
+    --full              Report every mismatching range, not just the first.
+    --help              Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_write
+  '''
+  Usage: firestarter write [OPTIONS] EPROM INPUT_FILE
+  
+    Writes a binary file to an EPROM.
+  
+    Blank check and erase are separate steps:
+      -b, --no-blank-check  skip the blank check only -- a pre-write erase
+                            still runs on electrically-erasable chips
+      --skip-erase          skip the pre-write erase as well
+  
+    Before the write reaches the port, the host -- not the firmware -- checks
+    that the target region is blank. Four protocol families never receive that
+    check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase per page immediately
+    before each write, and the SRAM and FRAM families have no blank state to
+    check at all. -b has nothing to skip on those four families; on every
+    protocol outside this list, it is still the way to skip the check.
+  
+    --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware unlocks
+    software data protection during write init. On any other protocol it has no
+    effect and the write proceeds. The host may also set it on its own when the
+    resolved chip is protocol-0x0D and its protection state cannot be read, and
+    always reports when it does.
+  
+    --pulse-us overrides the database program-pulse width for this run only, in
+    the range 1..65535 microseconds. Out-of-range values are refused before the
+    port is opened. A value above 50000 is refused by the firmware on protocol
+    0x0B before any high voltage is enabled. Using the flag always reports both
+    the database pulse and the override, so a log captured without its command
+    line still records which pulse was used.
+  
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
+  
+  Options:
+    -b, --no-blank-check      Skip the blank check before write (erase still
+                              runs if the chip supports it).
+    --skip-erase              Also skip the pre-write erase (for already-blank
+                              or non-erasable/pre-erased parts). WARNING:
+                              skipping erase on a non-blank electrically-
+                              erasable chip leaves un-erased bits that cannot be
+                              reprogrammed.
+    -f, --force               Force, even if the VPP or chip id doesn't match.
+    -a, --address TEXT        Write start address in dec/hex
+    --vpe-as-vpp              Use VPE as VPP voltage
+    --pulse-us INTEGER RANGE  Override the database program-pulse width for this
+                              run (microseconds, 1-65535). This bound is minipro
+                              parity (-o pulse=N is a uint16), NOT a wire-type
+                              or hardware limit -- see write()'s docstring.
+                              [1<=x<=65535]
+    --skip-sdp-unlock         Decline the automatic SDP unlock firmware performs
+                              at the start of every protocol-0x0D write.
+                              WARNING: on a chip whose software data protection
+                              is actually enabled, the write will then fail. Has
+                              NO EFFECT on any other protocol — the host warns
+                              and proceeds.
+    --verify                  After a successful write, read the written region
+                              back and compare it through the same engine
+                              `verify` uses. Changes THIS INVOCATION's exit-code
+                              contract: 0 the write landed and the read-back
+                              matched, 1 the invocation ended for a reason the
+                              host or the firmware decided (a blank-guard
+                              refusal, a firmware error during the write, a
+                              malformed address, or a read-back that completed
+                              and disagreed), 2 the transport or the hardware
+                              failed in ANY phase of the run -- the guard read,
+                              the write itself, or the read-back. Without
+                              --verify, write exits 0 on success and 1 on any
+                              failure, exactly as before.
+    --full                    With --verify, report every coalesced mismatching
+                              range in the read-back comparison, not just the
+                              first. Has no meaning and is refused without
+                              --verify.
+    --help                    Show this message and exit.
+  
+  '''
+# ---
+# name: test_info_at28c256
+  '''
+  Eprom Info          
+  Name:               AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L
+  Manufacturer:       ATMEL
+  Number of pins:     28
+  Memory size         0x8000
+  Type:               EEPROM
+  Can be erased:      yes (electrically erasable)
+  VCC:                5.0v
+  Chip ID:            -
+  
+         28-DIP package
+          -----v-----
+    A14 -|  1     28 |- VCC   
+    A12 -|  2     27 |- R/W(WE)
+    A7  -|  3     26 |- A13   
+    A6  -|  4     25 |- A8    
+    A5  -|  5     24 |- A9    
+    A4  -|  6     23 |- A11   
+    A3  -|  7     22 |- OE    
+    A2  -|  8     21 |- A10   
+    A1  -|  9     20 |- CE    
+    A0  -| 10     19 |- D7    
+    D0  -| 11     18 |- D6    
+    D1  -| 12     17 |- D5    
+    D2  -| 13     16 |- D4    
+    GND -| 14     15 |- D3    
+          -----------
+  
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+         ║
+       A ●                 B ●               VPP ●
+                             ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to 5V.     Bridge B to A13.    No jumper.
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
+  
+  Protocol: EEPROM - 5V parallel, SDP + DQ7 poll (ID: 0x0D)
+    - Programming protocol for large EEPROMs
+    - Supports byte-wise programming
+    - May require specific write sequences
+  
+  Flags: 0x00000010
+    - Electrically erasable
+  
+  '''
+# ---
+# name: test_info_at28c256[test_info_at28c256_stderr]
+  ''
+# ---
+# name: test_info_known_chip
+  '''
+  Eprom Info          
+  Name:               W27C512,W27E512
+  Manufacturer:       WINBOND
+  Number of pins:     28
+  Memory size         0x10000
+  Type:               EEPROM
+  Can be erased:      yes (electrically erasable)
+  VCC:                5.0v
+  VPP:                12.0v
+  Chip ID:            0xda08
+  Pulse delay:        100µS
+  
+         28-DIP package
+          -----v-----
+    A15 -|  1     28 |- VCC   
+    A12 -|  2     27 |- A14   
+    A7  -|  3     26 |- A13   
+    A6  -|  4     25 |- A8    
+    A5  -|  5     24 |- A9    
+    A4  -|  6     23 |- A11   
+    A3  -|  7     22 |- VPP   
+    A2  -|  8     21 |- A10   
+    A1  -|  9     20 |- CE    
+    A0  -| 10     19 |- D7    
+    D0  -| 11     18 |- D6    
+    D1  -| 12     17 |- D5    
+    D2  -| 13     16 |- D4    
+    GND -| 14     15 |- D3    
+          -----------
+  
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+         ║
+       A ●                 B ●               VPP ●
+                             ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to 5V.     Bridge B to A13.    No jumper.
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
+  
+  Protocol: EPROM - 28-pin UV/EE, 13V VPP (ID: 0x07)
+    - JEDEC 28-pin EPROM algorithm (also covers compatible 28C parts)
+    - Requires VPP on OE/VPP pin and byte-program style pulses
+    - Vendors may enable software data protection/unlock cycles
+  
+  Flags: 0x00000030
+    - Electrically erasable
+    - Provides readable manufacturer/device ID
+  
+  '''
+# ---
+# name: test_info_known_chip[test_info_known_chip_stderr]
+  ''
+# ---
+# name: test_info_mbm27c1000
+  '''
+  Eprom Info          
+  Name:               MBM27C1000P,MBM27C1000
+  Manufacturer:       FUJITSU
+  Number of pins:     32
+  Memory size         0x20000
+  Type:               UV-EPROM
+  Can be erased:      no (UV erase only)
+  VCC:                5.0v
+  Programming VCC:    6.0v
+  VPP:                12.5v
+  Chip ID:            0x4e5
+  Pulse delay:        500µS
+  
+  WARNING: Programming VCC decodes to 6.0 V; using 5.0 V.
+  
+         32-DIP package
+          -----v-----
+    VPP -|  1     32 |- VCC   
+    A16 -|  2     31 |- R/W(WE)
+    A15 -|  3     30 |- A17   
+    A12 -|  4     29 |- A14   
+    A7  -|  5     28 |- A13   
+    A6  -|  6     27 |- A8    
+    A5  -|  7     26 |- A9    
+    A4  -|  8     25 |- A11   
+    A3  -|  9     24 |- OE    
+    A2  -| 10     23 |- A10   
+    A1  -| 11     22 |- CE    
+    A0  -| 12     21 |- D7    
+    D0  -| 13     20 |- D6    
+    D1  -| 14     19 |- D5    
+    D2  -| 15     18 |- D4    
+    GND -| 16     17 |- D3    
+          -----------
+  
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+                                                 ║
+       A ●                 B ●               VPP ●
+         ║                   ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to A17.    Bridge B to A13.    Bridge VPP to D.
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
+  
+  Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
+    - High-voltage EPROM algorithm for 32-pin devices
+    - Uses ≥12 V VPP and EPROM-style timing
+    - Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)
+  
+  Flags: 0x00000020
+    - Provides readable manufacturer/device ID
+  
+  '''
+# ---
+# name: test_info_mbm27c1000[test_info_mbm27c1000_stderr]
+  ''
+# ---
+# name: test_info_mbm27c4001
+  '''
+  Eprom Info          
+  Name:               MBM27C4001
+  Manufacturer:       FUJITSU
+  Number of pins:     32
+  Memory size         0x80000
+  Type:               UV-EPROM
+  Can be erased:      no (UV erase only)
+  VCC:                5.0v
+  Programming VCC:    6.0v
+  VPP:                12.5v
+  Chip ID:            0x4f4
+  Pulse delay:        100µS
+  
+  WARNING: Programming VCC decodes to 6.0 V; using 5.0 V.
+  
+         32-DIP package
+          -----v-----
+    VPP -|  1     32 |- VCC   
+    A16 -|  2     31 |- A18   
+    A15 -|  3     30 |- A17   
+    A12 -|  4     29 |- A14   
+    A7  -|  5     28 |- A13   
+    A6  -|  6     27 |- A8    
+    A5  -|  7     26 |- A9    
+    A4  -|  8     25 |- A11   
+    A3  -|  9     24 |- OE    
+    A2  -| 10     23 |- A10   
+    A1  -| 11     22 |- CE    
+    A0  -| 12     21 |- D7    
+    D0  -| 13     20 |- D6    
+    D1  -| 14     19 |- D5    
+    D2  -| 15     18 |- D4    
+    GND -| 16     17 |- D3    
+          -----------
+  
+  Jumper config (Rev 0 & 1):
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+                                                 ║
+       A ●                 B ●               VPP ●
+         ║                   ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to A17.    Bridge B to A13.    Bridge VPP to D.
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
+  
+  Jumper config (Rev 2.2 & 2.3):
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
+  
+  Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
+    - High-voltage EPROM algorithm for 32-pin devices
+    - Uses ≥12 V VPP and EPROM-style timing
+    - Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)
+  
+  Flags: 0x00000020
+    - Provides readable manufacturer/device ID
+  
+  '''
+# ---
+# name: test_info_mbm27c4001[test_info_mbm27c4001_stderr]
+  ''
+# ---
+# name: test_list
+  '''
+  +---------------------+------------------+------+------------+-------------+------+
+  | Name                | Manufacturer     | Pins | Chip ID    | Type        | VPP  |
+  +---------------------+------------------+------+------------+-------------+------+
+  | M8720               | ALI(Acer)        |   32 |            | EEPROM      | 12.0v|
+  | AS29F002T           | ALLIANCE         |   32 | 0x52B0     | Flash/EEPROM| -    |
+  | AS29F002B           | ALLIANCE         |   32 | 0x5234     | Flash/EEPROM| -    |
+  | AM2716              | AMD              |   24 |            | UV-EPROM    | 18.0v|
+  | AM2716B             | AMD              |   24 |            | UV-EPROM    | 13.0v|
+  | AM2732,AM2732A      | AMD              |   24 |            | UV-EPROM    | 18.0v|
+  | AM2732B             | AMD              |   24 |            | UV-EPROM    | 13.0v|
+  | AM2764A             | AMD              |   28 | 0x0108     | UV-EPROM    | 13.0v|
+  | AM27128A            | AMD              |   28 | 0x0189     | UV-EPROM    | 13.0v|
+  | AM27256             | AMD              |   28 | 0x0104     | UV-EPROM    | 13.0v|
+  | AM27512             | AMD              |   28 | 0x0185     | UV-EPROM    | 13.0v|
+  | AM27C64             | AMD              |   28 | 0x0115     | UV-EPROM    | 13.0v|
+  | AM27C010            | AMD              |   32 | 0x010E     | UV-EPROM    | 13.0v|
+  | AM27C020            | AMD              |   32 | 0x0197     | UV-EPROM    | 13.0v|
+  | AM27C040            | AMD              |   32 | 0x019B     | UV-EPROM    | 13.0v|
+  | AM27C080            | AMD              |   32 | 0x011C     | UV-EPROM    | 13.0v|
+  | AM27C128            | AMD              |   28 | 0x0116     | UV-EPROM    | 13.0v|
+  | AM27C256            | AMD              |   28 | 0x0110     | UV-EPROM    | 13.0v|
+  | AM27C512            | AMD              |   28 | 0x0191     | UV-EPROM    | 13.0v|
+  | AM27LV010           | AMD              |   32 | 0x010E     | UV-EPROM    | 12.0v|
+  | AM27LV020,AM27LV020B| AMD              |   32 | 0x0197     | UV-EPROM    | 12.0v|
+  | AM27LV040           | AMD              |   32 | 0x019B     | UV-EPROM    | 12.0v|
+  | AM27LV080           | AMD              |   32 | 0x011C     | UV-EPROM    | 12.0v|
+  | AM27H010,AM27HB010  | AMD              |   32 | 0x010E     | UV-EPROM    | 13.0v|
+  | AM27H256            | AMD              |   28 | 0x0110     | UV-EPROM    | 13.0v|
+  | AM28C16A            | AMD              |   24 |            | EEPROM      | -    |
+  | AM28C17A            | AMD              |   28 |            | EEPROM      | -    |
+  | AM28C64A,AM28C64AE,…| AMD              |   28 |            | EEPROM      | -    |
+  | AM28F256            | AMD              |   32 | 0x01A1     | Flash/EEPROM| 12.0v|
+  | AM28F512            | AMD              |   32 | 0x0125     | Flash/EEPROM| 12.0v|
+  | AM28F010            | AMD              |   32 | 0x01A7     | Flash/EEPROM| 12.0v|
+  | AM28F010A           | AMD              |   32 | 0x01A2     | Flash/EEPROM| 12.0v|
+  | AM28F020            | AMD              |   32 | 0x012A     | Flash/EEPROM| 12.0v|
+  | AM28F020A           | AMD              |   32 | 0x0129     | Flash/EEPROM| 12.0v|
+  | AM29F002B,AM29F002BB| AMD              |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002BT,AM29F002T| AMD              |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F002NB,AM29F002…| AMD              |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002NBT,AM29F00…| AMD              |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F010,AM29F010B  | AMD              |   32 | 0x0120     | Flash/EEPROM| -    |
+  | AM29F040,AM29F040B  | AMD              |   32 | 0x01A4     | Flash/EEPROM| -    |
+  | A27020              | AMIC             |   32 | 0x3764     | UV-EPROM    | 12.0v|
+  | A276308             | AMIC             |   28 | 0x373D     | UV-EPROM    | 13.0v|
+  | A276308A            | AMIC             |   28 | 0x372C     | UV-EPROM    | 13.0v|
+  | A278308             | AMIC             |   28 | 0x3761     | UV-EPROM    | 13.0v|
+  | A278308A            | AMIC             |   28 | 0x3764     | UV-EPROM    | 13.0v|
+  | A29001T             | AMIC             |   32 | 0x37A1     | Flash/EEPROM| -    |
+  | A29001U             | AMIC             |   32 | 0x374C     | Flash/EEPROM| -    |
+  | A290011T            | AMIC             |   32 | 0x37A1     | Flash/EEPROM| -    |
+  | A290011U            | AMIC             |   32 | 0x374C     | Flash/EEPROM| -    |
+  | A29002T             | AMIC             |   32 | 0x378C     | Flash/EEPROM| -    |
+  | A29002U             | AMIC             |   32 | 0x370D     | Flash/EEPROM| -    |
+  | A290021T            | AMIC             |   32 | 0x378C     | Flash/EEPROM| -    |
+  | A290021U            | AMIC             |   32 | 0x370D     | Flash/EEPROM| -    |
+  | A29512              | AMIC             |   32 | 0x37A4     | Flash/EEPROM| -    |
+  | A29512A             | AMIC             |   32 | 0x37A1     | Flash/EEPROM| -    |
+  | A29010              | AMIC             |   32 | 0x37A4     | Flash/EEPROM| -    |
+  | A29040,A29040A,A290…| AMIC             |   32 | 0x3786     | Flash/EEPROM| -    |
+  | A29L040,A29L040A    | AMIC             |   32 | 0x3792     | Flash/EEPROM| -    |
+  | 27CX010             | ANACHIP          |   32 | 0x010E     | UV-EPROM    | 12.0v|
+  | 27CX256             | ANACHIP          |   28 | 0x0110     | UV-EPROM    | 12.0v|
+  | AE29F1008           | ASD              |   32 | 0xDAC1     | Flash/EEPROM| -    |
+  | AE29F2008           | ASD              |   32 | 0xDA45     | Flash/EEPROM| -    |
+  | AE29F4008           | ASD              |   32 | 0xDA46     | Flash/EEPROM| -    |
+  | AE49F2008           | ASD              |   32 | 0xDA0B     | Flash/EEPROM| -    |
+  | SMJ27C010A          | ASI Semic        |   32 | 0x97D6     | UV-EPROM    | 13.0v|
+  | SMJ27C040           | ASI Semic        |   32 | 0x9750     | UV-EPROM    | 13.0v|
+  | SMJ27C128           | ASI Semic        |   28 | 0x9783     | UV-EPROM    | 13.0v|
+  | SMJ27C256           | ASI Semic        |   28 | 0x9704     | UV-EPROM    | 13.0v|
+  | SMJ27C512           | ASI Semic        |   28 | 0x9785     | UV-EPROM    | 13.0v|
+  | AT2732A             | ATMEL            |   24 |            | UV-EPROM    | 12.0v|
+  | AT27256             | ATMEL            |   28 | 0x2904     | UV-EPROM    | 12.0v|
+  | AT27C010,AT27C010L  | ATMEL            |   32 | 0x1E05     | UV-EPROM    | 13.0v|
+  | AT27C011            | ATMEL            |   28 | 0x1E85     | UV-EPROM    | 13.0v|
+  | AT27C020            | ATMEL            |   32 | 0x1E86     | UV-EPROM    | 13.0v|
+  | AT27C040            | ATMEL            |   32 | 0x1E0B     | UV-EPROM    | 13.0v|
+  | AT27C080            | ATMEL            |   32 | 0x1E8A     | UV-EPROM    | 13.0v|
+  | AT27C128            | ATMEL            |   28 | 0x1F83     | UV-EPROM    | 13.0v|
+  | AT27C256            | ATMEL            |   28 | 0x298C     | UV-EPROM    | 12.0v|
+  | AT27C256R           | ATMEL            |   28 | 0x1E8C     | UV-EPROM    | 13.0v|
+  | AT27C512            | ATMEL            |   28 | 0x1F0D     | UV-EPROM    | 12.0v|
+  | AT27C512R           | ATMEL            |   28 | 0x1E0D     | UV-EPROM    | 13.0v|
+  | AT27HC256,AT27HC256L| ATMEL            |   28 | 0x1F94     | UV-EPROM    | 12.0v|
+  | AT27HC256R,AT27HC25…| ATMEL            |   28 | 0x1E94     | UV-EPROM    | 13.0v|
+  | AT27BV010,AT27LV010…| ATMEL            |   32 | 0x1E05     | UV-EPROM    | 12.0v|
+  | AT27BV020,AT27LV020…| ATMEL            |   32 | 0x1E86     | UV-EPROM    | 12.0v|
+  | AT27BV040,AT27LV040…| ATMEL            |   32 | 0x1E0B     | UV-EPROM    | 12.0v|
+  | AT27BV256,AT27LV256…| ATMEL            |   28 | 0x1E8C     | UV-EPROM    | 12.0v|
+  | AT27BV512,AT27LV512…| ATMEL            |   28 | 0x1E0D     | UV-EPROM    | 12.0v|
+  | AT28BV64,AT28LV64   | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28BV64B,AT28LV64B | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28BV256,AT28LV256 | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C010,AT28C010E  | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28C04,AT28HC04    | ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C04E,AT28C04F   | ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C040,AT28C040E  | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28C16,AT28HC16,AT…| ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C16E,AT28C16F   | ATMEL            |   24 |            | EEPROM      | -    |
+  | AT28C17             | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C17E,AT28C17F   | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C256,AT28C256E,…| ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C64,AT28C64B(No…| ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C64B,AT28HC64B,…| ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28C64E,AT28C64F   | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT28LV010           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28MC010           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28MC020           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28MC040           | ATMEL            |   32 |            | Flash/EEPROM| -    |
+  | AT28PC64,AT28PC64E  | ATMEL            |   28 |            | EEPROM      | -    |
+  | AT29BV010A,AT29LV01…| ATMEL            |   32 | 0x1F35     | Flash/EEPROM| -    |
+  | AT29BV020,AT29LV020 | ATMEL            |   32 | 0x1FBA     | Flash/EEPROM| -    |
+  | AT29BV040,AT29LV040 | ATMEL            |   32 | 0x1F3B     | Flash/EEPROM| -    |
+  | AT29BV040A,AT29LV04…| ATMEL            |   32 | 0x1FC4     | Flash/EEPROM| -    |
+  | AT29C256            | ATMEL            |   28 | 0x1FDC     | Flash/EEPROM| -    |
+  | AT29C257            | ATMEL            |   32 | 0x1FDC     | Flash/EEPROM| -    |
+  | AT29C512            | ATMEL            |   32 | 0x1F5D     | Flash/EEPROM| -    |
+  | AT29C010A           | ATMEL            |   32 | 0x1FD5     | Flash/EEPROM| -    |
+  | AT29C020            | ATMEL            |   32 | 0x1FDA     | Flash/EEPROM| -    |
+  | AT29C040            | ATMEL            |   32 | 0x1F5B     | Flash/EEPROM| -    |
+  | AT29C040A           | ATMEL            |   32 | 0x1FA4     | Flash/EEPROM| -    |
+  | AT29LV256           | ATMEL            |   28 | 0x1FDC     | Flash/EEPROM| -    |
+  | AT29LV512           | ATMEL            |   32 | 0x1F3D     | Flash/EEPROM| -    |
+  | AT49BV001,AT49BV001…| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49BV001AN,AT49BV0…| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49BV001ANT,AT49BV…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49BV001AT,AT49BV0…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49BV002,AT49BV002…| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49BV002AN,AT49BV0…| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49BV002ANT,AT49BV…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49BV002AT,AT49BV0…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49BV010,AT49HBV01…| ATMEL            |   32 | 0x1F17     | Flash/EEPROM| -    |
+  | AT49BV020,AT49LV020 | ATMEL            |   32 | 0x1F0B     | Flash/EEPROM| -    |
+  | AT49BV040,AT49BV040…| ATMEL            |   32 | 0x1F13     | Flash/EEPROM| -    |
+  | AT49BV040T,AT49LV04…| ATMEL            |   32 | 0x1F12     | Flash/EEPROM| -    |
+  | AT49BV512,AT49LV512 | ATMEL            |   32 | 0x1F03     | Flash/EEPROM| -    |
+  | AT49F001,AT49F001A  | ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49F001AN,AT49F001N| ATMEL            |   32 | 0x1F05     | Flash/EEPROM| -    |
+  | AT49F001ANT,AT49F00…| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49F001AT,AT49F001T| ATMEL            |   32 | 0x1F04     | Flash/EEPROM| -    |
+  | AT49F002,AT49F002A  | ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49F002AN,AT49F002N| ATMEL            |   32 | 0x1F07     | Flash/EEPROM| -    |
+  | AT49F002ANT,AT49F00…| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49F002AT,AT49F002T| ATMEL            |   32 | 0x1F08     | Flash/EEPROM| -    |
+  | AT49F010,AT49HF010  | ATMEL            |   32 | 0x1F17     | Flash/EEPROM| -    |
+  | AT49F020            | ATMEL            |   32 | 0x1F0B     | Flash/EEPROM| -    |
+  | AT49F040,AT49F040A  | ATMEL            |   32 | 0x1F13     | Flash/EEPROM| -    |
+  | AT49F040T           | ATMEL            |   32 | 0x1F12     | Flash/EEPROM| -    |
+  | AT49F512            | ATMEL            |   32 | 0x1F03     | Flash/EEPROM| -    |
+  | CAT27010            | CATALYST(CSI)    |   32 |            | UV-EPROM    | 13.0v|
+  | CAT2764A            | CATALYST(CSI)    |   28 |            | UV-EPROM    | 13.0v|
+  | CAT27128A           | CATALYST(CSI)    |   28 |            | UV-EPROM    | 13.0v|
+  | CAT27256,CAT27HC256I| CATALYST(CSI)    |   28 |            | UV-EPROM    | 13.0v|
+  | CAT27512            | CATALYST(CSI)    |   28 |            | UV-EPROM    | 13.0v|
+  | CAT27C16            | CATALYST(CSI)    |   24 |            | UV-EPROM    | 13.0v|
+  | CAT27HC256          | CATALYST(CSI)    |   28 | 0x3140     | UV-EPROM    | 13.0v|
+  | CAT28C16A,CAT28C16AI| CATALYST(CSI)    |   24 |            | EEPROM      | -    |
+  | CAT28C17A           | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C256,CAT28C257 | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C64A,CAT28C65  | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C64B           | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28C512           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28C010           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28C020           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28C040           | CATALYST(CSI)    |   32 |            | Flash/EEPROM| -    |
+  | CAT28LV64,CAT28LV65 | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28LV256          | CATALYST(CSI)    |   28 |            | EEPROM      | -    |
+  | CAT28F001P-B        | CATALYST(CSI)    |   32 | 0x3195     | Flash/EEPROM| 12.0v|
+  | CAT28F001P-T        | CATALYST(CSI)    |   32 | 0x3194     | Flash/EEPROM| 12.0v|
+  | CAT28F256           | CATALYST(CSI)    |   32 | 0x31B9     | Flash/EEPROM| 12.0v|
+  | CAT28F512           | CATALYST(CSI)    |   32 | 0x31B8     | Flash/EEPROM| 12.0v|
+  | CAT28F010           | CATALYST(CSI)    |   32 | 0x31B4     | Flash/EEPROM| 12.0v|
+  | CAT28F020           | CATALYST(CSI)    |   32 | 0x31BD     | Flash/EEPROM| 12.0v|
+  | EN29F002AB,EN29F002B| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F002ANT,EN29F00…| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F002ANB,EN29F00…| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F002AT,EN29F002T| CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F512            | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F010            | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29F040,EN29F040A  | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | EN29LV040A          | CFEON            |   32 |            | Flash/EEPROM| -    |
+  | PM29F002T           | CHINGIS          |   32 | 0x9D1D     | Flash/EEPROM| -    |
+  | PM29F002B           | CHINGIS          |   32 | 0x9D2D     | Flash/EEPROM| -    |
+  | PM29F004T           | CHINGIS          |   32 | 0x9D1E     | Flash/EEPROM| -    |
+  | PM29F004B           | CHINGIS          |   32 | 0x9D2E     | Flash/EEPROM| -    |
+  | PM39F010            | CHINGIS          |   32 | 0x9D1C     | Flash/EEPROM| -    |
+  | PM39F020            | CHINGIS          |   32 | 0x9D4D     | Flash/EEPROM| -    |
+  | PM39F040            | CHINGIS          |   32 | 0x9D4E     | Flash/EEPROM| -    |
+  | CY27C010,CY27H010   | CYPRESS          |   32 | 0x341D     | UV-EPROM    | 12.0v|
+  | CY27C020            | CYPRESS          |   32 |            | UV-EPROM    | 12.0v|
+  | CY27C040            | CYPRESS          |   32 |            | UV-EPROM    | 12.0v|
+  | CY27C128            | CYPRESS          |   28 |            | UV-EPROM    | 13.0v|
+  | CY27C256            | CYPRESS          |   28 |            | UV-EPROM    | 12.0v|
+  | CY27C512            | CYPRESS          |   28 |            | UV-EPROM    | 12.0v|
+  | CY27H256            | CYPRESS          |   28 | 0x3421     | UV-EPROM    | 12.0v|
+  | CY27H512            | CYPRESS          |   28 | 0x341F     | UV-EPROM    | 12.0v|
+  | FM28V020            | CYPRESS          |   28 |            | EEPROM      | -    |
+  | DS1220(RW)          | DALLAS           |   24 |            | SRAM        | -    |
+  | DS1220(TEST)        | DALLAS           |   24 |            | SRAM        | -    |
+  | DS1225(RW)          | DALLAS           |   28 |            | SRAM        | -    |
+  | DS1225(TEST)        | DALLAS           |   28 |            | SRAM        | -    |
+  | DS1230AB(RW),DS1230…| DALLAS           |   28 |            | SRAM        | -    |
+  | DS1230AB(TEST),DS12…| DALLAS           |   28 |            | SRAM        | -    |
+  | DS1230W(RW3.3V)     | DALLAS           |   28 |            | SRAM        | -    |
+  | DS1230W(TEST3.3V)   | DALLAS           |   28 |            | SRAM        | -    |
+  | DS1245AB(RW),DS1245…| DALLAS           |   32 |            | SRAM        | -    |
+  | DS1245AB(TEST),DS12…| DALLAS           |   32 |            | SRAM        | -    |
+  | DS1245W(RW3.3V)     | DALLAS           |   32 |            | SRAM        | -    |
+  | DS1245W(TEST3.3V)   | DALLAS           |   32 |            | SRAM        | -    |
+  | DS1249AB(RW),DS1249…| DALLAS           |   32 |            | SRAM        | -    |
+  | DS1249AB(TEST),DS12…| DALLAS           |   32 |            | SRAM        | -    |
+  | DS1249W(RW3.3V)     | DALLAS           |   32 |            | SRAM        | -    |
+  | DS1249W(TEST3.3V)   | DALLAS           |   32 |            | SRAM        | -    |
+  | DS1250AB(RW),DS1250…| DALLAS           |   32 |            | SRAM        | -    |
+  | DS1250AB(TEST),DS12…| DALLAS           |   32 |            | SRAM        | -    |
+  | DS1250W(RW3.3V)     | DALLAS           |   32 |            | SRAM        | -    |
+  | DS1250W(TEST3.3V)   | DALLAS           |   32 |            | SRAM        | -    |
+  | DPV27C101           | DENSE-PAC        |   32 |            | UV-EPROM    | 12.0v|
+  | DPV27C256           | DENSE-PAC        |   28 |            | UV-EPROM    | 12.0v|
+  | DPV27C512           | DENSE-PAC        |   28 |            | UV-EPROM    | 12.0v|
+  | F49B002UA           | EFST             |   32 | 0x8C00     | Flash/EEPROM| -    |
+  | EN27C010            | EON              |   32 | 0x1C01     | UV-EPROM    | 12.0v|
+  | EN27C512            | EON              |   28 | 0x1C83     | UV-EPROM    | 12.0v|
+  | EN29F002AB,EN29F002…| EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F002ANT,EN29F00…| EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F512            | EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F010            | EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29F040,EN29F040A  | EON              |   32 |            | Flash/EEPROM| -    |
+  | EN29LV040A          | EON              |   32 |            | Flash/EEPROM| -    |
+  | XL2804A             | EXEL             |   24 |            | EEPROM      | -    |
+  | XL2816A,XLE28C16A,X…| EXEL             |   24 |            | EEPROM      | -    |
+  | XLE2865A,XLS2865A   | EXEL             |   28 |            | EEPROM      | -    |
+  | XLE28C16B,XLS28C16B | EXEL             |   24 |            | EEPROM      | -    |
+  | XLE28C64A,XLS28C64A | EXEL             |   28 |            | EEPROM      | -    |
+  | XLE28C64B,XLS28C64B | EXEL             |   28 |            | EEPROM      | -    |
+  | XLE28C256,XLS28C256 | EXEL             |   28 |            | EEPROM      | -    |
+  | FM27C010            | FAIRCHILD        |   32 | 0x8F86     | UV-EPROM    | 12.0v|
+  | FM27C040            | FAIRCHILD        |   32 | 0x8F08     | UV-EPROM    | 12.0v|
+  | FM27C256,NM27C256,N…| FAIRCHILD        |   28 | 0x8F04     | UV-EPROM    | 13.0v|
+  | FM27C512,NM27C512,N…| FAIRCHILD        |   28 | 0x8F85     | UV-EPROM    | 13.0v|
+  | NM27C010,NM27LC010,…| FAIRCHILD        |   32 | 0x8F86     | UV-EPROM    | 13.0v|
+  | NM27C020,NM27LV020,…| FAIRCHILD        |   32 | 0x8F07     | UV-EPROM    | 13.0v|
+  | NM27C040,NM27LV040,…| FAIRCHILD        |   32 | 0x8F08     | UV-EPROM    | 13.0v|
+  | NM27C64Q,NM27LC64,N…| FAIRCHILD        |   28 | 0x8FC2     | UV-EPROM    | 13.0v|
+  | NM27C128,NMC27C128B…| FAIRCHILD        |   28 | 0x8F83     | UV-EPROM    | 13.0v|
+  | NMC2732             | FAIRCHILD        |   24 |            | UV-EPROM    | 13.0v|
+  | NMC27C16            | FAIRCHILD        |   24 |            | UV-EPROM    | 18.0v|
+  | NMC27C16B,NMC27C16BQ| FAIRCHILD        |   24 |            | UV-EPROM    | 13.0v|
+  | NMC27C16Q           | FAIRCHILD        |   24 |            | UV-EPROM    | 18.0v|
+  | NMC27C32,NMC27C32E,…| FAIRCHILD        |   24 |            | UV-EPROM    | 18.0v|
+  | NMC27C32B,NMC27C32BQ| FAIRCHILD        |   24 |            | UV-EPROM    | 13.0v|
+  | MB85R256H           | FUJITSU          |   28 |            | EEPROM      | -    |
+  | MBM2716             | FUJITSU          |   24 |            | UV-EPROM    | 12.0v|
+  | MBM27128            | FUJITSU          |   28 |            | UV-EPROM    | 21.0v|
+  | MBM27256            | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
+  | MBM2732,MBM2732A,MB…| FUJITSU          |   24 |            | UV-EPROM    | 18.0v|
+  | MBM2764             | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
+  | MBM27C1000P,MBM27C1…| FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.5v|
+  | MBM27C1001          | FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.5v|
+  | MBM27C128P          | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
+  | MBM27C2000P,MBM27C2…| FUJITSU          |   32 | 0x040B     | UV-EPROM    | 12.5v|
+  | MBM27C2001          | FUJITSU          |   32 |            | UV-EPROM    | 12.0v|
+  | MBM27C256A          | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
+  | MBM27C4001          | FUJITSU          |   32 | 0x04F4     | UV-EPROM    | 12.5v|
+  | MBM27C512           | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
+  | MBM27C64            | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
+  | MBM28F010           | FUJITSU          |   32 | 0x048F     | Flash/EEPROM| 12.0v|
+  | MBM29F002B          | FUJITSU          |   32 | 0x0434     | Flash/EEPROM| -    |
+  | MBM29F002T          | FUJITSU          |   32 | 0x04B0     | Flash/EEPROM| -    |
+  | MBM29F040           | FUJITSU          |   32 | 0x04A4     | Flash/EEPROM| -    |
+  | GR2764              | GREENWICH        |   28 |            | UV-EPROM    | 13.0v|
+  | GR27128             | GREENWICH        |   28 |            | UV-EPROM    | 13.0v|
+  | GR27256             | GREENWICH        |   28 |            | UV-EPROM    | 13.0v|
+  | GR27512             | GREENWICH        |   28 |            | UV-EPROM    | 13.0v|
+  | HN27128AG,HN27128AP | HITACHI          |   28 | 0x070D     | UV-EPROM    | 13.0v|
+  | HN27256G,HN27256P   | HITACHI          |   28 | 0x0710     | UV-EPROM    | 13.0v|
+  | HN27512G,HN27512P   | HITACHI          |   28 | 0x0794     | UV-EPROM    | 13.0v|
+  | HN27C101AG,HN27C101…| HITACHI          |   32 | 0x0738     | UV-EPROM    | 13.0v|
+  | HN27C301AG,HN27C301…| HITACHI          |   32 | 0x07B9     | UV-EPROM    | 12.5v|
+  | HN27C301G           | HITACHI          |   32 |            | UV-EPROM    | 12.5v|
+  | HN27C256AG,HN27C256…| HITACHI          |   28 | 0x0731     | UV-EPROM    | 13.0v|
+  | HN27C256G           | HITACHI          |   28 | 0x07B0     | UV-EPROM    | 13.0v|
+  | HN27C4001G          | HITACHI          |   32 | 0x0720     | UV-EPROM    | 13.0v|
+  | HN27C512G           | HITACHI          |   28 | 0x9785     | UV-EPROM    | 13.0v|
+  | HN27C64G            | HITACHI          |   28 |            | UV-EPROM    | 18.0v|
+  | HN27C64FP           | HITACHI          |   28 | 0x0115     | UV-EPROM    | 18.0v|
+  | HN28F101P,HN28F101FP| HITACHI          |   32 | 0x0719     | Flash/EEPROM| 12.0v|
+  | HN58C256AP          | HITACHI          |   28 |            | EEPROM      | -    |
+  | HT27C010            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
+  | HT27C020            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
+  | HT27C040            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
+  | HT27C512            | HOLTEK           |   28 |            | UV-EPROM    | 12.0v|
+  | HT27LC010           | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
+  | HT27LC020           | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
+  | HT27LC040           | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
+  | HT27LC512           | HOLTEK           |   28 |            | UV-EPROM    | 12.0v|
+  | HY27C64             | HYNIX            |   28 | 0x08A7     | UV-EPROM    | 13.0v|
+  | HY29F002T           | HYNIX            |   32 | 0xADB0     | Flash/EEPROM| -    |
+  | HY29F040            | HYNIX            |   32 | 0xAD40     | Flash/EEPROM| -    |
+  | HY29F040A,HY29F040T | HYNIX            |   32 | 0xADA4     | Flash/EEPROM| -    |
+  | HY27C64             | HYUNDAI          |   28 | 0x08A7     | UV-EPROM    | 13.0v|
+  | HY29F002T           | HYUNDAI          |   32 | 0xADB0     | Flash/EEPROM| -    |
+  | HY29F040            | HYUNDAI          |   32 | 0xAD40     | Flash/EEPROM| -    |
+  | HY29F040A,HY29F040T | HYUNDAI          |   32 | 0xADA4     | Flash/EEPROM| -    |
+  | ICE27C010,ICE27LC010| ICE              |   32 |            | UV-EPROM    | 13.0v|
+  | ICE27C020,ICE27LC020| ICE              |   32 |            | UV-EPROM    | 13.0v|
+  | ICE27C512,ICE27LC512| ICE              |   28 |            | UV-EPROM    | 13.0v|
+  | 27CX010             | ICMIC            |   32 | 0x010E     | UV-EPROM    | 12.0v|
+  | 27CX256             | ICMIC            |   28 | 0x0110     | UV-EPROM    | 12.0v|
+  | 27CX010             | ICT              |   32 | 0x010E     | UV-EPROM    | 12.0v|
+  | 27CX256             | ICT              |   28 | 0x0110     | UV-EPROM    | 12.0v|
+  | IM29F001B           | IMT              |   32 | 0x7FA3     | Flash/EEPROM| -    |
+  | IM29F001T           | IMT              |   32 | 0x7FA0     | Flash/EEPROM| -    |
+  | IM29F002B           | IMT              |   32 | 0x7FA2     | Flash/EEPROM| -    |
+  | IM29F002T           | IMT              |   32 | 0x7FA1     | Flash/EEPROM| -    |
+  | IM29LV004B          | IMT              |   32 | 0x7FA8     | Flash/EEPROM| -    |
+  | IM29LV004T          | IMT              |   32 | 0x7FA7     | Flash/EEPROM| -    |
+  | D27011              | INTEL            |   28 | 0x8985     | UV-EPROM    | 13.0v|
+  | D27C011             | INTEL            |   28 | 0x8931     | UV-EPROM    | 13.0v|
+  | 2732,2732A,M2732,M2…| INTEL            |   24 |            | UV-EPROM    | 25.0v|
+  | 2764                | INTEL            |   28 | 0x8908     | UV-EPROM    | 18.0v|
+  | 2764A               | INTEL            |   28 | 0x8908     | UV-EPROM    | 12.0v|
+  | 27128,D27128        | INTEL            |   28 | 0x8989     | UV-EPROM    | 18.0v|
+  | 27128A,D27128A,D271…| INTEL            |   28 | 0x8989     | UV-EPROM    | 12.0v|
+  | D27256,M27256       | INTEL            |   28 | 0x8904     | UV-EPROM    | 12.0v|
+  | M2716,M2716M        | INTEL            |   24 |            | UV-EPROM    | 25.0v|
+  | P27256              | INTEL            |   28 | 0x8804     | UV-EPROM    | 12.0v|
+  | 27512               | INTEL            |   28 | 0x890D     | UV-EPROM    | 12.0v|
+  | 27C010,27C010A      | INTEL            |   32 | 0x8935     | UV-EPROM    | 12.0v|
+  | 27C020              | INTEL            |   32 | 0x8934     | UV-EPROM    | 12.0v|
+  | 27C040              | INTEL            |   32 | 0x893D     | UV-EPROM    | 12.0v|
+  | 27C128              | INTEL            |   28 | 0x8983     | UV-EPROM    | 12.0v|
+  | 27C256              | INTEL            |   28 | 0x898C     | UV-EPROM    | 12.0v|
+  | 27C512              | INTEL            |   28 | 0x89FD     | UV-EPROM    | 12.0v|
+  | 87C257              | INTEL            |   28 | 0x8924     | UV-EPROM    | 13.0v|
+  | M28F256             | INTEL            |   32 | 0x89B2     | Flash/EEPROM| 12.0v|
+  | P28F001BX-T         | INTEL            |   32 | 0x8994     | Flash/EEPROM| 12.0v|
+  | P28F001BX-B         | INTEL            |   32 | 0x8995     | Flash/EEPROM| 12.0v|
+  | P28F256A            | INTEL            |   32 | 0x89B9     | Flash/EEPROM| 12.0v|
+  | P28F512             | INTEL            |   32 | 0x89B8     | Flash/EEPROM| 12.0v|
+  | P28F010             | INTEL            |   32 | 0x89B4     | Flash/EEPROM| 12.0v|
+  | P28F020             | INTEL            |   32 | 0x89BD     | Flash/EEPROM| 12.0v|
+  | IS27C010,IS27HC010  | ISSI             |   32 | 0xD50E     | UV-EPROM    | 12.0v|
+  | IS27C020,IS27HC020  | ISSI             |   32 | 0xD597     | UV-EPROM    | 12.0v|
+  | IS27C256,IS27HC256  | ISSI             |   28 | 0xD510     | UV-EPROM    | 12.0v|
+  | IS27C512,IS27HC512  | ISSI             |   28 | 0xD591     | UV-EPROM    | 12.0v|
+  | IS27LV010           | ISSI             |   32 | 0xD50E     | UV-EPROM    | 12.0v|
+  | IS27LV020           | ISSI             |   32 | 0xD597     | UV-EPROM    | 12.0v|
+  | IS27LV256           | ISSI             |   28 | 0xD510     | UV-EPROM    | 12.0v|
+  | IS27LV512           | ISSI             |   28 | 0xD591     | UV-EPROM    | 12.0v|
+  | IS28F010            | ISSI             |   32 | 0xD5B4     | Flash/EEPROM| 12.0v|
+  | IS28F020            | ISSI             |   32 | 0xD5BD     | Flash/EEPROM| 12.0v|
+  | LG28C010            | LINKAGE          |   32 |            | EEPROM      | 12.0v|
+  | LG28C020            | LINKAGE          |   32 |            | EEPROM      | 12.0v|
+  | LG28C040            | LINKAGE          |   32 |            | EEPROM      | 12.0v|
+  | LST28001            | LINKSMART        |   32 | 0x4001     | Flash/EEPROM| -    |
+  | LST28002            | LINKSMART        |   32 | 0x4002     | Flash/EEPROM| -    |
+  | LST28004            | LINKSMART        |   32 | 0x4003     | Flash/EEPROM| -    |
+  | MX26C1000           | MACRONIX(MXIC)   |   32 | 0xC2D2     | EEPROM      | 12.0v|
+  | MX26C2000           | MACRONIX(MXIC)   |   32 | 0xC2C3     | EEPROM      | 12.0v|
+  | MX26C4000           | MACRONIX(MXIC)   |   32 | 0xC2C0     | EEPROM      | 12.0v|
+  | MX26LV004B          | MACRONIX(MXIC)   |   32 | 0xC2B6     | Flash/EEPROM| -    |
+  | MX26LV004T          | MACRONIX(MXIC)   |   32 | 0xC2B5     | Flash/EEPROM| -    |
+  | MX26LV040           | MACRONIX(MXIC)   |   32 | 0xC24F     | Flash/EEPROM| -    |
+  | MX27C1000           | MACRONIX(MXIC)   |   32 | 0xC20E     | UV-EPROM    | 13.0v|
+  | MX27C1000A          | MACRONIX(MXIC)   |   32 | 0xC2CA     | UV-EPROM    | 13.0v|
+  | MX27C2000           | MACRONIX(MXIC)   |   32 | 0xC220     | UV-EPROM    | 13.0v|
+  | MX27C2000A          | MACRONIX(MXIC)   |   32 | 0xC2C3     | UV-EPROM    | 13.0v|
+  | MX27C256            | MACRONIX(MXIC)   |   28 | 0xC210     | UV-EPROM    | 13.0v|
+  | MX27C4000           | MACRONIX(MXIC)   |   32 | 0xC240     | UV-EPROM    | 13.0v|
+  | MX27C4000A          | MACRONIX(MXIC)   |   32 | 0xC2C0     | UV-EPROM    | 13.0v|
+  | MX27C512            | MACRONIX(MXIC)   |   28 | 0xC291     | UV-EPROM    | 13.0v|
+  | MX27C8000           | MACRONIX(MXIC)   |   32 | 0xC280     | UV-EPROM    | 13.0v|
+  | MX27C8000A          | MACRONIX(MXIC)   |   32 | 0xC202     | UV-EPROM    | 13.0v|
+  | MX27L1000           | MACRONIX(MXIC)   |   32 | 0xC20E     | UV-EPROM    | 13.0v|
+  | MX27L2000           | MACRONIX(MXIC)   |   32 | 0xC220     | UV-EPROM    | 13.0v|
+  | MX27L256            | MACRONIX(MXIC)   |   28 | 0xC210     | UV-EPROM    | 13.0v|
+  | MX27L4000           | MACRONIX(MXIC)   |   32 | 0xC240     | UV-EPROM    | 13.0v|
+  | MX27L512            | MACRONIX(MXIC)   |   28 | 0xC291     | UV-EPROM    | 13.0v|
+  | MX28F1000P          | MACRONIX(MXIC)   |   32 | 0xC21A     | Flash/EEPROM| 12.0v|
+  | MX28F2000P          | MACRONIX(MXIC)   |   32 | 0xC22A     | Flash/EEPROM| 12.0v|
+  | MX28F2000T          | MACRONIX(MXIC)   |   32 | 0xC23C     | Flash/EEPROM| 12.0v|
+  | MX29F001B           | MACRONIX(MXIC)   |   32 | 0xC219     | Flash/EEPROM| -    |
+  | MX29F001T           | MACRONIX(MXIC)   |   32 | 0xC218     | Flash/EEPROM| -    |
+  | MX29F002B           | MACRONIX(MXIC)   |   32 | 0xC234     | Flash/EEPROM| -    |
+  | MX29F002NB          | MACRONIX(MXIC)   |   32 | 0xC234     | Flash/EEPROM| -    |
+  | MX29F002NT          | MACRONIX(MXIC)   |   32 | 0xC2B0     | Flash/EEPROM| -    |
+  | MX29F002T           | MACRONIX(MXIC)   |   32 | 0xC2B0     | Flash/EEPROM| -    |
+  | MX29F004B           | MACRONIX(MXIC)   |   32 | 0xC246     | Flash/EEPROM| -    |
+  | MX29F004T           | MACRONIX(MXIC)   |   32 | 0xC245     | Flash/EEPROM| -    |
+  | MX29F022B           | MACRONIX(MXIC)   |   32 | 0xC237     | Flash/EEPROM| -    |
+  | MX29F022NB          | MACRONIX(MXIC)   |   32 | 0xC237     | Flash/EEPROM| -    |
+  | MX29F022NT          | MACRONIX(MXIC)   |   32 | 0xC236     | Flash/EEPROM| -    |
+  | MX29F022T           | MACRONIX(MXIC)   |   32 | 0xC236     | Flash/EEPROM| -    |
+  | MX29F040,MX29F040C  | MACRONIX(MXIC)   |   32 | 0xC2A4     | Flash/EEPROM| -    |
+  | MX29LV002CB         | MACRONIX(MXIC)   |   32 | 0xC25A     | Flash/EEPROM| -    |
+  | MX29LV002NCB        | MACRONIX(MXIC)   |   32 | 0xC25A     | Flash/EEPROM| -    |
+  | MX29LV002NCT        | MACRONIX(MXIC)   |   32 | 0xC259     | Flash/EEPROM| -    |
+  | MX29LV002CT         | MACRONIX(MXIC)   |   32 | 0xC259     | Flash/EEPROM| -    |
+  | 28C010,28C010T,28C0…| MAXWELL          |   32 |            | Flash/EEPROM| -    |
+  | 27C128              | MICROCHIP memory |   28 | 0x2983     | UV-EPROM    | 13.0v|
+  | 27C256,27LV256      | MICROCHIP memory |   28 | 0x298C     | UV-EPROM    | 13.0v|
+  | 27C32A              | MICROCHIP memory |   24 |            | UV-EPROM    | 12.0v|
+  | 27C512              | MICROCHIP memory |   28 | 0x290D     | UV-EPROM    | 13.0v|
+  | 27C512A             | MICROCHIP memory |   28 | 0x290D     | UV-EPROM    | 13.0v|
+  | 27C64,27LV64        | MICROCHIP memory |   28 | 0x2902     | UV-EPROM    | 13.0v|
+  | 27HC256,27HC256L    | MICROCHIP memory |   28 | 0x2994     | UV-EPROM    | 13.0v|
+  | 27HC64              | MICROCHIP memory |   28 | 0x2991     | UV-EPROM    | 13.0v|
+  | 2804                | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 2816                | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 2817                | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C04A              | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C04AF             | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C16A              | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C16AF             | MICROCHIP memory |   24 |            | EEPROM      | -    |
+  | 28C17A              | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C17AF             | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C256,28C256F      | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C64A              | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C64AF             | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28C64B              | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | 28LV64A             | MICROCHIP memory |   28 |            | EEPROM      | -    |
+  | M5L27256K           | MITSUBISHI       |   28 |            | UV-EPROM    | 12.0v|
+  | M5M27C101K          | MITSUBISHI       |   32 | 0x1C83     | UV-EPROM    | 12.5v|
+  | M5M27C128           | MITSUBISHI       |   28 |            | UV-EPROM    | 18.0v|
+  | M5M27C256K          | MITSUBISHI       |   28 |            | UV-EPROM    | 12.0v|
+  | M5M28F101,M5M28F101A| MITSUBISHI       |   32 | 0x1CD0     | Flash/EEPROM| 12.0v|
+  | V29C31001B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31001T          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31002B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31002T          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
+  | V29C31004B          | MOSEL VITELIC    |   32 | 0x4073     | Flash/EEPROM| -    |
+  | V29C31004T          | MOSEL VITELIC    |   32 | 0x4063     | Flash/EEPROM| -    |
+  | V29C51001B          | MOSEL VITELIC    |   32 | 0x40A1     | Flash/EEPROM| -    |
+  | V29C51001T          | MOSEL VITELIC    |   32 | 0x4001     | Flash/EEPROM| -    |
+  | V29C51002B          | MOSEL VITELIC    |   32 | 0x40A2     | Flash/EEPROM| -    |
+  | V29C51002T          | MOSEL VITELIC    |   32 | 0x4002     | Flash/EEPROM| -    |
+  | V29C51004B          | MOSEL VITELIC    |   32 | 0x40A3     | Flash/EEPROM| -    |
+  | V29C51004T          | MOSEL VITELIC    |   32 | 0x4003     | Flash/EEPROM| -    |
+  | V29LC51000          | MOSEL VITELIC    |   32 | 0x4020     | Flash/EEPROM| -    |
+  | V29LC51001          | MOSEL VITELIC    |   32 | 0x4060     | Flash/EEPROM| -    |
+  | V29LC51002          | MOSEL VITELIC    |   32 | 0x4082     | Flash/EEPROM| -    |
+  | UPD27128            | NEC              |   28 |            | UV-EPROM    | 12.0v|
+  | UPD27256            | NEC              |   28 |            | UV-EPROM    | 12.0v|
+  | UPD27512            | NEC              |   28 |            | UV-EPROM    | 12.0v|
+  | UPD2764,UPD2764C,UP…| NEC              |   28 |            | UV-EPROM    | 18.0v|
+  | UPD27C1001A         | NEC              |   32 |            | UV-EPROM    | 12.0v|
+  | UPD27C128           | NEC              |   28 |            | UV-EPROM    | 12.0v|
+  | UPD27C2001          | NEC              |   32 |            | UV-EPROM    | 12.0v|
+  | UPD27C256A          | NEC              |   28 |            | UV-EPROM    | 12.0v|
+  | UPD27C4001          | NEC              |   32 |            | UV-EPROM    | 12.0v|
+  | UPD27C512           | NEC              |   28 |            | UV-EPROM    | 12.0v|
+  | UPD27C8001          | NEC              |   32 |            | UV-EPROM    | 12.0v|
+  | UPD28C04            | NEC              |   24 |            | EEPROM      | -    |
+  | UPD28C256           | NEC              |   28 |            | EEPROM      | -    |
+  | UPD28C64            | NEC              |   28 |            | EEPROM      | -    |
+  | NX29F010            | NEXFLASH         |   32 | 0x0120     | Flash/EEPROM| -    |
+  | NM27C010            | NSC              |   32 | 0x8F86     | UV-EPROM    | 13.0v|
+  | NM27C020            | NSC              |   32 | 0x8F07     | UV-EPROM    | 13.0v|
+  | NM27C040            | NSC              |   32 | 0x8F08     | UV-EPROM    | 13.0v|
+  | NM27C64Q,NMC27C64Q  | NSC              |   28 | 0x8FC2     | UV-EPROM    | 13.0v|
+  | NM27C128,NMC27C128B…| NSC              |   28 | 0x8F83     | UV-EPROM    | 13.0v|
+  | NM27C256,NM27LC256,…| NSC              |   28 | 0x8F04     | UV-EPROM    | 13.0v|
+  | NM27C512,NM27LC512,…| NSC              |   28 | 0x8F85     | UV-EPROM    | 13.0v|
+  | NM27LC010,NM27P010,…| NSC              |   32 | 0x8F86     | UV-EPROM    | 13.0v|
+  | NM27LC64            | NSC              |   28 | 0x8FC2     | UV-EPROM    | 13.0v|
+  | NM27LV010           | NSC              |   32 | 0x8F86     | UV-EPROM    | 13.0v|
+  | NM27LV020           | NSC              |   32 | 0x8F07     | UV-EPROM    | 13.0v|
+  | NM27LV040           | NSC              |   32 | 0x8F08     | UV-EPROM    | 13.0v|
+  | NM27LV512           | NSC              |   28 | 0x8F85     | UV-EPROM    | 13.0v|
+  | NM27P020            | NSC              |   32 | 0x8F07     | UV-EPROM    | 13.0v|
+  | NM27P040            | NSC              |   32 | 0x8F08     | UV-EPROM    | 13.0v|
+  | NMC2732             | NSC              |   24 |            | UV-EPROM    | 12.0v|
+  | NMC27C16            | NSC              |   24 |            | UV-EPROM    | 18.0v|
+  | NMC27C16B           | NSC              |   24 |            | UV-EPROM    | 13.0v|
+  | NMC27C16Q           | NSC              |   24 |            | UV-EPROM    | 18.0v|
+  | NMC27C32B           | NSC              |   24 |            | UV-EPROM    | 12.0v|
+  | MSM27C201           | OKI              |   32 |            | UV-EPROM    | 12.0v|
+  | MSM27C401           | OKI              |   32 |            | UV-EPROM    | 12.0v|
+  | MSM27C512           | OKI              |   28 |            | UV-EPROM    | 12.0v|
+  | MSM27C1000          | OKI              |   32 |            | UV-EPROM    | 12.5v|
+  | MSM27C2000          | OKI              |   32 | 0xAE89     | UV-EPROM    | 12.5v|
+  | 27C010              | PHILIPS          |   32 | 0x1525     | UV-EPROM    | 12.0v|
+  | 27C040              | PHILIPS          |   32 | 0xF53E     | UV-EPROM    | 12.0v|
+  | 27C256              | PHILIPS          |   28 |            | UV-EPROM    | 12.0v|
+  | 27C512              | PHILIPS          |   28 |            | UV-EPROM    | 12.0v|
+  | PM29F002T           | PMC              |   32 | 0x9D1D     | Flash/EEPROM| -    |
+  | PM29F002B           | PMC              |   32 | 0x9D2D     | Flash/EEPROM| -    |
+  | PM29F004T           | PMC              |   32 | 0x9D1E     | Flash/EEPROM| -    |
+  | PM29F004B           | PMC              |   32 | 0x9D2E     | Flash/EEPROM| -    |
+  | PM39F010            | PMC              |   32 | 0x9D1C     | Flash/EEPROM| -    |
+  | PM39F020            | PMC              |   32 | 0x9D4D     | Flash/EEPROM| -    |
+  | PM39F040            | PMC              |   32 | 0x9D4E     | Flash/EEPROM| -    |
+  | PT28C010            | PTC              |   32 |            | EEPROM      | 12.0v|
+  | PT28C020            | PTC              |   32 |            | EEPROM      | 12.0v|
+  | PT28C040            | PTC              |   32 |            | EEPROM      | 12.0v|
+  | FM1208              | RAMTRON          |   24 |            | SRAM        | -    |
+  | FM1608              | RAMTRON          |   28 |            | SRAM        | -    |
+  | FM16W08             | RAMTRON          |   28 |            | SRAM        | -    |
+  | FM1808,FM1808B,FM18…| RAMTRON          |   28 |            | SRAM        | -    |
+  | FM18L08             | RAMTRON          |   28 |            | SRAM        | -    |
+  | KM28C64             | SAMSUNG          |   28 |            | EEPROM      | -    |
+  | KM28C64A,KM28C65A   | SAMSUNG          |   28 |            | EEPROM      | -    |
+  | ETC2716,M2716       | SGS-THOMSON      |   24 |            | UV-EPROM    | 25.0v|
+  | ETC2732             | SGS-THOMSON      |   24 |            | UV-EPROM    | 18.0v|
+  | M23C1001            | SGS-THOMSON      |   32 |            | UV-EPROM    | 12.0v|
+  | M23C2001            | SGS-THOMSON      |   32 |            | UV-EPROM    | 12.0v|
+  | M23C4001            | SGS-THOMSON      |   32 |            | UV-EPROM    | 12.0v|
+  | M27128A             | SGS-THOMSON      |   28 | 0x2089     | UV-EPROM    | 12.0v|
+  | M27256              | SGS-THOMSON      |   28 | 0x2004     | UV-EPROM    | 12.0v|
+  | M2732A              | SGS-THOMSON      |   24 |            | UV-EPROM    | 21.0v|
+  | M27512              | SGS-THOMSON      |   28 | 0x200D     | UV-EPROM    | 13.0v|
+  | M2764A              | SGS-THOMSON      |   28 | 0x2008     | UV-EPROM    | 12.0v|
+  | M27C1000            | SGS-THOMSON      |   32 | 0x2086     | UV-EPROM    | 13.0v|
+  | M27C1001,M27V101    | SGS-THOMSON      |   32 | 0x2005     | UV-EPROM    | 13.0v|
+  | M27C2001,M27V201,M2…| SGS-THOMSON      |   32 | 0x2061     | UV-EPROM    | 13.0v|
+  | M27C256B            | SGS-THOMSON      |   28 | 0x208D     | UV-EPROM    | 13.0v|
+  | M27C4001,M27V401    | SGS-THOMSON      |   32 | 0x2041     | UV-EPROM    | 13.0v|
+  | M27C512,M27V512     | SGS-THOMSON      |   28 | 0x203D     | UV-EPROM    | 13.0v|
+  | M27C64A             | SGS-THOMSON      |   28 | 0x9B08     | UV-EPROM    | 12.0v|
+  | M27C801             | SGS-THOMSON      |   32 | 0x2042     | UV-EPROM    | 13.0v|
+  | M28010              | SGS-THOMSON      |   32 |            | Flash/EEPROM| -    |
+  | M28C64,M28C64A      | SGS-THOMSON      |   28 |            | EEPROM      | -    |
+  | M28C64-xxW          | SGS-THOMSON      |   28 |            | EEPROM      | -    |
+  | M28F101             | SGS-THOMSON      |   32 | 0x2007     | Flash/EEPROM| 12.0v|
+  | M28F201             | SGS-THOMSON      |   32 | 0x20F4     | Flash/EEPROM| 12.0v|
+  | M28F256             | SGS-THOMSON      |   32 | 0x20A8     | Flash/EEPROM| 12.0v|
+  | M28F512,M28F512B,M2…| SGS-THOMSON      |   32 | 0x2002     | Flash/EEPROM| 12.0v|
+  | M29F002B,M29F002BB  | SGS-THOMSON      |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F002BT,M29F002T  | SGS-THOMSON      |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNT,M29F002NT| SGS-THOMSON      |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNB          | SGS-THOMSON      |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F010B            | SGS-THOMSON      |   32 | 0x2020     | Flash/EEPROM| -    |
+  | M29F040B            | SGS-THOMSON      |   32 | 0x20E2     | Flash/EEPROM| -    |
+  | M29F512B            | SGS-THOMSON      |   32 | 0x2024     | Flash/EEPROM| -    |
+  | M87C257             | SGS-THOMSON      |   28 | 0x2080     | UV-EPROM    | 13.0v|
+  | M87C257(8D)         | SGS-THOMSON      |   28 | 0x208D     | UV-EPROM    | 13.0v|
+  | ST27128A            | SGS-THOMSON      |   28 | 0x2089     | UV-EPROM    | 12.0v|
+  | ST27256             | SGS-THOMSON      |   28 | 0x2004     | UV-EPROM    | 12.0v|
+  | ST2764A             | SGS-THOMSON      |   28 | 0x2008     | UV-EPROM    | 12.0v|
+  | ST27C256,TS27C256   | SGS-THOMSON      |   28 | 0x9B04     | UV-EPROM    | 12.0v|
+  | TS27C64A            | SGS-THOMSON      |   28 | 0x9B08     | UV-EPROM    | 12.0v|
+  | M48T02,M48T12,M48Z0…| SGS-THOMSON      |   24 |            | SRAM        | -    |
+  | M48T08,M48T08Y,M48T…| SGS-THOMSON      |   28 |            | SRAM        | -    |
+  | M48T35AY,M48Z35,M48…| SGS-THOMSON      |   28 |            | SRAM        | -    |
+  | M48T35AV,M48Z35V,M4…| SGS-THOMSON      |   28 |            | SRAM        | -    |
+  | M48T59,M48T59Y,M48Z…| SGS-THOMSON      |   28 |            | SRAM        | -    |
+  | M48T59V,M48Z59V     | SGS-THOMSON      |   28 |            | SRAM        | -    |
+  | M48T128Y,M48T129Y,M…| SGS-THOMSON      |   32 |            | SRAM        | -    |
+  | M48T128V,M48T129V,M…| SGS-THOMSON      |   32 |            | SRAM        | -    |
+  | M48T512Y,M48T513Y,M…| SGS-THOMSON      |   32 |            | SRAM        | -    |
+  | M48T512V,M48T513V,M…| SGS-THOMSON      |   32 |            | SRAM        | -    |
+  | AM29F002B,AM29F002BB| SPANSION(1)      |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002BT,AM29F002T| SPANSION(1)      |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F002NB,AM29F002…| SPANSION(1)      |   32 | 0x0134     | Flash/EEPROM| -    |
+  | AM29F002NBT,AM29F00…| SPANSION(1)      |   32 | 0x01B0     | Flash/EEPROM| -    |
+  | AM29F010,AM29F010B  | SPANSION(1)      |   32 | 0x0120     | Flash/EEPROM| -    |
+  | AM29F040,AM29F040B  | SPANSION(1)      |   32 | 0x01A4     | Flash/EEPROM| -    |
+  | MBM29F002B          | SPANSION(1)      |   32 | 0x0434     | Flash/EEPROM| -    |
+  | MBM29F002T          | SPANSION(1)      |   32 | 0x04B0     | Flash/EEPROM| -    |
+  | MBM29F040           | SPANSION(1)      |   32 | 0x04A4     | Flash/EEPROM| -    |
+  | SST27SF010          | SST              |   32 | 0xBFA5     | EEPROM      | 12.0v|
+  | SST27SF020          | SST              |   32 | 0xBFA6     | EEPROM      | 12.0v|
+  | SST27SF256          | SST              |   28 | 0xBFA3     | EEPROM      | 12.0v|
+  | SST27SF512          | SST              |   28 | 0xBFA4     | EEPROM      | 12.0v|
+  | SST27VF010          | SST              |   32 | 0xBFA9     | EEPROM      | 12.0v|
+  | SST27VF020          | SST              |   32 | 0xBFAA     | EEPROM      | 12.0v|
+  | SST27VF256          | SST              |   28 | 0xBFA7     | EEPROM      | 12.0v|
+  | SST27VF512          | SST              |   28 | 0xBFA8     | EEPROM      | 12.0v|
+  | SST28LF040,SST28LF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| 12.0v|
+  | SST28SF040,SST28SF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| 12.0v|
+  | SST29EE010          | SST              |   32 | 0xBF07     | Flash/EEPROM| -    |
+  | SST29EE020          | SST              |   32 | 0xBF10     | Flash/EEPROM| -    |
+  | SST29EE512          | SST              |   32 | 0xBF5D     | Flash/EEPROM| -    |
+  | SST29LE010,SST29VE0…| SST              |   32 | 0xBF08     | Flash/EEPROM| -    |
+  | SST29LE020,SST29VE0…| SST              |   32 | 0xBF12     | Flash/EEPROM| -    |
+  | SST29LE512,SST29VE5…| SST              |   32 | 0xBF3D     | Flash/EEPROM| -    |
+  | SST29SF010          | SST              |   32 | 0xBF22     | Flash/EEPROM| -    |
+  | SST29SF020          | SST              |   32 | 0xBF24     | Flash/EEPROM| -    |
+  | SST29SF040          | SST              |   32 | 0xBF13     | Flash/EEPROM| -    |
+  | SST29SF512          | SST              |   32 | 0xBF20     | Flash/EEPROM| -    |
+  | SST29VF010          | SST              |   32 | 0xBF23     | Flash/EEPROM| -    |
+  | SST29VF020          | SST              |   32 | 0xBF25     | Flash/EEPROM| -    |
+  | SST29VF040          | SST              |   32 | 0xBF14     | Flash/EEPROM| -    |
+  | SST29VF512          | SST              |   32 | 0xBF21     | Flash/EEPROM| -    |
+  | SST37VF010          | SST              |   32 | 0xBFC5     | EEPROM      | 12.0v|
+  | SST37VF020          | SST              |   32 | 0xBFC6     | EEPROM      | 12.0v|
+  | SST37VF040          | SST              |   32 | 0xBFC2     | EEPROM      | 12.0v|
+  | SST37VF512          | SST              |   32 | 0xBFC4     | EEPROM      | 12.0v|
+  | SST39LH010,SST39VF0…| SST              |   32 | 0xBFD5     | Flash/EEPROM| -    |
+  | SST39LH020,SST39VF0…| SST              |   32 | 0xBFD6     | Flash/EEPROM| -    |
+  | SST39LH040          | SST              |   32 | 0xBFD7     | Flash/EEPROM| -    |
+  | SST39LH512,SST39VF5…| SST              |   32 | 0xBFD4     | Flash/EEPROM| -    |
+  | SST39SF010,SST39SF0…| SST              |   32 | 0xBFB5     | Flash/EEPROM| -    |
+  | SST39SF020,SST39SF0…| SST              |   32 | 0xBFB6     | Flash/EEPROM| -    |
+  | SST39SF040          | SST              |   32 | 0xBFB7     | Flash/EEPROM| -    |
+  | SST39SF512,SST39SF5…| SST              |   32 | 0xBFB4     | Flash/EEPROM| -    |
+  | SST39VF040,SST39VF0…| SST              |   32 | 0xBFD7     | Flash/EEPROM| -    |
+  | ETC2716,M2716       | ST               |   24 |            | UV-EPROM    | 25.0v|
+  | ETC2732             | ST               |   24 |            | UV-EPROM    | 18.0v|
+  | M27128A             | ST               |   28 | 0x2089     | UV-EPROM    | 12.0v|
+  | M27256              | ST               |   28 | 0x2004     | UV-EPROM    | 12.0v|
+  | M2732A              | ST               |   24 |            | UV-EPROM    | 21.0v|
+  | M27512              | ST               |   28 | 0x200D     | UV-EPROM    | 13.0v|
+  | M2764A              | ST               |   28 | 0x2008     | UV-EPROM    | 12.0v|
+  | M27C1001,M27V101,M2…| ST               |   32 | 0x2005     | UV-EPROM    | 13.0v|
+  | M27C2001,M27V201,M2…| ST               |   32 | 0x2061     | UV-EPROM    | 13.0v|
+  | M27C256B            | ST               |   28 | 0x208D     | UV-EPROM    | 13.0v|
+  | M27C256B(2)         | ST               |   28 | 0x158C     | UV-EPROM    | 13.0v|
+  | M27C4001,M27V401,M2…| ST               |   32 | 0x2041     | UV-EPROM    | 13.0v|
+  | M27C512,M27V512,M27…| ST               |   28 | 0x203D     | UV-EPROM    | 13.0v|
+  | M27C64A             | ST               |   28 | 0x9B08     | UV-EPROM    | 12.0v|
+  | M27C801             | ST               |   32 | 0x2042     | UV-EPROM    | 13.0v|
+  | M28010              | ST               |   32 |            | Flash/EEPROM| -    |
+  | M28256              | ST               |   28 |            | EEPROM      | -    |
+  | M28C64,M28C64A      | ST               |   28 |            | EEPROM      | -    |
+  | M28C64-xxW          | ST               |   28 |            | EEPROM      | -    |
+  | M28F101             | ST               |   32 | 0x2007     | Flash/EEPROM| 12.0v|
+  | M28F201             | ST               |   32 | 0x20F4     | Flash/EEPROM| 12.0v|
+  | M28F256             | ST               |   32 | 0x20A8     | Flash/EEPROM| 12.0v|
+  | M28F512,M28F512B,M2…| ST               |   32 | 0x2002     | Flash/EEPROM| 12.0v|
+  | M28LV64             | ST               |   28 |            | EEPROM      | -    |
+  | M29F002B,M29F002BB  | ST               |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F002BT,M29F002T  | ST               |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNT,M29F002NT| ST               |   32 | 0x20B0     | Flash/EEPROM| -    |
+  | M29F002BNB          | ST               |   32 | 0x2034     | Flash/EEPROM| -    |
+  | M29F010B            | ST               |   32 | 0x2020     | Flash/EEPROM| -    |
+  | M29F040B            | ST               |   32 | 0x20E2     | Flash/EEPROM| -    |
+  | M29F512B            | ST               |   32 | 0x2024     | Flash/EEPROM| -    |
+  | M87C257             | ST               |   28 | 0x2080     | UV-EPROM    | 13.0v|
+  | M87C257(8D)         | ST               |   28 | 0x208D     | UV-EPROM    | 13.0v|
+  | ST27128A            | ST               |   28 | 0x2089     | UV-EPROM    | 12.0v|
+  | ST27256             | ST               |   28 | 0x2004     | UV-EPROM    | 12.0v|
+  | ST2764A             | ST               |   28 | 0x2008     | UV-EPROM    | 12.0v|
+  | ST27C256            | ST               |   28 | 0x9B04     | UV-EPROM    | 12.0v|
+  | TS27C256            | ST               |   28 | 0x9B04     | UV-EPROM    | 12.0v|
+  | TS27C64A            | ST               |   28 | 0x9B08     | UV-EPROM    | 12.0v|
+  | M48T02,M48T12       | ST               |   24 |            | SRAM        | -    |
+  | M48T08,M48T08Y,M48T…| ST               |   28 |            | SRAM        | -    |
+  | M48T35AY            | ST               |   28 |            | SRAM        | -    |
+  | M48T35AV            | ST               |   28 |            | SRAM        | -    |
+  | M48T59,M48T59Y      | ST               |   28 |            | SRAM        | -    |
+  | M48T59V             | ST               |   28 |            | SRAM        | -    |
+  | M48T128Y,M48T129Y   | ST               |   32 |            | SRAM        | -    |
+  | M48T128V,M48T129V   | ST               |   32 |            | SRAM        | -    |
+  | M48T512Y,M48T513Y   | ST               |   32 |            | SRAM        | -    |
+  | M48T512V,M48T513V   | ST               |   32 |            | SRAM        | -    |
+  | F29C31004B,S29C3100…| SYNCMOS          |   32 | 0x4073     | Flash/EEPROM| -    |
+  | F29C31004T,S29C3100…| SYNCMOS          |   32 | 0x4063     | Flash/EEPROM| -    |
+  | F29C51001B,S29C5100…| SYNCMOS          |   32 | 0x40A1     | Flash/EEPROM| -    |
+  | F29C51001T,S29C5100…| SYNCMOS          |   32 | 0x4001     | Flash/EEPROM| -    |
+  | F29C51002B,S29C5100…| SYNCMOS          |   32 | 0x40A2     | Flash/EEPROM| -    |
+  | F29C51002T,S29C5100…| SYNCMOS          |   32 | 0x4002     | Flash/EEPROM| -    |
+  | F29C51004B,S29C5100…| SYNCMOS          |   32 | 0x40A3     | Flash/EEPROM| -    |
+  | F29C51004T,S29C5100…| SYNCMOS          |   32 | 0x4003     | Flash/EEPROM| -    |
+  | F29LC51000          | SYNCMOS          |   32 | 0x4020     | Flash/EEPROM| -    |
+  | F29LC51001          | SYNCMOS          |   32 | 0x4060     | Flash/EEPROM| -    |
+  | F29LC51002          | SYNCMOS          |   32 | 0x4082     | Flash/EEPROM| -    |
+  | S29C31001B          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
+  | S29C31001T          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
+  | S29C31002B          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
+  | S29C31002T          | SYNCMOS          |   32 |            | Flash/EEPROM| -    |
+  | 6116                | Standard SRAM    |   24 |            | SRAM        | -    |
+  | 6164,6264           | Standard SRAM    |   28 |            | SRAM        | -    |
+  | 61256,62256         | Standard SRAM    |   28 |            | SRAM        | -    |
+  | 61512,62512         | Standard SRAM    |   32 |            | SRAM        | -    |
+  | 628128              | Standard SRAM    |   32 |            | SRAM        | -    |
+  | 628256              | Standard SRAM    |   32 |            | SRAM        | -    |
+  | 628512              | Standard SRAM    |   32 |            | SRAM        | -    |
+  | 2516                | TEXAS INSTRUMENTS|   24 |            | UV-EPROM    | 25.0v|
+  | 2532                | TEXAS INSTRUMENTS|   24 |            | UV-EPROM    | 25.0v|
+  | SMJ27C128,TMS27C128…| TI               |   28 | 0x9783     | UV-EPROM    | 13.0v|
+  | SMJ27C256,TMS27C256…| TI               |   28 | 0x9704     | UV-EPROM    | 13.0v|
+  | SMJ27C512,TMS27C512…| TI               |   28 | 0x9785     | UV-EPROM    | 13.0v|
+  | TMS2716             | TI               |   24 |            | UV-EPROM    | 18.0v|
+  | TMS2732A            | TI               |   24 |            | UV-EPROM    | 18.0v|
+  | TMS2764             | TI               |   28 |            | UV-EPROM    | 18.0v|
+  | TMS27C010           | TI               |   32 | 0x9746     | UV-EPROM    | 12.0v|
+  | TMS27C010A,TMS27PC0…| TI               |   32 | 0x97D6     | UV-EPROM    | 13.0v|
+  | TMS27C020,TMS27PC020| TI               |   32 | 0x9732     | UV-EPROM    | 13.0v|
+  | TMS27C040,TMS27PC040| TI               |   32 | 0x9750     | UV-EPROM    | 13.0v|
+  | TMS27C64,TMS27PC64  | TI               |   28 | 0x9707     | UV-EPROM    | 13.0v|
+  | TMS28F010,TMS28F010…| TI               |   32 | 0x89B4     | Flash/EEPROM| 12.0v|
+  | TMS28F020           | TI               |   32 | 0x89BD     | Flash/EEPROM| 12.0v|
+  | TMS87C257           | TI               |   28 | 0x97C2     | UV-EPROM    | 13.0v|
+  | BQ4010YMA(RW)       | TI               |   28 |            | SRAM        | -    |
+  | BQ4010YMA(TEST)     | TI               |   28 |            | SRAM        | -    |
+  | BQ4011YMA(RW)       | TI               |   28 |            | SRAM        | -    |
+  | BQ4011YMA(TEST)     | TI               |   28 |            | SRAM        | -    |
+  | BQ4011LYMA(RW3.3V)  | TI               |   28 |            | SRAM        | -    |
+  | BQ4011LYMA(TEST3.3V)| TI               |   28 |            | SRAM        | -    |
+  | BQ4013YMA(RW)       | TI               |   32 |            | SRAM        | -    |
+  | BQ4013YMA(TEST)     | TI               |   32 |            | SRAM        | -    |
+  | BQ4013LYMA(RW3.3V)  | TI               |   32 |            | SRAM        | -    |
+  | BQ4013LYMA(TEST3.3V)| TI               |   32 |            | SRAM        | -    |
+  | BQ4014YMA(RW)       | TI               |   32 |            | SRAM        | -    |
+  | BQ4014YMA(TEST)     | TI               |   32 |            | SRAM        | -    |
+  | BQ4014LYMA(RW3.3V)  | TI               |   32 |            | SRAM        | -    |
+  | BQ4014LYMA(TEST3.3V)| TI               |   32 |            | SRAM        | -    |
+  | BQ4015YMA(RW)       | TI               |   32 |            | SRAM        | -    |
+  | BQ4015YMA(TEST)     | TI               |   32 |            | SRAM        | -    |
+  | BQ4015LYMA(RW3.3V)  | TI               |   32 |            | SRAM        | -    |
+  | BQ4015LYMA(TEST3.3V)| TI               |   32 |            | SRAM        | -    |
+  | TC54256AF,TC54256AP | TOSHIBA/KIOXIA   |   28 | 0x98C4     | UV-EPROM    | 12.0v|
+  | TC57256D            | TOSHIBA/KIOXIA   |   28 | 0x9845     | UV-EPROM    | 13.0v|
+  | TC57512AD           | TOSHIBA/KIOXIA   |   28 | 0x9885     | UV-EPROM    | 13.0v|
+  | WE128K8             | WED              |   32 |            | Flash/EEPROM| -    |
+  | WE256K8             | WED              |   32 |            | Flash/EEPROM| -    |
+  | WE512K8             | WED              |   32 |            | Flash/EEPROM| -    |
+  | WME128K8            | WED              |   32 |            | Flash/EEPROM| -    |
+  | W27C01,W27C010,W27E…| WINBOND          |   32 | 0xDA01     | EEPROM      | 12.0v|
+  | W27C02,W27C020,W27E…| WINBOND          |   32 | 0xDA85     | EEPROM      | 12.0v|
+  | W27C04,W27C040,W27E…| WINBOND          |   32 | 0xDA86     | EEPROM      | 12.0v|
+  | W27C257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
+  | W27C512,W27E512     | WINBOND          |   28 | 0xDA08     | EEPROM      | 12.0v|
+  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 13.5v|
+  | W29C010,W29C011,W29…| WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| -    |
+  | W29C020,W29C020C,W2…| WINBOND          |   32 | 0xDA45     | Flash/EEPROM| -    |
+  | W29C040,W29C042     | WINBOND          |   32 | 0xDA46     | Flash/EEPROM| -    |
+  | W29C512,W29EE512    | WINBOND          |   32 | 0xDAC8     | Flash/EEPROM| -    |
+  | W29EE011            | WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| -    |
+  | W39F010             | WINBOND          |   32 | 0xDAA1     | Flash/EEPROM| -    |
+  | W39L040A            | WINBOND          |   32 | 0xDAD6     | Flash/EEPROM| -    |
+  | W49F002,W49F002A,W4…| WINBOND          |   32 | 0xDA0B     | Flash/EEPROM| -    |
+  | W49F020             | WINBOND          |   32 | 0xDA8C     | Flash/EEPROM| -    |
+  | W24010              | WINBOND          |   32 |            | SRAM        | -    |
+  | W24020              | WINBOND          |   32 |            | SRAM        | -    |
+  | W24040              | WINBOND          |   32 |            | SRAM        | -    |
+  | W24256,W24257A      | WINBOND          |   28 |            | SRAM        | -    |
+  | W24512              | WINBOND          |   32 |            | SRAM        | -    |
+  | W2464,W2465         | WINBOND          |   28 |            | SRAM        | -    |
+  | WS27C010F           | WSI              |   32 |            | UV-EPROM    | 13.0v|
+  | WS27C010L           | WSI              |   32 | 0x23C1     | UV-EPROM    | 13.0v|
+  | WS27C128F           | WSI              |   28 | 0x23A8     | UV-EPROM    | 13.0v|
+  | WS27C256L           | WSI              |   28 | 0x23C0     | UV-EPROM    | 12.0v|
+  | WS27C512F,WS27C512L | WSI              |   28 |            | UV-EPROM    | 12.0v|
+  | WS27C64             | WSI              |   28 |            | UV-EPROM    | 12.0v|
+  | WS57C128FB          | WSI              |   28 |            | UV-EPROM    | 13.0v|
+  | WS57C256F           | WSI              |   28 | 0x23E0     | UV-EPROM    | 12.0v|
+  | X2804A,X2804AI      | XICOR            |   24 |            | EEPROM      | -    |
+  | X2816A              | XICOR            |   24 |            | EEPROM      | -    |
+  | X2816B,X2816C       | XICOR            |   24 |            | EEPROM      | -    |
+  | X28256,X28C256      | XICOR            |   28 |            | EEPROM      | -    |
+  | X2864AP             | XICOR            |   28 |            | EEPROM      | -    |
+  | X28C010             | XICOR            |   32 |            | Flash/EEPROM| -    |
+  | X28C64,X28HC64      | XICOR            |   28 |            | EEPROM      | -    |
+  | X28C64(NonStandard)…| XICOR            |   28 |            | EEPROM      | -    |
+  | X88C64P,X88C64S     | XICOR            |   24 |            | EEPROM      | -    |
+  +---------------------+------------------+------+------------+-------------+------+
+  
+  '''
+# ---
+# name: test_no_blank_check_polarity
+  '''
+  Usage: firestarter write [OPTIONS] EPROM INPUT_FILE
+  
+    Writes a binary file to an EPROM.
+  
+    Blank check and erase are separate steps:
+      -b, --no-blank-check  skip the blank check only -- a pre-write erase
+                            still runs on electrically-erasable chips
+      --skip-erase          skip the pre-write erase as well
+  
+    Before the write reaches the port, the host -- not the firmware -- checks
+    that the target region is blank. Four protocol families never receive that
+    check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase per page immediately
+    before each write, and the SRAM and FRAM families have no blank state to
+    check at all. -b has nothing to skip on those four families; on every
+    protocol outside this list, it is still the way to skip the check.
+  
+    --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware unlocks
+    software data protection during write init. On any other protocol it has no
+    effect and the write proceeds. The host may also set it on its own when the
+    resolved chip is protocol-0x0D and its protection state cannot be read, and
+    always reports when it does.
+  
+    --pulse-us overrides the database program-pulse width for this run only, in
+    the range 1..65535 microseconds. Out-of-range values are refused before the
+    port is opened. A value above 50000 is refused by the firmware on protocol
+    0x0B before any high voltage is enabled. Using the flag always reports both
+    the database pulse and the override, so a log captured without its command
+    line still records which pulse was used.
+  
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
+  
+  Options:
+    -b, --no-blank-check      Skip the blank check before write (erase still
+                              runs if the chip supports it).
+    --skip-erase              Also skip the pre-write erase (for already-blank
+                              or non-erasable/pre-erased parts). WARNING:
+                              skipping erase on a non-blank electrically-
+                              erasable chip leaves un-erased bits that cannot be
+                              reprogrammed.
+    -f, --force               Force, even if the VPP or chip id doesn't match.
+    -a, --address TEXT        Write start address in dec/hex
+    --vpe-as-vpp              Use VPE as VPP voltage
+    --pulse-us INTEGER RANGE  Override the database program-pulse width for this
+                              run (microseconds, 1-65535). This bound is minipro
+                              parity (-o pulse=N is a uint16), NOT a wire-type
+                              or hardware limit -- see write()'s docstring.
+                              [1<=x<=65535]
+    --skip-sdp-unlock         Decline the automatic SDP unlock firmware performs
+                              at the start of every protocol-0x0D write.
+                              WARNING: on a chip whose software data protection
+                              is actually enabled, the write will then fail. Has
+                              NO EFFECT on any other protocol — the host warns
+                              and proceeds.
+    --verify                  After a successful write, read the written region
+                              back and compare it through the same engine
+                              `verify` uses. Changes THIS INVOCATION's exit-code
+                              contract: 0 the write landed and the read-back
+                              matched, 1 the invocation ended for a reason the
+                              host or the firmware decided (a blank-guard
+                              refusal, a firmware error during the write, a
+                              malformed address, or a read-back that completed
+                              and disagreed), 2 the transport or the hardware
+                              failed in ANY phase of the run -- the guard read,
+                              the write itself, or the read-back. Without
+                              --verify, write exits 0 on success and 1 on any
+                              failure, exactly as before.
+    --full                    With --verify, report every coalesced mismatching
+                              range in the read-back comparison, not just the
+                              first. Has no meaning and is refused without
+                              --verify.
+    --help                    Show this message and exit.
+  
+  '''
+# ---
+# name: test_search_no_results
+  ''
+# ---
+# name: test_search_w27
+  '''
+  +---------------------+------------------+------+------------+-------------+------+
+  | Name                | Manufacturer     | Pins | Chip ID    | Type        | VPP  |
+  +---------------------+------------------+------+------------+-------------+------+
+  | W27C01,W27C010,W27E…| WINBOND          |   32 | 0xDA01     | EEPROM      | 12.0v|
+  | W27C02,W27C020,W27E…| WINBOND          |   32 | 0xDA85     | EEPROM      | 12.0v|
+  | W27C04,W27C040,W27E…| WINBOND          |   32 | 0xDA86     | EEPROM      | 12.0v|
+  | W27C257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
+  | W27C512,W27E512     | WINBOND          |   28 | 0xDA08     | EEPROM      | 12.0v|
+  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 13.5v|
+  +---------------------+------------------+------+------------+-------------+------+
+  
+  '''
+# ---
+# name: test_version
+  '''
+  Firestarter, version <VERSION>
+  
+  '''
+# ---

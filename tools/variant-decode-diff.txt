@@ -1,0 +1,177 @@
+========================================================================
+GATE-02 Per-chip Diff Report
+  Baseline: /workspaces/firestarter_app/tools/baseline/chip_database.baseline.json  (744 chips, 744 diffed)
+  Current:  /workspaces/firestarter_app/tools/../firestarter/data/chip_database.json  (746 chips, 746 diffed)
+========================================================================
+
+--- CHANGED chips (72 total) ---
+
+[RULE_ALGO] (4 chips)
+  Algorithm correction (Rule 1/2/3) — Phase 57/58 principled re-derivation.
+    Rule 1: variant_lo=0x10 chips (24-pin EEPROM family) now get DIP24_2816 + algo=0x0D
+      instead of being skipped. Previously blocked by the 24-pin safety skip.
+    Rule 2: WARNING-5 override — DIP28_2764 Flash/EEPROM chips flipped 0x07->0x0D
+      to route through configure_eeprom28c (5V-only, no VPP assertion).
+      [CITED: .planning/v1.0-MILESTONE-AUDIT.md §WARNING-5]
+    Rule 3: fm1608 FRAM chips corrected to algo=0x29 (SRAM_512K_1M).
+      [VERIFIED: minipro database.c @ a8efaedc —
+       https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c]
+  Affected part_numbers (4):
+    2732,2732A,M2732,M2732A
+    M2716,M2716M
+    ETC2716,M2716
+    ETC2716,M2716
+
+[BUG3_VCC_VDD] (1 chips)
+  BUG-3 vcc/vdd label swap only — inverted field labels corrected.
+    bits 11-8 = vcc (VCC supply voltage), bits 15-12 = vdd (VDD programming voltage).
+    Previously the decode had these reversed.
+    [VERIFIED: minipro database.c#L921-L923 @ a8efaedc —
+     https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L921]
+  Affected part_numbers (1):
+    FM1608
+
+[VARIANT_DECODE] (67 chips)
+  Variant-decode consolidation (Phase 86 VAR-02) — Rule 1/2/3 replaced by a
+    single principled classify(type,proto,pm_idx,flags,pinout).
+    The override stack is gone; electrical.type/algorithm/pinout are now derived
+    once from the fields minipro itself uses to classify a device. Two effects
+    land here as electrical.type-only deltas:
+      (a) 68 5V-EEPROM-pinout chips (proto 0x0D, configure_eeprom28c, no VPP)
+          decode Flash/EEPROM -> EEPROM. The old two-pass mapped proto 0x0D to
+          'Flash/EEPROM'; classify() arm 2 (5V-EEPROM pinout clusters) emits the
+          more-accurate 'EEPROM' type for the 28C/28LV/2816 family. NO algorithm,
+          pinout, or VPP change — the chips already dispatched to configure_eeprom28c.
+      (b) X88C64P (proto 0x34, XICOR NovRAM/EEPROM) decodes UV-EPROM -> EEPROM via
+          classify() arm 4b. Display-only: the chip stays
+          support_status=protocol-not-implemented and non-dispatchable; algorithm
+          (0x34) and pinout unchanged.
+    The variant HIGH byte is minipro's T56/T76 algo-file selector, NOT a
+    classification axis — classify() keys on type/proto/pm_idx/flags.
+    [VERIFIED: minipro database.c#L1918 @ a8efaedc —
+     uint8_t algo_number = (uint8_t)(device->variant >> 8) —
+     https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L1918]
+    [VERIFIED: minipro minipro.h#L70 MP_SRAM=0x04 —
+     https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/minipro.h#L70]
+    [CITED: tools/DECODE-NOTES.md §2 (high byte) / §4 (X88C64) / §5 (FM1608)]
+  Affected part_numbers (67):
+    AM28C16A
+    AM28C17A
+    AM28C64A,AM28C64AE,AM28C64B,AM28C64BE
+    AT28BV256,AT28LV256
+    AT28BV64,AT28LV64
+    AT28BV64B,AT28LV64B
+    AT28C04,AT28HC04
+    AT28C04E,AT28C04F
+    AT28C16,AT28HC16,AT28HC16L
+    AT28C16E,AT28C16F
+    AT28C17
+    AT28C17E,AT28C17F
+    AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L
+    AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L
+    AT28C64B,AT28HC64B,AT28HC64BF
+    AT28C64E,AT28C64F
+    AT28PC64,AT28PC64E
+    CAT28C16A,CAT28C16AI
+    CAT28C17A
+    CAT28C256,CAT28C257
+    CAT28C64A,CAT28C65
+    CAT28C64B
+    CAT28LV256
+    CAT28LV64,CAT28LV65
+    FM28V020
+    XL2804A
+    XL2816A,XLE28C16A,XLS28C16A
+    XLE2865A,XLS2865A
+    XLE28C16B,XLS28C16B
+    XLE28C256,XLS28C256
+    XLE28C64A,XLS28C64A
+    XLE28C64B,XLS28C64B
+    MB85R256H
+    HN58C256AP
+    2804
+    2816
+    2817
+    28C04A
+    28C04AF
+    28C16A
+    28C16AF
+    28C17A
+    28C17AF
+    28C256,28C256F
+    28C64A
+    28C64AF
+    28C64B
+    28LV64A
+    UPD28C04
+    UPD28C256
+    UPD28C64
+    KM28C64
+    KM28C64A,KM28C65A
+    M28C64,M28C64A
+    M28C64-xxW
+    M28256
+    M28C64,M28C64A
+    M28C64-xxW
+    M28LV64
+    X2804A,X2804AI
+    X2816A
+    X2816B,X2816C
+    X28256,X28C256
+    X2864AP
+    X28C64(NonStandard),X28HC64(NonStandard)
+    X28C64,X28HC64
+    X88C64P,X88C64S
+
+--- COMPOUND changes (15) — algo+other deltas ---
+
+  These chips have a primary cause PLUS a secondary field delta that
+  is itself explained by a known rule. Both are surfaced so a
+  co-bundled change is not silently masked by the primary rationale.
+
+  2732,2732A,M2732,M2732A [RULE_ALGO] + secondary: programming.pulse_duration, support_status, unsupported_reason
+  28C04A [VARIANT_DECODE] + secondary: unsupported_reason
+  28C04AF [VARIANT_DECODE] + secondary: unsupported_reason
+  28C16A [VARIANT_DECODE] + secondary: unsupported_reason
+  28C16AF [VARIANT_DECODE] + secondary: unsupported_reason
+  AT28C04,AT28HC04 [VARIANT_DECODE] + secondary: unsupported_reason
+  AT28C04E,AT28C04F [VARIANT_DECODE] + secondary: unsupported_reason
+  AT28C16,AT28HC16,AT28HC16L [VARIANT_DECODE] + secondary: unsupported_reason
+  AT28C16E,AT28C16F [VARIANT_DECODE] + secondary: unsupported_reason
+  ETC2716,M2716 [RULE_ALGO] + secondary: programming.pulse_duration, support_status, unsupported_reason
+  ETC2716,M2716 [RULE_ALGO] + secondary: programming.pulse_duration, support_status, unsupported_reason
+  FM1608 [BUG3_VCC_VDD] + secondary: electrical.type
+  M2716,M2716M [RULE_ALGO] + secondary: programming.pulse_duration, support_status, unsupported_reason
+  UPD28C04 [VARIANT_DECODE] + secondary: unsupported_reason
+  X88C64P,X88C64S [VARIANT_DECODE] + secondary: unsupported_reason
+
+--- NEW chips: non-upstream supplement (2) — Phase 86 VAR-05 / D-10 (cited) ---
+
+  Non-upstream chip supplement (Phase 86 VAR-05 / D-10) — 2516 + 2532.
+    These are physically-real 24-pin UV-EPROM oddballs that are ABSENT from
+    minipro's infoic.xml entirely (no upstream record at all). They ship
+    first-class in chip_database.json via the curated, provenance-cited
+    supplement tools/extra_chips.json, which build_db.py merges AFTER the
+    infoic.xml decode loop (NOT routed through classify()/resolve_pinout_key —
+    they arrive fully-specified). Each supplement record carries a
+    source='non-upstream-supplement' marker + a datasheet citation (D-11).
+    They appear here as NEW chips against the OLD baseline because the baseline
+    re-pin is Plan 86-03 (runs AFTER this plan); their presence — with the
+    non-upstream source marker — is the explanation, NOT a Rule 1 unblock.
+      2516: algorithm 0x0B, DIP24_2716, UV-EPROM, vpp_mv 25000, 2048 B —
+        wire values verbatim from the v1.15 user-override (SAFE-04, unmoved);
+        verification_status UNVERIFIED (resolvable, not write-graduated; FUT-03).
+      2532: algorithm 0x0B, DIP24_2532 (non-JEDEC, VPP=pin 21), UV-EPROM,
+        4096 B; UNVERIFIED (no on-hand silicon).
+    [CITED: tools/extra_chips.json provenance fields + 2516_EPROM.pdf datasheet;
+     .planning/phases/86-variant-decode-correct-db-regen/86-CONTEXT.md D-10/D-11;
+     .planning/v1.15/DECODE-AUDIT.md (2516 user-override wire values)]
+
+  2516 [non-upstream-supplement] (pinout=DIP24_2716, algo=0xb, datasheet=firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf, UNVERIFIED)
+  2532 [non-upstream-supplement] (pinout=DIP24_2532, algo=0xb, datasheet=firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf, UNVERIFIED)
+
+--- NEW chips (0) — expected Rule 1 unblock (DIP24_2816 + algo=0x0D) ---
+
+--- MISSING chips (0) ---
+
+PASS: all 72 changed chips explained (2 new chips confirmed; 0 chips removed from baseline)

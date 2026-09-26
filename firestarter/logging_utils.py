@@ -49,5 +49,5 @@ class SingleLineStatusHandler(logging.StreamHandler):
                 self._status_line_active = False  # Ensure it's reset
 
             self.flush()
-        except Exception:
+        except Exception as e:  # noqa: F841  # bind 'as e' uniformly
             self.handleError(record)

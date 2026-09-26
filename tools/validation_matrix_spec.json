@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "families": [
+    {
+      "id": "eprom",
+      "handler": "configure_eprom",
+      "protocols": [7, 8, 11],
+      "rep_chip": "W27C512",
+      "tier1": {
+        "suite": "test_val_eprom",
+        "assertions": [
+          "vpp_regulator_enabled_on_write",
+          "vpp_regulator_disabled_on_read",
+          "op_pointer_write_set",
+          "op_pointer_read_set"
+        ]
+      },
+      "tier2": {
+        "test_module": "test_val_wire_eprom",
+        "commands": ["write", "read", "verify", "blank_check", "chip_id"]
+      },
+      "tier3": {
+        "test_chip": "W27C512",
+        "boards": ["leonardo"],
+        "skip_boards": ["uno328pb"]
+      }
+    },
+    {
+      "id": "eeprom28c",
+      "handler": "configure_eeprom28c",
+      "protocols": [13],
+      "rep_chip": "AT28C256",
+      "tier1": {
+        "suite": "test_val_eeprom28c",
+        "assertions": [
+          "no_vpp_regulator_on_write",
+          "no_vpp_regulator_on_read"
+        ]
+      },
+      "tier2": {
+        "test_module": "test_val_wire_eeprom28c",
+        "commands": ["write", "read", "verify", "blank_check"]
+      },
+      "tier3": {
+        "test_chip": "AT28C256",
+        "boards": ["leonardo"],
+        "skip_boards": ["uno328pb"]
+      }
+    },
+    {
+      "id": "nor_unlock",
+      "handler": "configure_flash_nor_unlock",
+      "protocols": [6],
+      "rep_chip": "AM29F040",
+      "tier1": {
+        "suite": "test_val_nor_unlock",
+        "assertions": [
+          "no_vpp_regulator_on_write",
+          "no_vpp_regulator_on_read"
+        ]
+      },
+      "tier2": {
+        "test_module": "test_val_wire_nor_unlock",
+        "commands": ["write", "read", "verify", "blank_check"]
+      },
+      "tier3": {
+        "test_chip": "AM29F040",
+        "boards": ["leonardo"],
+        "skip_boards": ["uno328pb"]
+      }
+    },
+    {
+      "id": "5v_page",
+      "handler": "configure_flash_5v_page",
+      "protocols": [5],
+      "protocols_note": "The matrix tracks host-dispatchable protocols (check_dispatch.py KNOWN_PROTOCOLS / dispatch()). Protocols 0x35 (53) and 0x39 (57) ALSO dispatch to configure_flash_5v_page in firmware (memory.cpp) and ARE covered by the Tier-1 native suite test_val_5v_page.cpp (hard-coded make_handle(0x35,...)/make_handle(0x39,...), calling configure_memory directly). However, zero chips in chip_database.json carry algorithm=0x35 or 0x39, so the host dispatch path never routes to configure_flash_5v_page via those protocols. They are intentionally omitted here to keep the host matrix consistent with the host dispatch mirror (CR-02 resolution, 2026-06-16). This is NOT a regression — the firmware truth and native coverage are preserved in test_val_5v_page.cpp.",
+      "rep_chip": "AT29C040",
+      "tier1": {
+        "suite": "test_val_5v_page",
+        "assertions": [
+          "no_vpp_regulator_on_write",
+          "no_vpp_regulator_on_read"
+        ]
+      },
+      "tier2": {
+        "test_module": "test_val_wire_5v_page",
+        "commands": ["write", "read", "verify", "blank_check"]
+      },
+      "tier3": {
+        "test_chip": "AT29C040",
+        "boards": ["leonardo"],
+        "skip_boards": ["uno328pb"]
+      }
+    },
+    {
+      "id": "flash_intel",
+      "handler": "configure_flash_intel",
+      "protocols": [16],
+      "rep_chip": "AM28F010",
+      "tier1": {
+        "suite": "test_val_flash_intel",
+        "assertions": [
+          "vpp_p1_enabled_on_write",
+          "vpp_p1_disabled_on_read"
+        ]
+      },
+      "tier2": {
+        "test_module": "test_val_wire_flash_intel",
+        "commands": ["write", "read", "verify", "blank_check"]
+      },
+      "tier3": {
+        "test_chip": "AM28F010",
+        "boards": ["leonardo"],
+        "skip_boards": ["uno328pb"]
+      }
+    },
+    {
+      "id": "sram",
+      "handler": "configure_sram",
+      "protocols": [14, 39, 40, 41],
+      "rep_chip": "6116",
+      "tier1": {
+        "suite": "test_val_sram",
+        "assertions": [
+          "zero_bus_writes_on_configure"
+        ]
+      },
+      "tier2": {
+        "test_module": "test_val_wire_sram",
+        "commands": ["write", "read", "verify"]
+      },
+      "tier3": {
+        "test_chip": "6116",
+        "boards": ["leonardo"],
+        "skip_boards": ["uno328pb"]
+      }
+    }
+  ]
+}

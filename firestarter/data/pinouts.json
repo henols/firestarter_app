@@ -1,0 +1,167 @@
+{
+    "DIP24_2716": {
+        "name": "JEDEC 2716 (2KB)",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12], "vpp-pin": [21],
+            "VCC_READ": 5.0, "VCC_PROG": 25.0,
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18], "oe-pin": [20],
+            "static-high-pins": [24]
+        }
+    },
+    "DIP24_2732": {
+        "name": "JEDEC 2732 (4KB)",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12],
+            "vpp-pin": [20], "oe-pin": [20],
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19, 21],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18],
+            "static-high-pins": [24]
+        }
+    },
+    "DIP28_2764": {
+        "name": "JEDEC 2764/128",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
+            "pgm-pin": [27], "nc-pin": [26],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22]
+        }
+    },
+    "DIP28_JEDEC_SRAM_8K": {
+        "name": "JEDEC 28-pin SRAM/FRAM 8K (6264/FM1608 family)",
+        "comment": "Standard JEDEC parallel SRAM/FRAM 28-pin layout. Same address bus as DIP28_2764 (A0-A12 at pins 10,9,...,2 — 13 address bits for 8K). Differs from DIP28_2764 at: pin 1 = NC (vs VPP), pin 27 = !WE (vs !PGM), pin 26 = NC. Used by 6264-class SRAM and Ramtron FM1608 FRAM. Tentative — bench-validation required for chip-specific layouts.",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14],
+            "rw-pin": [27], "nc-pin": [1, 26],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22]
+        }
+    },
+    "DIP28_27256": {
+        "name": "JEDEC 27256",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26, 27],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22]
+        }
+    },
+    "DIP28_27512": {
+        "name": "JEDEC 27512",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14],
+            "vpp-pin": [22], "oe-pin": [22],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26, 27, 1],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20]
+        }
+    },
+    "DIP32_STD": {
+        "name": "JEDEC 32-Pin Standard",
+        "comment": "Standard 32-pin UV-EPROM layout (27C010/27C020/27C040 family). VPP on pin 1, PGM (where applicable) on pin 31; A18 takes over pin 31 on 27C040. NOT correct for 5V flash (AM29F040/SST39SF040 family — those have A18 at pin 1, WE at pin 31 — see DIP32_SST39SF040).",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 31],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24]
+        }
+    },
+    "DIP32_SST39SF040": {
+        "name": "JEDEC 32-pin 5V Flash (SST39SF040/AM29F040 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): SST39SF040 and same-family 4Mbit/8Mbit 5V flash chips have A18 at pin 1 (NOT VPP) and WE at pin 31 (NOT address bus). Distinct from DIP32_STD (UV-EPROM 27C040 layout) where pins 1 and 31 are swapped. Covers ~47 chips at (pin_count=32, pm_idx=13, protocol_id=0x06): AM29F040, SST39SF040, A29040, EN29F040, MX29F040, etc. — all 5V single-supply flash.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 1],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
+        }
+    },
+    "DIP32_27C020": {
+        "name": "JEDEC 32-pin UV-EPROM ≤256K (27C010/27C020 family — PGM on pin 31)",
+        "comment": "Scoped pinout for 0x08 protocol chips with mem_size ≤ 262144 (≤256K — A18 bit 18 = mask 0x40000 unused). Per AM27C020.pdf: pin 1 = VPP (12.75V programming voltage), pin 31 = PGM (active-LOW program enable, NOT A18). On 256K and smaller parts, address bit 18 is never set, so pin 31 is always the PGM control, never an address line. Scope: ONLY assigned by resolve_pinout_key to proto_id=0x08 && mem_size<=262144 (D-02/D-04 alias guard). The 512K AM27C040 and 1M AM27C080 legitimately use pin 31 = A18 and MUST stay on DIP32_STD. CR-01 CORRECTED FIX (2026-07-01, operator schematic study): pin 31 is the distinct RW line — CTRL_READ_WRITE (physical bit 0x40) — DISTINCT from P1/VPP (CTRL_VPP_P1_ENABLE, physical bit 0x08) on BOTH legacy Rev 0/1 AND Rev 2 layouts (revision-invariant; the earlier CR-01 fork worry about a Rev-2 P1/PGM alias was a misdiagnosis — that alias is CTRL_ADDRESS_LINE_18_REV2/CTRL_VPP_P1_ENABLE_REV2 sharing 0x08, which this fix never touches). rw-pin:[31] mirrors the working DIP32_SST39SF040 flash entry (also rw-pin:[31]) and uses the SAME existing rw_line mechanism: the host resolves pin 31 -> pin_conversions[32][31] = 22 -> config.rw_line = 22, and the firmware's mem_util_remap_address_bus / mem_util_calculate_top_address_register fold bus line 22 into the CONTROL register's CTRL_READ_WRITE (0x40) bit, held at the program-active VIL level for the full write (WRITE_FLAG=0) pulse. Static-high-pins is RULED OUT as the PGM vehicle (Q1, 2026-06-30) — static_high_mask ORs HIGH into the bus line with no inversion in the RURP latch path, but PGM program-active is VIL (LOW). rw-pin:[31] is the correct mechanism: it is the missing assignment that makes pin 31 a DELIBERATELY-driven /PGM (=/WE) write strobe instead of merely unassigned/floating. Whether this flips bits on the seated AM27C020 remains the Phase-99 empirical gate; this pinout delivers the corrected host bus-config, not a silicon proof.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
+        }
+    },
+    "DIP32_27C801": {
+        "name": "JEDEC 32-pin UV-EPROM 1M (27C080 / M27C801 — A19 on pin 1, VPP on pin 24)",
+        "comment": "Per piersfinlayson/one-rom docs/CHIP-TYPES.md (datasheet-verified): the 8 Mbit 27C080/M27C801 class has 20 address lines (A0-A19) with A19 at pin 1, and VPP at pin 24 shared with /OE — the same OE/VPP sharing DIP28_27512 uses at pin 22. /PGM is pin 22 shared with /CE. Distinct from DIP32_STD (27C040 class: pin 1 = VPP, pin 31 = A18, 19 address lines) and from DIP32_27C020 (pin 31 = PGM). Assigned by resolve_pinout_key to pin_count=32 && pm_idx=12 && proto_id=0x08 && variant_lo=0x03 — the eight 1 MB rows AM27C080, AM27LV080, AT27C080, M27C801 (x2), MX27C8000, MX27C8000A, UPD27C8001. HARDWARE: A19 at pin 1 means socket pin 1 carries an address line, and on Rev 2.x shields socket pin 1 is also the VPP-enable line (JP5 = A19_CUT bridges it to the switched VPP node). JP5 must be cut for these parts, per the shield silkscreen.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16],
+            "vpp-pin": [24], "oe-pin": [24],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 31, 1],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22]
+        }
+    },
+    "DIP28_28C256": {
+        "name": "JEDEC 28-pin 5V parallel EEPROM (28C256 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C256 family has 15 address pins (A0-A14), with A14 at pin 1 (NOT VPP) and WE at pin 27 (NOT PGM). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) which has VPP at pin 1 and PGM at pin 27. Covers ~8 chips at (pin_count=28, pm_idx=20, protocol_id=0x07): AT28C256, AT28C256E/F, HN58C256, HN58C256AP, etc. Routes through configure_eeprom28c after WARNING-5 algo override OR directly via pm_idx-based pinout selection.",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26, 1],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22], "rw-pin": [27]
+        }
+    },
+    "DIP24_6116": {
+        "name": "JEDEC 24-pin 5V SRAM (6116/6264-style)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 6116 SRAM has 11 address pins (A0-A10) with A10=pin 19, CE=18, OE=20, WE=21. 5V single-supply, no programming voltage. Used by 6116-class 2KB SRAM chips. Covers the (pin_count=24, pm_idx=0, protocol_id=0x27) group + any other JEDEC 24-pin SRAM/FRAM with 6116-compatible pinout.",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12],
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
+        }
+    },
+    "DIP24_2532": {
+        "name": "TI 2532 (4KB) — non-JEDEC 24-pin UV-EPROM",
+        "comment": "TI/Motorola 2532 is a 4KB (4096x8) 24-pin UV-EPROM with a NON-JEDEC pinout that differs from the JEDEC 2732 (DIP24_2732). On the 2532: VPP=pin 21, A11=pin 18, !PD/PGM=pin 20 (chip-enable / power-down-program), VCC=pin 24, GND=pin 12. The JEDEC 2732 instead puts OE/VPP on pin 20, A11 on pin 21, and CE on pin 18 — so the two layouts must NOT be conflated (VPP on pin 21 vs pin 20 is a 12-25V-to-wrong-pin hardware-damage path). Source: TI 2532 datasheet pin assignment (committed 2516/2532-family scan under datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf, which is the TI 2500-series UV-EPROM family doc covering the 2516/2532 lineage). vpp-pin=21 satisfies the GATE-03 structural VPP guard for the 0x0B legacy EPROM handler. Tentative leaf layout — bench-validation required (carries the same UNVERIFIED posture as the 2516 supplement row).",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12], "vpp-pin": [21],
+            "VCC_READ": 5.0, "VCC_PROG": 25.0,
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19, 18],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [20],
+            "static-high-pins": [24]
+        }
+    },
+    "DIP24_2816": {
+        "name": "JEDEC 24-pin 5V parallel EEPROM (AT28C16/AT28C04 family)",
+        "comment": "AT28C16/AT28C04/28C16A-class 24-pin 5V single-supply parallel EEPROMs. Same physical layout as DIP24_6116 SRAM (WE=pin 21, OE=pin 20, CE=pin 18, VCC=pin 24, GND=pin 12). NO vpp-pin — configure_eeprom28c is 5V-only (SDP-disable + DQ7 page-write polling; VPP regulator is never asserted). Over-allocated to A0-A10 (11 address bits = AT28C16 maximum); AT28C04 has 9 address lines and firmware restricts driving via mem_size. Source: Atmel AT28C16 datasheet Table 1 (pin description). Pin 21=WE, NOT VPP — the DIP24_2716 (UV-EPROM) layout has VPP=pin 21; this layout does NOT.",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12],
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
+        }
+    },
+    "DIP28_28C64": {
+        "name": "JEDEC 28-pin 5V parallel EEPROM 8K (28C64 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C64 has 13 address pins (A0-A12, same as 2764 EPROM), CE=20, OE=22, WE=27, pin 1=NC (or /busy on some variants). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) — pin 27 is WE (not PGM), pin 1 is NC (not VPP). Covers (pin_count=28, pm_idx=19, protocol_id=0x07) group: AM28C64A/B/E, etc. Routes through configure_eeprom28c via WARNING-5 algo flip.",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14], "nc-pin": [1, 26],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22], "rw-pin": [27]
+        }
+    },
+    "DIP32_28C512_EEPROM": {
+        "name": "JEDEC 32-pin 5V parallel EEPROM 64K (28C512 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C512 has 16 address pins (A0-A15) with A15=pin 3, data bus on pins 13,14,15,17-21, CE=22, OE=24, WE=30, no VPP. 5V single-supply. Used by 32-pin 5V parallel EEPROMs (64K class). Covers (pin_count=32, pm_idx=9, protocol_id=0x0D) group: CAT28C512, CAT28C010 (note CAT28C010 is 64K despite name due to 16-bit organization), etc. Also reasonable default for 32-pin SRAM/NVRAM (M48Tx) with similar physical layout, though those use byte-write semantics rather than EEPROM page-write.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [30]
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+  "generated": "2026-06-17T13:25:16Z",
+  "harness_version": "71",
+  "cells": [
+    {
+      "family": "eprom",
+      "board": "leonardo",
+      "tier": 3,
+      "verdict": "PASS",
+      "pass_type": "authoritative",
+      "evidence_sha": "9521375d0847e99b46c6db8d5590d120aaea87c529272243decece3b22ef3490",
+      "retry_count": 1
+    }
+  ]
+}

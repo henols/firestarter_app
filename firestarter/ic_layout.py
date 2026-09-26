@@ -7,10 +7,19 @@ IC Layout Generation Module
 """
 
 import logging
-from typing import Optional, List, Dict
-from firestarter.database import EpromDatabase # Changed import
+from typing import Dict, List  # noqa: UP035
+
+from firestarter import jumper_table
+from firestarter.database import EpromDatabase, format_mv
+from firestarter.erase_support import erase_accepted, is_electrically_erasable
+from firestarter.vpp_display import shows_programming_vpp
 
 logger = logging.getLogger("EpromSpecBuilder")
+
+CAN_ERASE_YES = "yes (electrically erasable)"
+CAN_ERASE_UV_ONLY = "no (UV erase only)"
+CAN_ERASE_NOT_SUPPORTED = "no (erase is not supported for this chip)"
+
 
 class EpromSpecBuilder:
     """
@@ -19,72 +28,149 @@ class EpromSpecBuilder:
     jumper settings, communication protocol details, and flag interpretations.
     The output is a structured data object intended for further processing or display.
     """
+
     # Generic pin names for 24-pin, 28-pin, and 32-pin EPROMs
     _generic_pin_names_map = {
-        24: ["A7", "A6", "A5", "A4", "A3", "A2", "A1", "A0", "D0", "D1", "D2", "GND",
-             "D3", "D4", "D5", "D6", "D7", "CE", "NC", "OE", "NC", "NC", "NC", "VCC"],
-        28: ["NC", "NC", "A7", "A6", "A5", "A4", "A3", "A2", "A1", "A0", "D0", "D1", "D2", "GND",
-             "D3", "D4", "D5", "D6", "D7", "CE", "NC", "OE/VPP", "NC", "NC", "NC", "NC", "NC", "VCC"],
-        32: ["NC", "NC", "NC", "NC", "A7", "A6", "A5", "A4", "A3", "A2", "A1", "A0", "D0", "D1", "D2", "GND",
-             "D3", "D4", "D5", "D6", "D7", "CE", "NC", "OE", "NC", "NC", "NC", "NC", "NC", "NC", "R/W(WE)", "VCC"],
+        24: [
+            "A7",
+            "A6",
+            "A5",
+            "A4",
+            "A3",
+            "A2",
+            "A1",
+            "A0",
+            "D0",
+            "D1",
+            "D2",
+            "GND",
+            "D3",
+            "D4",
+            "D5",
+            "D6",
+            "D7",
+            "CE",
+            "NC",
+            "OE",
+            "NC",
+            "NC",
+            "NC",
+            "VCC",
+        ],
+        28: [
+            "NC",
+            "NC",
+            "A7",
+            "A6",
+            "A5",
+            "A4",
+            "A3",
+            "A2",
+            "A1",
+            "A0",
+            "D0",
+            "D1",
+            "D2",
+            "GND",
+            "D3",
+            "D4",
+            "D5",
+            "D6",
+            "D7",
+            "CE",
+            "NC",
+            "OE/VPP",
+            "NC",
+            "NC",
+            "NC",
+            "NC",
+            "NC",
+            "VCC",
+        ],
+        32: [
+            "NC",
+            "NC",
+            "NC",
+            "NC",
+            "A7",
+            "A6",
+            "A5",
+            "A4",
+            "A3",
+            "A2",
+            "A1",
+            "A0",
+            "D0",
+            "D1",
+            "D2",
+            "GND",
+            "D3",
+            "D4",
+            "D5",
+            "D6",
+            "D7",
+            "CE",
+            "NC",
+            "OE",
+            "NC",
+            "NC",
+            "NC",
+            "NC",
+            "NC",
+            "NC",
+            "R/W(WE)",
+            "VCC",
+        ],
     }
 
     def __init__(self, db_instance: EpromDatabase):
         self.db = db_instance
 
-    def _select_jumper_label(self, jp_setting: int, label1: str, label2: str) -> str:
-        if jp_setting == 1: return label1
-        if jp_setting == 2: return label2
-        return "NA"
+    @staticmethod
+    def _first_pin(pin_field: list) -> int:
+        """Extract a scalar pin number from a single-element list pin field.
 
-    def _get_rev1_jumper_settings_data(self, jp1: int, jp2: int, jp3: int) -> dict:
-        """Generates structured data for Rev 0.1 & 1.0 jumper settings."""
-        jumper_display = [" ● ● ● ", " ●(● ●)", "(● ●)● "] # 0: N/A, 1: Pos1, 2: Pos2
-        jp1_label = self._select_jumper_label(jp1, "A13", "VCC")
-        jp2_label = self._select_jumper_label(jp2, "A17", "VCC")
-        jp3_label = self._select_jumper_label(jp3, "32pin", "28pin")
-        return  {"0.1 & 1.0":
-         {   "jp1": {"config_text": "5V", "display": jumper_display[jp1], "pin_text": "A13", "selected_label": jp1_label},
-            "jp2": {"config_text": "5V", "display": jumper_display[jp2], "pin_text": "A17", "selected_label": jp2_label},
-            "jp3": {"config_text": "28pin", "display": jumper_display[jp3], "pin_text": "32pin", "selected_label": jp3_label},
-         }}
+        Pin map fields like vpp-pin, oe-pin, and rw-pin are stored as
+        single-element lists in pinouts.json (e.g. [22]).  This helper
+        returns the first element so the caller can use it as an integer
+        index or in arithmetic comparisons.
+        """
+        return pin_field[0]
 
-    def _get_rev2_jumper_settings_data(self, jp4: int) -> dict:
-        """Generates structured data for Rev 2.0 & 2.1 jumper settings."""
-        jp4_label = self._select_jumper_label(jp4, "Open", "Closed") # Assuming 1=Open, 2=Closed
-        jumper_display = [" N/A   ", " ● ●   ", "(● ●)  "] # 0: N/A, 1: Open, 2: Closed
-        return  {"2.0 & 2.1":{
-            "jp4": {"config_text": "28pin", "display": jumper_display[jp4], "pin_text": "32pin", "selected_label": jp4_label},
-        }}
+    def get_chip_type_string(self, protocol_id: int | None = None) -> str:
+        """Return a user-facing chip-type label.
 
-    def _get_rev2_2_jumper_settings_data(self, jp5: int) -> dict:
-        """Generates structured data for Rev 2.2 jumper settings."""
-        jp5_label = self._select_jumper_label(jp5, "Open", "Closed") # Assuming 1=Open, 2=Closed
-        jumper_display = [" N/A   ", " ● ●   ", "(● ●)  "] # 0: N/A, 1: Open, 2: Closed
-        return {"2.2":{
-            "jp5": {"config_text": "28pin", "display": jumper_display[jp5], "pin_text": "32pin", "selected_label": jp5_label},
-        }}
-
-    def get_chip_type_string(self, chip_type_int: int) -> str:
-        type_map = {1: "EPROM", 2: "Flash type 2", 3: "Flash type 3", 4: "SRAM"}
-        return type_map.get(chip_type_int, f"Unknown ({chip_type_int})")
+        When protocol_id is supplied, use it to look up the protocol-based
+        display label. The protocol-based labels are aligned with the
+        algorithm-family names in firestarter/CLAUDE.md so the displayed
+        type matches the firmware dispatch path the chip actually takes.
+        Falls back to the bare string "Unknown" when the protocol is absent
+        or unrecognized.
+        """
+        if protocol_id is not None:
+            # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
+            # earlier; no DB chip uses either protocol. Firmware still
+            # dispatches both → configure_flash4 for forward-compat (memory.cpp:89);
+            # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
+            if protocol_id in self._PROTOCOL_DISPLAY_NAME:
+                return self._PROTOCOL_DISPLAY_NAME[protocol_id]
+        return "Unknown"
 
     def _interpret_flags(self, flags: int) -> list[str]:
-        """
-        Interpret the flags value and return a list of properties.
+        """Interpret the info-flags value and return a list of properties.
+
+        Only two bits are derivable from the current chip_database.json pipeline:
+          0x10 — electrically erasable (set for EEPROM and Flash/EEPROM families)
+          0x20 — provides readable manufacturer/device ID (set when chip_id_check=True)
+
+        All other bits (0x08, 0x40, 0x80, 0x200, 0x4000, 0x8000, 0x400000) are not
+        produced by _map_data from the current DB and are omitted to avoid misleading
+        output.  Re-add them if a future DB revision carries those signals.
         """
         properties = []
         flag_definitions = [
-            (0x00000010, "Can be electrically erased"),
-            (0x00000020, "Has Readable Chip ID"),
-            (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)"),
-            (0x00000200, "Supports Boot Block Features"),
-            (0x00001000, "Data Memory Addressing"),
-            (0x00002000, "Data Bus Width"), # This seems more like a category than a boolean flag
-            (0x00004000, "Software Data Protection (SDP) before Erase/Program"),
-            (0x00008000, "Software Data Protection (SDP) after Erase/Program"),
-            # (0x00300000, "Supported Programming Modes"), # This is a multi-bit field
-            # (0x03000000, "Data Organization"), # This is a multi-bit field
+            (0x00000010, "Electrically erasable"),
+            (0x00000020, "Provides readable manufacturer/device ID"),
         ]
         for bitmask, description in flag_definitions:
             if flags & bitmask:
@@ -94,74 +180,192 @@ class EpromSpecBuilder:
     def _get_protocol_info_structured(self, protocol_id: int) -> dict | None:
         """Returns structured protocol information."""
         protocol_info_data = [
-            (0x05, "EEPROM/Flash", ("EEPROM/Flash with write enable sequence, software commands", "Requires specific software commands for programming/erasure", "Operates at standard voltage levels")),
-            (0x06, "Flash Memory", ("Standard Flash memory programming protocol", "Uses command sequences for programming/erasure", "Operates at standard voltage levels")),
-            (0x07, "EEPROM", ("EEPROM programming protocol for 28-pin devices", "Byte-wise programming, no high voltage required", "May include software data protection")),
-            (0x08, "EPROM", ("EPROM programming protocol requiring high programming voltage", "Uses VPP (typically 12.5V or higher) for programming", "Follows EPROM programming algorithms")),
-            (0x0B, "EPROM/EEPROM", ("Programming protocol for older 24-pin devices", "May require VPP for programming", "Smaller capacity devices")),
-            (0x0D, "EEPROM", ("Programming protocol for large EEPROMs", "Supports byte-wise programming", "May require specific write sequences")),
-            (0x0E, "SRAM", ("SRAM with battery backup or additional features", "Standard SRAM access protocols", "32-pin devices")),
-            (0x10, "Flash Memory", ("Intel-compatible Flash memory programming protocol", "Requires specific command sequences", "Operates at standard voltage levels")),
-            (0x11, "Flash Memory", ("Firmware Hub (FWH) programming protocol", "Used in BIOS chips", "Requires specific interfaces and commands")),
-            (0x27, "SRAM", ("Standard SRAM access protocol for 24-pin devices", "2Kb SRAM devices", "Simple read/write operations")),
-            (0x28, "SRAM", ("Standard SRAM access protocol for 28-pin devices", "8Kb SRAM devices", "Simple read/write operations")),
-            (0x29, "SRAM", ("Standard SRAM access protocol for 32-pin devices", "512Kb to 1Mb SRAM devices", "Simple read/write operations")),
-            (0x2A, "NVRAM", ("Non-volatile SRAM with built-in battery", "Requires special handling for battery-backed operation", "32-pin devices")),
-            (0x2C, "NVRAM", ("Non-volatile SRAM (Timekeeping RAM)", "May include real-time clock features", "Standard SRAM access protocol")),
-            (0x2E, "NVRAM", ("High-capacity non-volatile SRAM", "512Kb and larger sizes", "Requires specific protocols for access")),
-            (0x35, "Flash Memory", ("Flash memory with EEPROM-like interface", "Requires specific write sequences", "May include software data protection")),
-            (0x39, "Flash Memory", ("Advanced Flash memory programming protocol", "Uses command sequences similar to Intel algorithms", "Operates at standard voltage levels")),
-            (0x3C, "Flash Memory", ("Common Flash memory protocol for 4Mb devices", "Uses standard command sequences for programming", "May operate at lower voltages (3.3V)")),
+            (
+                0x05,
+                "EEPROM/Flash",
+                (
+                    "EEPROM/Flash with write enable sequence, software commands",
+                    "Requires specific software commands for programming/erasure",
+                    "Operates at standard voltage levels",
+                ),
+            ),
+            (
+                0x06,
+                "Flash Memory",
+                (
+                    "Standard Flash memory programming protocol",
+                    "Uses command sequences for programming/erasure",
+                    "Operates at standard voltage levels",
+                ),
+            ),
+            (
+                0x07,
+                "EPROM/EEPROM",
+                (
+                    "JEDEC 28-pin EPROM algorithm (also covers compatible 28C parts)",
+                    "Requires VPP on OE/VPP pin and byte-program style pulses",
+                    "Vendors may enable software data protection/unlock cycles",
+                ),
+            ),
+            (
+                0x08,
+                "Large EPROM",
+                (
+                    "High-voltage EPROM algorithm for 32-pin devices",
+                    "Uses ≥12 V VPP and EPROM-style timing",
+                    "Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)",  # noqa: E501
+                ),
+            ),
+            (
+                0x0B,
+                "Legacy EPROM/EEPROM",
+                (
+                    "Programming protocol for older 24-pin devices",
+                    "VPP is on pin 21 (2716, 2532), or it shares OE on pin 20 (2732)",
+                    "Targets small capacity 2716/2732/28C04/16 era parts",
+                ),
+            ),
+            (
+                0x0D,
+                "EEPROM",
+                (
+                    "Programming protocol for large EEPROMs",
+                    "Supports byte-wise programming",
+                    "May require specific write sequences",
+                ),
+            ),
+            (
+                0x0E,
+                "SRAM",
+                (
+                    "SRAM with battery backup or additional features",
+                    "Standard SRAM access protocols",
+                    "32-pin devices",
+                ),
+            ),
+            (
+                0x10,
+                "Flash Memory",
+                (
+                    "Intel-compatible Flash memory programming protocol",
+                    "Requires specific command sequences",
+                    "Operates at standard voltage levels",
+                ),
+            ),
+            (
+                0x27,
+                "SRAM",
+                (
+                    "Standard SRAM access protocol for 24-pin devices",
+                    "2Kb SRAM devices",
+                    "Simple read/write operations",
+                ),
+            ),
+            (
+                0x28,
+                "SRAM",
+                (
+                    "Standard SRAM access protocol for 28-pin devices",
+                    "8Kb SRAM devices",
+                    "Simple read/write operations",
+                ),
+            ),
+            (
+                0x29,
+                "SRAM",
+                (
+                    "Standard SRAM access protocol for 32-pin devices",
+                    "512Kb to 1Mb SRAM devices",
+                    "Simple read/write operations",
+                ),
+            ),
+            (
+                # X88C64 (1 DB chip) can surface in `info`. The bullet is a
+                # minimal, non-minipro-heritage placeholder: name-only
+                # scope, with prose reconciliation left to the doc.
+                0x34,
+                "EEPROM - XICOR 8051-bus",
+                (
+                    "XICOR 8051-multiplexed bus; not implemented on RURP (FUT-01)",
+                    "",
+                    "",
+                ),
+            ),
         ]
-        for pid, ptype, desc_tuple in protocol_info_data:
+        for pid, _ptype, desc_tuple in protocol_info_data:
             if pid == protocol_id:
                 return {
                     "id_hex": f"0x{pid:02X}",
-                    "type": ptype,
-                    "description_points": list(desc_tuple)
+                    "type": self._PROTOCOL_DISPLAY_NAME.get(pid, _ptype),
+                    "description_points": list(desc_tuple),
                 }
         return None
 
-    def _generate_pin_names_for_display(self, eprom_data: dict) -> Optional[List[str]]:
+    def _generate_pin_names_for_display(self, eprom_data: dict) -> List[str] | None:  # noqa: UP006
         pin_count = eprom_data.get("pin-count")
         if pin_count not in self._generic_pin_names_map:
             logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
             return None
-        
+
         # Start with a copy of the generic names
         pin_names = list(self._generic_pin_names_map[pin_count])
-        
+
         # Default OE pin position (example for 24-pin, adjust if needed for others)
         # This logic was a bit specific in the original, might need generalization
-        # For 24-pin, OE is pin 20 (index 19). For 28-pin, OE/VPP is pin 22 (index 21). For 32-pin, OE is pin 24 (index 23).
+        # For 24-pin, OE is pin 20 (index 19). For 28-pin, OE/VPP is pin 22 (index 21). For 32-pin, OE is pin 24 (index 23).  # noqa: E501
         # Let's assume a generic OE position if not overridden by pin map.
-        # This part of the original logic was a bit hardcoded and might need review for all chip types.
+        # This part of the original logic was a bit hardcoded and might need review for all chip types.  # noqa: E501
         # For simplicity, we'll rely on the pin_map to override.
 
         pin_map_id = eprom_data.get("pin-map")
-        pin_map_details = self.db.get_pin_map(pin_count, pin_map_id) if not pin_map_id is None else None
+        pin_map_details = (
+            self.db.get_pin_map(pin_count, pin_map_id)
+            if not pin_map_id is None  # noqa: E714
+            else None
+        )
 
         if pin_map_details:
-            if "rw-pin" in pin_map_details and pin_map_details["rw-pin"] <= pin_count:
-                pin_names[pin_map_details["rw-pin"] - 1] = "R/W(WE)"
-            if "vpp-pin" in pin_map_details and pin_map_details["vpp-pin"] <= pin_count:
-                pin_names[pin_map_details["vpp-pin"] - 1] = "VPP"
-                # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different
-                if "oe-pin" in pin_map_details and pin_map_details["oe-pin"] != pin_map_details["vpp-pin"] and pin_map_details["oe-pin"] <= pin_count:
-                     pin_names[pin_map_details["oe-pin"] - 1] = "OE"
-            elif "oe-pin" in pin_map_details and pin_map_details["oe-pin"] <= pin_count: # Only OE, no separate VPP
-                pin_names[pin_map_details["oe-pin"] - 1] = "OE"
+            # Single-pin fields in pinouts.json are stored as single-element
+            # lists (e.g. "vpp-pin": [22]).  Extract scalars before comparison.
+            rw_pin = (
+                self._first_pin(pin_map_details["rw-pin"])
+                if "rw-pin" in pin_map_details
+                else None
+            )  # noqa: E501
+            vpp_pin = (
+                self._first_pin(pin_map_details["vpp-pin"])
+                if "vpp-pin" in pin_map_details
+                else None
+            )  # noqa: E501
+            oe_pin = (
+                self._first_pin(pin_map_details["oe-pin"])
+                if "oe-pin" in pin_map_details
+                else None
+            )  # noqa: E501
+            if rw_pin is not None and rw_pin <= pin_count:
+                pin_names[rw_pin - 1] = "R/W(WE)"
+            if vpp_pin is not None and vpp_pin <= pin_count:
+                pin_names[vpp_pin - 1] = "VPP"
+                # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different  # noqa: E501
+                if oe_pin is not None and oe_pin != vpp_pin and oe_pin <= pin_count:
+                    pin_names[oe_pin - 1] = "OE"
+            elif oe_pin is not None and oe_pin <= pin_count:  # Only OE, no separate VPP
+                pin_names[oe_pin - 1] = "OE"
 
             if "address-bus-pins" in pin_map_details:
                 for i, pin_num in enumerate(pin_map_details["address-bus-pins"]):
                     if pin_num <= pin_count:
                         pin_names[pin_num - 1] = f"A{i}"
         else:
-            logger.warning(f"No specific pin map '{pin_map_id}' found for {pin_count}-pin {eprom_data.get('name', 'EPROM')}. Displaying generic layout.")
-        
+            logger.warning(
+                f"No specific pin map '{pin_map_id}' found for {pin_count}-pin {eprom_data.get('name', 'EPROM')}. Displaying generic layout."  # noqa: E501
+            )
+
         return pin_names
 
-    def _build_dip_layout_data_from_names(self, pin_count: int, pin_names: list) -> dict:
+    def _build_dip_layout_data_from_names(
+        self, pin_count: int, pin_names: list
+    ) -> dict:
         """
         Creates the structured data for a DIP package layout using pin count and names.
         """
@@ -175,127 +379,239 @@ class EpromSpecBuilder:
         for i in range(half):
             pin_left = pin_names[i]
             pin_right = pin_names[pin_count - 1 - i]
-            layout_data["pin_pairs"].append({
-                "left_name": pin_left, "left_num": i + 1,
-                "right_num": pin_count - i, "right_name": pin_right,
-            })
+            layout_data["pin_pairs"].append(
+                {
+                    "left_name": pin_left,
+                    "left_num": i + 1,
+                    "right_num": pin_count - i,
+                    "right_name": pin_right,
+                }
+            )
         return layout_data
 
-    def build_specifications(self, eprom_data: dict) -> Optional[Dict]:
+    # Canonical protocol display names -- the single source. Both the
+    # get_chip_type_string fallback path (proto_display, legacy user-override
+    # entries lacking electrical.type) and _get_protocol_info_structured's
+    # `type` field (the `firestarter info` "Protocol:" line) read from this ONE
+    # dict — preventing the two vocabularies from re-diverging, which is a
+    # recurring class of bug here. 0x34 added / 0x11 dropped / 0x35+0x39 stay
+    # excluded per the full-coverage reconcile against the 12-protocol
+    # canonical DB set.
+    _PROTOCOL_DISPLAY_NAME = {
+        0x05: "Flash - 5V page-write (EEPROM-like)",
+        0x06: "Flash - AMD/SST unlock-sequence NOR",
+        0x07: "EPROM - 28-pin UV/EE, 13V VPP",
+        0x08: "EPROM - 32-pin UV/EE, 13V VPP",
+        0x0B: "EPROM - 24-pin legacy, 12-25V direct-VPE",
+        0x0D: "EEPROM - 5V parallel, SDP + DQ7 poll",
+        0x0E: "SRAM - 32-pin battery-backed NVRAM",
+        0x10: "Flash - Intel 28F command-register, 12V VPP mandatory",
+        0x27: "SRAM - 24-pin async, 5V",
+        0x28: "SRAM/FRAM - 28-pin",
+        0x29: "SRAM - 32-pin large battery-backed NVRAM, 512K-1M",
+        0x34: "EEPROM - XICOR 8051-bus",
+    }
+
+    # Curated map from electrical.type DB ground truth to display label.
+    # These are the distinct values present in chip_database.json.
+    # Falls back to get_chip_type_string (protocol-based) when electrical_type
+    # is absent or empty (legacy user-override entries without electrical.type).
+    # "FRAM" is present so FM1608 displays "FRAM" (not the
+    # protocol-based fallback).  CAN_ERASE is unaffected (FRAM ∉ {EEPROM,
+    # Flash/EEPROM} in database.py:630).
+    _ELECTRICAL_TYPE_LABEL = {
+        "EEPROM": "EEPROM",
+        "Flash/EEPROM": "Flash/EEPROM",
+        "FRAM": "FRAM",
+        "SRAM": "SRAM",
+        "UV-EPROM": "UV-EPROM",
+    }
+
+    def resolve_type_label(
+        self,
+        electrical_type: str | None,  # noqa: UP006
+        protocol_id: int | None = None,  # noqa: UP006
+    ) -> str:
+        """Return the user-facing chip-type display label (single source of truth).
+
+        Looks up ``electrical_type`` in ``_ELECTRICAL_TYPE_LABEL`` (the curated
+        ground-truth map from the DB ``electrical.type`` field).  When
+        ``electrical_type`` is absent or empty — e.g. legacy user-override DB
+        entries that predate the ``electrical.type`` field (fallback) — falls
+        back to the protocol-based label via ``get_chip_type_string``.
+
+        Both ``build_specifications`` (info view) and ``print_eprom_list_table``
+        (list/search view) call this helper so the label is computed in exactly one
+        place, preventing future info-vs-list divergence (IN-01 fix).
+
+        Args:
+            electrical_type: Raw ``electrical.type`` string from the DB record
+                (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).
+                Pass ``None`` or ``""`` for legacy entries.
+            protocol_id: The mapped ``protocol-id`` integer — used by the fallback
+                for more precise disambiguation.
+
+        Returns:
+            A non-empty display label string (never raises).
         """
-        Builds a dictionary containing comprehensive technical specifications
-        for the given EPROM data. This includes basic properties, pin names for layout,
-        jumper settings, protocol information, and flag interpretations.
-        `eprom_data` should be the fully mapped data from `EpromDatabase.get_eprom(..., full=True)`.
+        etype = electrical_type or ""
+        if etype in self._ELECTRICAL_TYPE_LABEL:
+            return self._ELECTRICAL_TYPE_LABEL[etype]
+        return self.get_chip_type_string(protocol_id)
+
+    def build_specifications(  # noqa: UP006
+        self,
+        eprom_data: dict,
+        electrical_type: str | None = None,  # noqa: UP006
+    ) -> Dict | None:  # noqa: UP006
+        """Build a dictionary of comprehensive technical specifications for the EPROM.
+
+        This includes basic properties, pin names for layout, jumper settings,
+        protocol information, and flag interpretations.
+
+        ``eprom_data`` should be the fully mapped data from
+        ``EpromDatabase.get_eprom(name)``.
+
+        ``electrical_type`` is the raw ``electrical.type`` string from the DB record
+        (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).  When
+        provided it is used as the sole source of the Type label and the
+        "Can be erased" derivation.  Pass ``None`` for legacy user-override
+        entries that do not carry ``electrical.type``.
         """
         if not eprom_data:
             logger.error("No EPROM data provided to display.")
             return None
 
+        # Type label via the single shared helper (resolve_type_label).
+        # Falls back to protocol-based label when electrical_type is absent/empty.
+        etype = electrical_type or ""
+        chip_type_str = self.resolve_type_label(
+            electrical_type,
+            eprom_data.get("protocol-id"),
+        )
+
+        # No verified_str marker is shown.
+        # The presenter reads chip_data.get("verified_str", "") so omitting the
+        # key is safe and produces no visible marker.
         output_data = {
-            "name": eprom_data.get('name', 'N/A'),
-            "manufacturer": eprom_data.get('manufacturer', 'N/A'),
-            "pin_count": eprom_data.get('pin-count', 'N/A'),
-            "memory_size_hex": hex(eprom_data.get('memory-size', 0)),
-            "type_str": self.get_chip_type_string(eprom_data.get('type', 0)),
-            "vcc_str": f"{eprom_data.get('vcc', 'N/A')}v",
-            "pulse_delay_us_str": f"{eprom_data.get('pulse-delay', 'N/A')}µS",
-            "verified_str": "" if eprom_data.get("verified", False) else "-- NOT VERIFIED --",
-            "dip_layout": None, # Will store the structured DIP layout data
-            "jumpers":{},
+            "name": eprom_data.get("name", "N/A"),
+            "manufacturer": eprom_data.get("manufacturer", "N/A"),
+            "pin_count": eprom_data.get("pin-count", "N/A"),
+            "memory_size_hex": hex(eprom_data.get("memory-size", 0)),
+            "type_str": chip_type_str,
+            "vcc_str": format_mv(eprom_data["vcc_mv"]),
+            "dip_layout": None,  # Will store the structured DIP layout data
+            "jumpers": {},
             "protocol_info": None,
             "flags_info": None,
         }
 
-        chip_type_str = self.get_chip_type_string(eprom_data.get('type', 0))
-        output_data["type_str"] = chip_type_str
+        # "Can be erased" states what `firestarter erase` does. It uses the rule that sets
+        # FLAG_CAN_ERASE (erase_support.erase_accepted), so the line and the command agree.
+        # A not-supported chip is changed to "no" in eprom_info, where support_status is known.
+        # SRAM and absent/unknown type: no can_erase_str row.
+        if erase_accepted(etype, eprom_data.get("protocol-id")):
+            output_data["can_erase_str"] = CAN_ERASE_YES
+        elif is_electrically_erasable(etype):
+            output_data["can_erase_str"] = CAN_ERASE_NOT_SUPPORTED
+        elif etype == "UV-EPROM":
+            output_data["can_erase_str"] = CAN_ERASE_UV_ONLY
 
-        if eprom_data.get("type") == 1: # EPROM
-            output_data["can_erase_str"] = "true" if eprom_data.get('flags', 0) & 0x00000010 else "false"
+        # VPP row only where vpp_mv is a programming VPP (vpp_display.shows_programming_vpp). On
+        # the 5 V-only protocols vpp_mv is the WP-pin voltage, and on SRAM/FRAM it is a decode
+        # artifact. The list view calls the same predicate.
+        if shows_programming_vpp(
+            eprom_data.get("protocol-id"), eprom_data.get("vpp_mv")
+        ):
+            output_data["vpp_str"] = format_mv(int(eprom_data["vpp_mv"]))
 
-        if eprom_data.get("flags", 0) & 0x00000008: # Assumes this flag means VPP is relevant
-            output_data["vpp_str"] = f"{eprom_data.get('vpp', 'N/A')}v"
+        # Chip ID: always render a row, but show "-" when the chip has no
+        # real/readable ID — i.e. the key is absent, or it is a 0x00000000
+        # placeholder from a chip_id_check=false entry (e.g. SRAM/FRAM such as
+        # FM1608). A genuine chip ID is always non-zero.
+        chip_id = eprom_data.get("chip-id")
+        output_data["chip_id_hex"] = hex(chip_id) if chip_id else "-"
 
-        if "chip-id" in eprom_data:
-            output_data["chip_id_hex"] = hex(eprom_data.get('chip-id', 0))
+        # Pulse delay: omit the row when 0 / algorithm-controlled (no fixed
+        # programming pulse to report, e.g. SRAM/FRAM).
+        _pulse_delay = eprom_data.get("pulse-delay", 0) or 0
+        if _pulse_delay:
+            output_data["pulse_delay_us_str"] = f"{_pulse_delay}µS"
 
         # Generate DIP layout data
         pin_count = eprom_data.get("pin-count")
         if pin_count:
             display_pin_names = self._generate_pin_names_for_display(eprom_data)
             if display_pin_names:
-                output_data["dip_layout"] = self._build_dip_layout_data_from_names(pin_count, display_pin_names)
+                output_data["dip_layout"] = self._build_dip_layout_data_from_names(
+                    pin_count, display_pin_names
+                )
 
-                # Determine jumper settings based on pin count and VPP presence
-                jp1, jp2, jp3_rev01, jp4_rev2 = 0, 0, 0, 0 # Default to N/A or first position
-                has_vpp_pin_on_map = False
-                pin_map_details = self.db.get_pin_map(pin_count, eprom_data.get("pin-map"))
-                if pin_map_details and "vpp-pin" in pin_map_details:
-                    has_vpp_pin_on_map = True
-                
-                if pin_count == 24:
-                    jp1 = 2 # VCC
-                elif pin_count == 28:
-                    jp1 = 1 # A13
-                    jp2 = 2 # VCC
-                    if has_vpp_pin_on_map: jp3_rev01 = 2 # 28pin (if VPP is used, implies 28pin mode for VPP)
-                    jp4_rev2 = 2 if has_vpp_pin_on_map else 1 # Closed if VPP, Open otherwise
-                elif pin_count == 32:
-                    jp1 = 1 # A13
-                    jp2 = 1 # A17
-                    if has_vpp_pin_on_map: jp3_rev01 = 1 # 32pin
-                    jp4_rev2 = 2 if has_vpp_pin_on_map else 1
-                output_data["jumpers"].update( self._get_rev1_jumper_settings_data(jp1, jp2, jp3_rev01))
-                output_data["jumpers"].update( self._get_rev2_jumper_settings_data(jp4_rev2))
-                # output_data["jumpers"].update( self._get_rev2_2_jumper_settings_data(jp4_rev2))
+            # Jumper settings come from the per-pin-map table only (jumper_table.py). A pin
+            # map with no entry gets a fail-closed note and no jumper settings.
+            pin_map_key = eprom_data.get("pin-map")
+            entry = jumper_table.lookup(pin_map_key)
+            if entry is None:
+                output_data["jumper_note"] = jumper_table.NO_ENTRY_FORMAT.format(
+                    pin_map=pin_map_key or "(none)"
+                )
+            else:
+                output_data["jumpers"] = jumper_table.render_blocks(entry)
 
         protocol_id = eprom_data.get("protocol-id")
         if protocol_id is not None:
-            output_data["protocol_info"] = self._get_protocol_info_structured(protocol_id)
+            output_data["protocol_info"] = self._get_protocol_info_structured(
+                protocol_id
+            )
 
         flags = eprom_data.get("info-flags")
         if flags is not None:
             properties = self._interpret_flags(flags)
             output_data["flags_info"] = {
                 "value_hex": f"0x{flags:08X}",
-                "properties": properties
+                "properties": properties,
             }
         return output_data
 
 
-def main(): # Test function
+def main():  # Test function
     import json
-    logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
+
+    logging.basicConfig(
+        level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
+    )
     db_instance = EpromDatabase()
     spec_builder = EpromSpecBuilder(db_instance)
 
-    chip_name = "AT28C256" # A chip with a known pin map
-    chip_name = "2732" # A chip with a known pin map
+    chip_name = "AT28C256"  # A chip with a known pin map
+    chip_name = "2732"  # A chip with a known pin map
     eprom_details = db_instance.get_eprom(chip_name)
     if not eprom_details:
         logger.error(f"EPROM {chip_name} not found in the database.")
         return 1
-    
+
     logger.info(f"\n--- Generating structured data for {chip_name} ---")
     structured_data = spec_builder.build_specifications(eprom_details)
     if structured_data:
-        # For testing, just log the raw structure. Printing is now EpromInfoProvider's job.
-        logger.info(f"Generated data for {chip_name}: {json.dumps(structured_data, indent=2)}")
+        # For testing, just log the raw structure. Printing is now EpromInfoProvider's job.  # noqa: E501
+        logger.info(
+            f"Generated data for {chip_name}: {json.dumps(structured_data, indent=2)}"
+        )
 
-    logger.info(f"\n--- Testing get_chip_type_string ---")
-    logger.info(f"Type 1: {spec_builder.get_chip_type_string(1)}")
-    logger.info(f"Type 5: {spec_builder.get_chip_type_string(5)}")
+    logger.info(f"\n--- Testing get_chip_type_string ---")  # noqa: F541
+    logger.info(f"Protocol 0x08 (known): {spec_builder.get_chip_type_string(0x08)}")
+    logger.info(f"Protocol 0x99 (unknown): {spec_builder.get_chip_type_string(0x99)}")
 
-    logger.info(f"\n--- Testing flag interpretation (example flags) ---")
-    example_flags = 0x000000B0 # Has ID, Elec. Erasable, Can be Elec. Erased
+    logger.info(f"\n--- Testing flag interpretation (example flags) ---")  # noqa: F541
+    example_flags = 0x000000B0  # Has ID, Elec. Erasable, Can be Elec. Erased
     interpreted = spec_builder._interpret_flags(example_flags)
     logger.info(f"Flags 0x{example_flags:08X}: {interpreted}")
 
-    logger.info(f"\n--- Testing protocol info (example protocol ID) ---")
-    protocol_data = spec_builder._get_protocol_info_structured(0x08) # EPROM
+    logger.info(f"\n--- Testing protocol info (example protocol ID) ---")  # noqa: F541
+    protocol_data = spec_builder._get_protocol_info_structured(0x08)  # EPROM
     if protocol_data:
         logger.info(f"Protocol Data: {protocol_data}")
-    
+
 
 if __name__ == "__main__":
     main()

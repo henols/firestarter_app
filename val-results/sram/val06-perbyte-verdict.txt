@@ -1,0 +1,119 @@
+VAL-06 FM1608 Two-Pattern Per-Byte Verdict
+==========================================
+Date: 2026-06-17
+Board: Leonardo, /dev/ttyACM0, firmware 3.0.0b8
+Shield: Rev 2.0
+R1: 270000 (within [202500, 337500] band)
+Chip: FM1608 (FRAM, 8KB, algorithm 0x28, DIP28_JEDEC_SRAM_8K)
+
+Pre-Write Gate
+--------------
+- controller: leonardo  (CONFIRMED)
+- shield: Rev 2.0-class (CONFIRMED)
+- R1: 270000            (IN-BAND)
+
+Erase Path Probe (Open Question 1)
+------------------------------------
+Command: firestarter -p /dev/ttyACM0 erase FM1608
+Exit code: 1
+Output: ERROR: Not supported / Programmer error during ERASE: Programmer error during init: Not supported
+Conclusion: configure_sram CMD_ERASE is NOT a vacuous success — it errors.
+            The direct write+read-back method (firestarter write FM1608 -b) is
+            the ONLY correct path for FM1608 validation (Pitfall 3 confirmed).
+            dev validate-family sram would exit 2 (hw-error) — AVOIDED correctly.
+
+Baseline (D-07)
+---------------
+Initial read before any write:
+  fm1608-baseline.bin: 8192 bytes
+  SHA256: 571fbb8c054ef0e78a21cd74497af4bec5ea4c5fc05f4e6355128f58e3c6a899
+  Content: non-trivial existing data (chip had prior contents)
+
+Patterns (D-06)
+---------------
+Pattern A: 0x5A repeating, 8192 bytes
+  SHA256: 1ae62b3110141bf43af6a7a14875442afaea8460122b814e36466febf39ca654
+  Non-trivial: YES (not all-0x00, not all-0xFF)
+
+Pattern B: 0xA5 repeating, 8192 bytes
+  SHA256: 2ef1444bc950050c92f373cd2f5442022af98aa900aefd82c749cff93d4c0037
+  Non-trivial: YES (not all-0x00, not all-0xFF)
+
+Distinct: YES (0x5A and 0xA5 are bitwise complements — maximum separation)
+
+Per-Byte Mismatch Analysis (D-08) — N=2 runs per pattern
+---------------------------------------------------------
+Run method: firestarter write FM1608 <pattern.bin> -b
+            firestarter read FM1608 <readback.bin>
+            python3 per-byte compare
+
+Pattern A, Run 1 (readback_a_run1.bin vs pattern_a.bin):
+  Total bytes: 8192
+  Mismatches: 0
+  Offsets: []
+  SHA match: YES (1ae62b3110141bf43af6a7a14875442afaea8460122b814e36466febf39ca654)
+
+Pattern B, Run 1 (readback_b_run1.bin vs pattern_b.bin):
+  Total bytes: 8192
+  Mismatches: 0
+  Offsets: []
+  SHA match: YES (2ef1444bc950050c92f373cd2f5442022af98aa900aefd82c749cff93d4c0037)
+
+Pattern A, Run 2 (readback_a_run2.bin vs pattern_a.bin):
+  Total bytes: 8192
+  Mismatches: 0
+  Offsets: []
+  SHA match: YES (1ae62b3110141bf43af6a7a14875442afaea8460122b814e36466febf39ca654)
+
+Pattern B, Run 2 (readback_b_run2.bin vs pattern_b.bin):
+  Total bytes: 8192
+  Mismatches: 0
+  Offsets: []
+  SHA match: YES (2ef1444bc950050c92f373cd2f5442022af98aa900aefd82c749cff93d4c0037)
+
+D-08 Classification
+--------------------
+Case (a): ALL bytes match for both patterns on both runs
+  -> persistence confirmed
+  -> configure_sram DOES write (via generic_memory_write_execute)
+  -> VAL-06 = table-stakes-PASS
+
+Byte-0 FRAM Bug Assessment (D-08 separation)
+--------------------------------------------
+Byte 0 status: MATCHES (no mismatch at offset 0 in any of the 4 runs)
+Parked FM1608 byte-0 write bug: NOT triggered in this run (bytes all matched)
+Note: The pre-existing byte-0 bug documented in fm1608-fresh-chip-baseline.md
+      was NOT reproduced here. If byte 0 had mismatched while bytes 1..N
+      matched, that would have been table-stakes-PASS (separate parked bug).
+      This result is even cleaner: zero mismatches anywhere.
+
+Negative Control (D-08 / Pitfall 5)
+------------------------------------
+After writing pattern A, run: firestarter -p /dev/ttyACM0 verify FM1608 fm1608-baseline.bin
+Exit code: 1 (FAIL — as expected)
+Error: 0xff != 0x5a at 0x000000
+Result: PASSED (negative control confirms verify CAN fail — oracle is non-vacuous)
+
+Two-Pattern Anti-Floating-Bus Proof (D-06)
+------------------------------------------
+Pattern A (0x5A) was overwritten by Pattern B (0xA5), then overwritten by A again, then B.
+Both distinct patterns round-tripped cleanly on both runs. A floating-bus echo cannot
+track two distinct patterns across separate write+read cycles. Persistence is REAL.
+
+VERDICT
+-------
+VAL-06 = table-stakes-PASS
+
+Reasoning: All bytes in both patterns on both runs match exactly (zero mismatches).
+configure_sram does NOT implement a no-op write — the generic_memory_write_execute
+path fires correctly and persists data to the FM1608 FRAM. No FIX-01 correctness
+defect exists.
+
+Phase-74 FIX-01 Disposition
+-----------------------------
+VAL-06 = table-stakes-PASS (configure_sram does write) →
+FIX-01 (SRAM real read/write implementation) is CLOSED NOT-NEEDED with evidence.
+Phase 74 does NOT need to implement a SRAM write fix.
+
+Runs agreeing: YES (pattern A run1 == run2; pattern B run1 == run2 — no ambiguity)
+D-09 hard gate: SATISFIED (definitive verdict reached, not SKIP-deferred, not inconclusive)

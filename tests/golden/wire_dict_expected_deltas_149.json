@@ -1,0 +1,65 @@
+{
+  "deltas": {
+    "ATMEL|AT28C010,AT28C010E|22": {
+      "page-size": 128
+    },
+    "ATMEL|AT28C040,AT28C040E|25": {
+      "page-size": 128
+    },
+    "ATMEL|AT28LV010|34": {
+      "page-size": 128
+    },
+    "ATMEL|AT28MC010|35": {
+      "page-size": 64
+    },
+    "ATMEL|AT28MC020|36": {
+      "page-size": 128
+    },
+    "ATMEL|AT28MC040|37": {
+      "page-size": 128
+    },
+    "CATALYST(CSI)|CAT28C010|13": {
+      "page-size": 128
+    },
+    "CATALYST(CSI)|CAT28C020|14": {
+      "page-size": 128
+    },
+    "CATALYST(CSI)|CAT28C040|15": {
+      "page-size": 128
+    },
+    "CATALYST(CSI)|CAT28C512|12": {
+      "page-size": 128
+    },
+    "MAXWELL|28C010,28C010T,28C011,28C011T|0": {
+      "page-size": 128
+    },
+    "SGS-THOMSON|M28010|18": {
+      "page-size": 128
+    },
+    "ST|M28010|15": {
+      "page-size": 128
+    },
+    "WED|WE128K8|0": {
+      "page-size": 64
+    },
+    "WED|WE256K8|1": {
+      "page-size": 64
+    },
+    "WED|WE512K8|2": {
+      "page-size": 128
+    },
+    "WED|WME128K8|3": {
+      "page-size": 128
+    },
+    "XICOR|X28C010|5": {
+      "page-size": 128
+    }
+  },
+  "meta": {
+    "decision": "D-17: Phase 148's wire golden (tests/golden/wire_dict_baseline.json) is preserved byte-unchanged. This file is the committed, reviewable expected-delta list this phase's provenance-keyed page_size emit arm produces on top of it -- the golden itself is never re-captured or re-baselined to make this phase's change disappear.",
+    "honesty": "This change is software-proven and unvalidated on silicon.",
+    "how_to_update": "A new delta must name the chips and the reason in the commit message. Growing this list without a provenance justification is exactly the re-baselining D-17 exists to prevent -- see tests/test_wire_dict_equivalence.py's test_live_capture_matches_golden_plus_the_149_deltas for the anti-laundering assertion this fixture must satisfy.",
+    "phase": "149-firmware-page-size-seam-dual-repo-lockstep",
+    "provenance": "The 18 upstream-native protocol_id==0x0D rows (149-RESEARCH.md section 'D-01 Verification'): 15 gain wire page-size=128, 3 gain wire page-size=64. Generated programmatically from the live capture against the committed golden -- never transcribed by hand, since the |<i> record-key suffix is a positional index within each manufacturer's list and would silently rot if any row is ever added or reordered."
+  }
+}
