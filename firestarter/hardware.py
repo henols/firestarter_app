@@ -259,6 +259,76 @@ class HardwareManager:
             success, _ = self._execute_simple_command(command, "Hardware configuration")
             return success
 
+    # Deliberately field-by-field, not one whole-line pattern. The middle of
+    # this message has two renderings: codec.py replaces the raw "Cfg: N" with
+    # a silkscreen-aware "Override HW: Rev 2.0-class" when an override is set,
+    # and drops the field entirely when it is not. A single pattern spanning
+    # them matched only the raw form and broke the moment codec.py did its job.
+    # Same tolerance rationale as _VOLTAGE_RE above.
+    _CFG_R1_RE = re.compile(r"R1:\s*(\d+)")
+    _CFG_R2_RE = re.compile(r"R2:\s*(\d+)")
+    _CFG_BANDGAP_RE = re.compile(r"Bandgap:\s*(\d+)")
+
+    def read_calibration(self, flags: int = 0) -> dict[str, int] | None:
+        """Read r1, r2 and the calibrated bandgap.
+
+        The revision override is deliberately not returned: codec.py renders it
+        as a silkscreen name rather than the raw byte, so it cannot be read back
+        as an integer from this line. `firestarter hw` is where to read it.
+
+        Returns None on any transport error, or when the reply has no bandgap
+        field -- which means the firmware predates calibration support.
+        """
+        command: dict[str, int] = {"state": COMMAND_CONFIG}
+        if flags:
+            command["flags"] = flags
+        comm = None
+        try:
+            comm = SerialCommunicator.find_and_connect(command, self.config)
+            is_ok, msg = comm.expect_ack()
+            if not is_ok:
+                return None
+            text = msg or ""
+            r1_m = self._CFG_R1_RE.search(text)
+            r2_m = self._CFG_R2_RE.search(text)
+            bg_m = self._CFG_BANDGAP_RE.search(text)
+            if r1_m is None or r2_m is None or bg_m is None:
+                return None
+            return {
+                "r1": int(r1_m.group(1)),
+                "r2": int(r2_m.group(1)),
+                "bandgap_mv": int(bg_m.group(1)),
+            }
+        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+            logger.debug(f"Failed to read calibration: {e}")
+            return None
+        finally:
+            if comm:
+                comm.disconnect()
+
+    def calibrate_bandgap(self, measured_vcc_mv: int, flags: int = 0) -> bool:
+        """Calibrate this board against a measured supply voltage.
+
+        The firmware reads its own bandgap count and back-solves
+        ``bandgap_mv = measured_vcc_mv * bandgap_adc / 1024``. It refuses a
+        result outside the ATmega datasheet's 1.0-1.2 V window rather than
+        clamping it, so a mistyped reading fails loudly instead of storing a
+        wrong value the firmware would then trust.
+        """
+        command: dict[str, int] = {"state": COMMAND_CONFIG, "vcc": measured_vcc_mv}
+        if flags:
+            command["flags"] = flags
+        success, _ = self._execute_simple_command(command, "Calibration")
+        return success
+
+    def set_bandgap_mv(self, bandgap_mv: int, flags: int = 0) -> bool:
+        """Write the bandgap directly, for --reset back to the nominal."""
+        command: dict[str, int] = {"state": COMMAND_CONFIG, "bg": bandgap_mv}
+        if flags:
+            command["flags"] = flags
+        success, _ = self._execute_simple_command(command, "Calibration reset")
+        return success
+
     def _read_voltage_loop(
         self,
         state_to_set: int,

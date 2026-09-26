@@ -1486,6 +1486,98 @@ def hw(app: AppContext) -> None:
     sys.exit(0 if ok else 1)
 
 
+_BANDGAP_NOMINAL_MV = 1100
+_DIVIDER_GAIN = 314000 / 44000
+
+
+@cli.command(name="cal")
+@click.option(
+    "--vcc",
+    type=float,
+    default=None,
+    metavar="VOLTS",
+    help="Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09",
+)
+@click.option(
+    "--reset",
+    is_flag=True,
+    help="Restore the nominal 1100 mV reference, undoing any calibration.",
+)
+@click.pass_obj
+@map_typed_errors
+def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
+    """Calibrate the voltage readings against a multimeter.
+
+    Every board reads its rails through its microcontroller's internal
+    reference. That reference is only specified to 1.0-1.2 V and differs from
+    chip to chip, so an uncalibrated board can report a voltage up to 10 percent
+    away from the real one. A board that reads high can refuse to program a
+    correctly set rail.
+
+    To calibrate, measure the 5V pin on the Arduino header with a multimeter
+    and give the reading. No potentiometer and no high voltage are involved,
+    and the chip can stay in the socket.
+
+        firestarter cal --vcc 5.09
+
+    Run with no options to see the current calibration.
+    """
+    if vcc is not None and reset:
+        raise click.UsageError("Use either --vcc or --reset, not both.")
+
+    if reset:
+        before = app.hardware_manager.read_calibration()
+        if before is not None:
+            click.echo(f"Reference now: {before['bandgap_mv']} mV")
+        click.echo(f"Restoring the nominal {_BANDGAP_NOMINAL_MV} mV.")
+        ok = app.hardware_manager.set_bandgap_mv(_BANDGAP_NOMINAL_MV)
+        sys.exit(0 if ok else 1)
+
+    if vcc is not None:
+        measured_mv = int(round(vcc * 1000))
+        before = app.hardware_manager.read_calibration()
+        if not app.hardware_manager.calibrate_bandgap(measured_mv):
+            click.echo(
+                "Calibration refused. The result was outside 1000-1200 mV, which "
+                "means the reading does not match this board. Check that the "
+                "multimeter is on the 5V pin and that the value is in volts."
+            )
+            sys.exit(1)
+        after = app.hardware_manager.read_calibration()
+        if before is not None and after is not None:
+            click.echo(
+                f"Reference: {before['bandgap_mv']} mV -> {after['bandgap_mv']} mV"
+            )
+            _echo_calibration_effect(after["bandgap_mv"])
+        sys.exit(0)
+
+    current = app.hardware_manager.read_calibration()
+    if current is None:
+        click.echo(
+            "Could not read the calibration. The firmware may be older than this CLI."
+        )
+        sys.exit(1)
+    click.echo(f"Reference: {current['bandgap_mv']} mV")
+    click.echo(f"Divider: R1 {current['r1']}, R2 {current['r2']}")
+    _echo_calibration_effect(current["bandgap_mv"])
+    sys.exit(0)
+
+
+def _echo_calibration_effect(bandgap_mv: int) -> None:
+    """Say what the stored reference means for the reported voltages."""
+    if bandgap_mv == _BANDGAP_NOMINAL_MV:
+        click.echo(
+            "This board uses the nominal reference. If it has not been "
+            "calibrated, the readings can be up to 10 percent out."
+        )
+        return
+    error = _BANDGAP_NOMINAL_MV / bandgap_mv - 1
+    click.echo(
+        f"Before calibration this board read {abs(error) * 100:.1f} percent "
+        f"{'high' if error > 0 else 'low'}."
+    )
+
+
 @cli.command(name="config")
 @click.option(
     "--rev",

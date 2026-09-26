@@ -401,43 +401,56 @@ class TestIdFrameDecoder:
         render as 'Rev 2.0-class' on the MSG_OK_REV ack and 'Rev2' on the
         adjacent MSG_OK_CFG ack."""
         comm = make_comm()
-        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02 (REVISION_2_0)
-        params = struct.pack(">II", 10000, 4700) + bytes([0x02])
+        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02 (REVISION_2_0),
+        # u16 bandgap_mv=1100 (v1.43 appended the calibrated reference)
+        params = (
+            struct.pack(">II", 10000, 4700) + bytes([0x02]) + struct.pack(">H", 1100)
+        )
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev 2.0-class"
+        assert (
+            response.message
+            == "R1: 10000, R2: 4700, Override HW: Rev 2.0-class, Bandgap: 1100 mV"
+        )
 
     def test_ok_cfg_p03_no_override_decodes(self, fake_serial, make_comm):
         """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0xFF sentinel renders
         'R1: 10000, R2: 4700' (no override clause)."""
         comm = make_comm()
         # params: u32 r1=10000, u32 r2=4700, u8 override=0xFF (sentinel = no override)
-        params = struct.pack(">II", 10000, 4700) + bytes([0xFF])
+        params = (
+            struct.pack(">II", 10000, 4700) + bytes([0xFF]) + struct.pack(">H", 1100)
+        )
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "R1: 10000, R2: 4700"
+        assert response.message == "R1: 10000, R2: 4700, Bandgap: 1100 mV"
 
     def test_ok_cfg_p03_with_unknown_override_decodes(self, fake_serial, make_comm):
         """P-03: MSG_OK_CFG with override=0x99 (unknown byte) falls back to
         'R1: ..., R2: ..., Override HW: Rev153' (no space — mirrors MSG_OK_REV
         fallback shape). Per Phase 35 D-04 + WR-02 close."""
         comm = make_comm()
-        params = struct.pack(">II", 10000, 4700) + bytes([0x99])
+        params = (
+            struct.pack(">II", 10000, 4700) + bytes([0x99]) + struct.pack(">H", 1019)
+        )
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev153"
+        assert (
+            response.message
+            == "R1: 10000, R2: 4700, Override HW: Rev153, Bandgap: 1019 mV"
+        )
 
     def test_info_hw_silkscreen_known_rev_decodes(self, fake_serial, make_comm):
         """D-03: MSG_INFO_HW with byte=0x01 (REVISION_1) renders 'HW: Rev 1'
