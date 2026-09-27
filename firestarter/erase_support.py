@@ -13,12 +13,16 @@ So the `info` line and the `erase` result cannot disagree.
 Algorithm 5 (flash4) is excluded for hardware safety. The flash4 page write erases each page
 internally, and the flag would send the firmware into an erase that turns on the VPP regulator on a
 5 V-only chip.
+
+The DIP24_2816 pin map is excluded because those parts have no command decoder. The software erase
+would store bytes as data and report success. Refer to `dip24_2816_erase_gate`.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from firestarter import dip24_2816_erase_gate
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 
 ELECTRICALLY_ERASABLE_TYPES = frozenset({"EEPROM", "Flash/EEPROM"})
@@ -29,6 +33,12 @@ def is_electrically_erasable(electrical_type: Any) -> bool:
     return electrical_type in ELECTRICALLY_ERASABLE_TYPES
 
 
-def erase_accepted(electrical_type: Any, algorithm: Any) -> bool:
+def erase_accepted(
+    electrical_type: Any, algorithm: Any, pinout_key: Any = None
+) -> bool:
     """True when the host sets `FLAG_CAN_ERASE`, so that the `erase` command can erase the chip."""
-    return is_electrically_erasable(electrical_type) and algorithm != FLASH4_PROTOCOL_ID
+    return (
+        is_electrically_erasable(electrical_type)
+        and algorithm != FLASH4_PROTOCOL_ID
+        and not dip24_2816_erase_gate.is_affected(pinout_key)
+    )

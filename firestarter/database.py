@@ -559,7 +559,11 @@ class EpromDatabase:
         # same function.
         simple_flags = 0
         algo = programmer_data["algorithm"]  # already computed above from protocol-id
-        if erase_accepted(full_eprom_data.get("electrical-type", ""), algo):
+        if erase_accepted(
+            full_eprom_data.get("electrical-type", ""),
+            algo,
+            full_eprom_data.get("pin-map"),
+        ):
             simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 

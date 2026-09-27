@@ -23,6 +23,7 @@ from rich.console import Console
 
 from firestarter import __version__ as version
 from firestarter import (
+    dip24_2816_erase_gate,
     flash4_erase_gate,
     jp5_gate,
     log_capture,
@@ -1355,6 +1356,11 @@ def erase(
 
     if flash4_erase_gate.is_flash4(eprom_data):
         click.echo(flash4_erase_gate.refusal_text(eprom))
+        sys.exit(0 if ignore_unsupported else 1)
+
+    full_record = app.db.get_eprom(eprom) or {}
+    if dip24_2816_erase_gate.is_affected(full_record.get("pin-map")):
+        click.echo(dip24_2816_erase_gate.refusal_text(eprom))
         sys.exit(0 if ignore_unsupported else 1)
 
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "erase"):

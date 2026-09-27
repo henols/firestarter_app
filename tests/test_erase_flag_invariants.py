@@ -166,17 +166,37 @@ def test_exactly_84_algorithm_13_rows_across_all_746_rows() -> None:
 # Leg 2: every one of the 84 algorithm-13 rows carries the erase bit.
 
 
-def test_every_algorithm_13_row_carries_the_erase_capability_bit() -> None:
+def test_every_algorithm_13_row_off_dip24_2816_carries_the_erase_capability_bit() -> (
+    None
+):
     algo13_rows = _select_algorithm_13_rows(_REAL_DB)
     offenders = [
         f"{mfr}/{chip.get('part_number', '?')}"
         for mfr, chip in algo13_rows
-        if not _erase_capability_bit(_REAL_DB, mfr, chip)
+        if chip["pinout"] != "DIP24_2816"
+        and not _erase_capability_bit(_REAL_DB, mfr, chip)
     ]
     assert not offenders, (
-        f"every algorithm-13 row must carry the erase capability bit after "
-        f"conversion; rows missing it: {offenders}"
+        f"every algorithm-13 row off DIP24_2816 must carry the erase "
+        f"capability bit after conversion; rows missing it: {offenders}"
     )
+
+
+def test_no_dip24_2816_row_carries_the_erase_capability_bit() -> None:
+    """These parts have no command decoder: the software erase would store
+    bytes as data. The firmware must never be told it may erase them."""
+    dip24 = [
+        (mfr, chip)
+        for mfr, chip in _select_algorithm_13_rows(_REAL_DB)
+        if chip["pinout"] == "DIP24_2816"
+    ]
+    assert len(dip24) == 19
+    carrying = [
+        f"{mfr}/{chip['part_number']}"
+        for mfr, chip in dip24
+        if _erase_capability_bit(_REAL_DB, mfr, chip)
+    ]
+    assert not carrying, carrying
 
 
 # Leg 3: no non-algorithm-13 row's bit moved -- the scope proof.

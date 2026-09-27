@@ -244,7 +244,7 @@ def test_cli_erase_on_non_flash4_part_still_reaches_operator():
         "resolve_chip",
         return_value={"algorithm": 13, "bus-config": NO_PIN1_BUS_CONFIG},
     ):
-        result = runner.invoke(cli, ["erase", "AM28C16A"], obj=app)
+        result = runner.invoke(cli, ["erase", "AT28C256"], obj=app)
 
     assert result.exit_code == 0
     eprom_operator.erase_eprom.assert_called_once()

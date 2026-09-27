@@ -510,7 +510,9 @@ class EpromSpecBuilder:
         # FLAG_CAN_ERASE (erase_support.erase_accepted), so the line and the command agree.
         # A not-supported chip is changed to "no" in eprom_info, where support_status is known.
         # SRAM and absent/unknown type: no can_erase_str row.
-        if erase_accepted(etype, eprom_data.get("protocol-id")):
+        if erase_accepted(
+            etype, eprom_data.get("protocol-id"), eprom_data.get("pin-map")
+        ):
             output_data["can_erase_str"] = CAN_ERASE_YES
         elif is_electrically_erasable(etype):
             output_data["can_erase_str"] = CAN_ERASE_NOT_SUPPORTED
