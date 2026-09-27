@@ -1,10 +1,17 @@
-# Firestarter support and issue tracking
+<p align="left"><img src="https://raw.githubusercontent.com/henols/firestarter/main/images/branding/firestarter_logo_horizontal.png" alt="Firestarter EPROM Programmer" width="400"></p>
 
-Bugs, feature requests, support requests, release coordination, and cross-repository work are tracked centrally in [`henols/firestarter`](https://github.com/henols/firestarter/issues).
+# Support and issues
 
-Please do not open project issues in this repository. Use the central issue tracker instead:
+The Firestarter project keeps all issues in one tracker, in the
+[henols/firestarter](https://github.com/henols/firestarter/issues) repository. This includes bug
+reports, feature requests, support requests and changes that touch more than one repository.
+
+Do not open an issue in this repository. Use the project tracker:
 
 - [Open a Firestarter issue](https://github.com/henols/firestarter/issues/new/choose)
-- [Browse existing Firestarter issues](https://github.com/henols/firestarter/issues)
+- [Find an existing Firestarter issue](https://github.com/henols/firestarter/issues)
 
-For community discussion, you can also use the [Firestarter Discord server](https://discord.com/invite/kmhbxAjQc3).
+The wiki [Contributing](https://github.com/henols/firestarter/wiki/Contributing) page tells you
+where to report a problem and where to open a pull request.
+
+For community discussion, use the [Firestarter Discord server](https://discord.com/invite/kmhbxAjQc3).
