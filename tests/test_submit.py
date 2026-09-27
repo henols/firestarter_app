@@ -683,7 +683,6 @@ def test_submit_via_gh_argv_carries_nothing_permission_gated():
     assert isinstance(argv, list)
     assert argv[0] == "gh"
     assert "--label" not in argv
-    assert submit.GSD_INBOX_LABEL not in argv
     assert "gsd-inbox" not in " ".join(argv)
     assert "shell" not in run_fn.call_args.kwargs
 
@@ -753,10 +752,6 @@ def test_submit_via_gh_success_prints_nothing():
     console.print.assert_not_called()
 
 
-def test_gsd_inbox_label_constant_retained():
-    assert submit.GSD_INBOX_LABEL == "gsd-inbox"
-
-
 _CREATE_DENY_SET = [
     "-l",
     "--label",
@@ -793,9 +788,8 @@ def test_gh_create_argv_carries_no_permission_gated_flag(flag):
     argv = run_fn.call_args[0][0]
     assert isinstance(argv, list)
     assert flag not in argv
-    # The retained value-absence + list-argv + no-shell assertions (the
+    # The list-argv + no-shell assertions (the
     # pre-existing idiom this widens).
-    assert submit.GSD_INBOX_LABEL not in argv
     assert "gsd-inbox" not in " ".join(argv)
     assert "shell" not in run_fn.call_args.kwargs
 
