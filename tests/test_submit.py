@@ -752,10 +752,6 @@ def test_submit_via_gh_success_prints_nothing():
     console.print.assert_not_called()
 
 
-def test_gsd_inbox_label_constant_retained():
-    assert submit.GSD_INBOX_LABEL == "gsd-inbox"
-
-
 _CREATE_DENY_SET = [
     "-l",
     "--label",
