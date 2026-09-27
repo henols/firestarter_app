@@ -15,6 +15,7 @@ from typing import NamedTuple, Tuple  # noqa: UP035
 from firestarter.config import ConfigManager
 from firestarter.constants import (
     COMMAND_CONFIG,
+    COMMAND_DEV_ADC,
     COMMAND_HW_VERSION,
     COMMAND_READ_VPE,
     COMMAND_READ_VPP,
@@ -258,6 +259,76 @@ class HardwareManager:
             success, _ = self._execute_simple_command(command, "Hardware configuration")
             return success
 
+    # Deliberately field-by-field, not one whole-line pattern. The middle of
+    # this message has two renderings: codec.py replaces the raw "Cfg: N" with
+    # a silkscreen-aware "Override HW: Rev 2.0-class" when an override is set,
+    # and drops the field entirely when it is not. A single pattern spanning
+    # them matched only the raw form and broke the moment codec.py did its job.
+    # Same tolerance rationale as _VOLTAGE_RE above.
+    _CFG_R1_RE = re.compile(r"R1:\s*(\d+)")
+    _CFG_R2_RE = re.compile(r"R2:\s*(\d+)")
+    _CFG_BANDGAP_RE = re.compile(r"Bandgap:\s*(\d+)")
+
+    def read_calibration(self, flags: int = 0) -> dict[str, int] | None:
+        """Read r1, r2 and the calibrated bandgap.
+
+        The revision override is deliberately not returned: codec.py renders it
+        as a silkscreen name rather than the raw byte, so it cannot be read back
+        as an integer from this line. `firestarter hw` is where to read it.
+
+        Returns None on any transport error, or when the reply has no bandgap
+        field -- which means the firmware predates calibration support.
+        """
+        command: dict[str, int] = {"state": COMMAND_CONFIG}
+        if flags:
+            command["flags"] = flags
+        comm = None
+        try:
+            comm = SerialCommunicator.find_and_connect(command, self.config)
+            is_ok, msg = comm.expect_ack()
+            if not is_ok:
+                return None
+            text = msg or ""
+            r1_m = self._CFG_R1_RE.search(text)
+            r2_m = self._CFG_R2_RE.search(text)
+            bg_m = self._CFG_BANDGAP_RE.search(text)
+            if r1_m is None or r2_m is None or bg_m is None:
+                return None
+            return {
+                "r1": int(r1_m.group(1)),
+                "r2": int(r2_m.group(1)),
+                "bandgap_mv": int(bg_m.group(1)),
+            }
+        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+            logger.debug(f"Failed to read calibration: {e}")
+            return None
+        finally:
+            if comm:
+                comm.disconnect()
+
+    def calibrate_bandgap(self, measured_vcc_mv: int, flags: int = 0) -> bool:
+        """Calibrate this board against a measured supply voltage.
+
+        The firmware reads its own bandgap count and back-solves
+        ``bandgap_mv = measured_vcc_mv * bandgap_adc / 1024``. It refuses a
+        result outside the ATmega datasheet's 1.0-1.2 V window rather than
+        clamping it, so a mistyped reading fails loudly instead of storing a
+        wrong value the firmware would then trust.
+        """
+        command: dict[str, int] = {"state": COMMAND_CONFIG, "vcc": measured_vcc_mv}
+        if flags:
+            command["flags"] = flags
+        success, _ = self._execute_simple_command(command, "Calibration")
+        return success
+
+    def set_bandgap_mv(self, bandgap_mv: int, flags: int = 0) -> bool:
+        """Write the bandgap directly, for --reset back to the nominal."""
+        command: dict[str, int] = {"state": COMMAND_CONFIG, "bg": bandgap_mv}
+        if flags:
+            command["flags"] = flags
+        success, _ = self._execute_simple_command(command, "Calibration reset")
+        return success
+
     def _read_voltage_loop(
         self,
         state_to_set: int,
@@ -318,6 +389,14 @@ class HardwareManager:
                         f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"  # noqa: E501
                     )
                     return True
+                elif response_type == "WARN":
+                    # A warning never ends a read. The firmware emits the
+                    # implausible-VCC warning once per command, ahead of the
+                    # DATA frame for that same sample, so do NOT ack here --
+                    # the reading this warning belongs to is still coming.
+                    # No log call: _log_response in serial_comm already
+                    # surfaces every WARN frame at logging.WARNING.
+                    print()
                 elif response_type == "ERROR":
                     print()
                     logger.error(f"Error reading {voltage_type_str}: {message}")
@@ -411,6 +490,11 @@ class HardwareManager:
 
             for _ in range(n):
                 response = comm.get_response()
+                if response.type == "WARN":
+                    # Same contract as _read_voltage_loop: a warning precedes
+                    # the DATA frame for its own sample and must not consume
+                    # this iteration's ack. serial_comm already logged it.
+                    response = comm.get_response()
                 if response.type != "DATA":
                     break
                 mv = self._parse_voltage_frame(response.message)
@@ -434,6 +518,69 @@ class HardwareManager:
                 comm.disconnect()
 
         return int(statistics.median(samples)) if samples else None
+
+    _ADC_RAW_RE = re.compile(
+        r"ADC mode (\d+): divider (\d+), bandgap (\d+), V (\d+) mV, "
+        r"VCC (\d+) mV, R1 (\d+), R2 (\d+)"
+    )
+
+    def read_adc_raw(self, flags: int = 0) -> list[dict[str, int]] | None:
+        """Read the raw ADC diagnostic frames (dev-gated CMD_DEV_ADC).
+
+        The firmware sweeps three rail states in one command and emits one
+        MSG_DATA_ADC_RAW frame per state, so all three are sampled at a single
+        pot setting. Every field is a full integer, unlike the vpp/vpe
+        monitors whose wire format carries only tenths of a volt.
+
+        Returns one dict per frame with keys mode, divider_adc, bandgap_adc,
+        voltage_mv, vcc_mv, r1, r2 -- or None on any transport error or if no
+        frame could be parsed. Never a fabricated zero.
+        """
+        comm = None
+        frames: list[dict[str, int]] = []
+        command: dict[str, int] = {"state": COMMAND_DEV_ADC}
+        if flags:
+            command["flags"] = flags
+        try:
+            # No expect_ack() here. find_and_connect consumes the firmware's
+            # MSG_OK_READY as part of the handshake, and dt_read_adc sends no
+            # second ack -- it emits its three DATA frames and ends. An
+            # expect_ack() at this point eats those frames looking for an OK
+            # that never comes, then times out.
+            comm = SerialCommunicator.find_and_connect(command, self.config)
+            for _ in range(3):
+                response = comm.get_response()
+                if response.type != "DATA":
+                    break
+                match = self._ADC_RAW_RE.search(response.message or "")
+                if match is None:
+                    continue
+                mode, divider, bandgap, voltage_mv, vcc_mv, r1, r2 = (
+                    int(g) for g in match.groups()
+                )
+                frames.append(
+                    {
+                        "mode": mode,
+                        "divider_adc": divider,
+                        "bandgap_adc": bandgap,
+                        "voltage_mv": voltage_mv,
+                        "vcc_mv": vcc_mv,
+                        "r1": r1,
+                        "r2": r2,
+                    }
+                )
+        except (
+            ProgrammerNotFoundError,
+            SerialError,
+            SerialTimeoutError,
+            HardwareOperationError,
+        ) as e:
+            logger.debug(f"Failed to read raw ADC: {e}")
+            return None
+        finally:
+            if comm:
+                comm.disconnect()
+        return frames or None
 
     def sample_vpp_mv(self, n: int = 3) -> int | None:
         """Value-returning sibling of read_vpp_voltage: median VPP mV over

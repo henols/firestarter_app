@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 79
+Total messages: 83
 """
 
 from dataclasses import dataclass
@@ -90,6 +90,8 @@ MSG_WARN_MEM_SIZE_TOO_SMALL = 0x84
 MSG_WARN_FL4_BOOT_BLOCK_LOCKED = 0x85
 MSG_WARN_SDP_UNLOCK_SKIPPED = 0x86
 MSG_WARN_SDP_TBLC_EXCEEDED = 0x87
+MSG_WARN_VCC_IMPLAUSIBLE = 0x88
+MSG_WARN_NOT_CALIBRATED = 0x89
 MSG_ERR_BAD_JSON = 0xA0
 MSG_ERR_NO_CMD = 0xA1
 MSG_ERR_SETUP = 0xA2
@@ -123,12 +125,14 @@ MSG_ERR_MAX_PULSES = 0xBD
 MSG_ERR_ENERGY_CAP = 0xBE
 MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_ERR_FL4_PAGE_ALIGN = 0xC0
+MSG_ERR_CALIBRATION = 0xC1
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
 MSG_DATA_VPP_VOLTAGE = 0xE4
 MSG_DATA_VPE_VOLTAGE = 0xE5
 MSG_DATA_CHUNK = 0xE6
+MSG_DATA_ADC_RAW = 0xE7
 MSG_DEBUG = 0xF0
 
 
@@ -183,9 +187,9 @@ CATALOG: dict[int, MessageDef] = {
         id=0x05,
         name="MSG_OK_CFG",
         severity=SEVERITY_OK,
-        format="R1: %lu, R2: %lu, Cfg: %u",
-        params=(("u32", "hex"), ("u32", "hex"), ("u8", "dec")),
-        param_bytes=9,
+        format="R1: %lu, R2: %lu, Cfg: %u, Bandgap: %u mV",
+        params=(("u32", "dec"), ("u32", "dec"), ("u8", "dec"), ("u16", "dec")),
+        param_bytes=11,
         wire_format="id_frame",
     ),
     0x10: MessageDef(
@@ -485,6 +489,24 @@ CATALOG: dict[int, MessageDef] = {
         param_bytes=4,
         wire_format="id_frame",
     ),
+    0x88: MessageDef(
+        id=0x88,
+        name="MSG_WARN_VCC_IMPLAUSIBLE",
+        severity=SEVERITY_WARN,
+        format="Internal VCC reads %u mV, which the board cannot run at. The voltage readings are not trustworthy.",
+        params=(("u16", "dec"),),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x89: MessageDef(
+        id=0x89,
+        name="MSG_WARN_NOT_CALIBRATED",
+        severity=SEVERITY_WARN,
+        format="Voltage readings are uncalibrated on this board. Run 'firestarter cal' to make them trustworthy.",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
     0xA0: MessageDef(
         id=0xA0,
         name="MSG_ERR_BAD_JSON",
@@ -782,6 +804,15 @@ CATALOG: dict[int, MessageDef] = {
         param_bytes=5,
         wire_format="id_frame",
     ),
+    0xC1: MessageDef(
+        id=0xC1,
+        name="MSG_ERR_CALIBRATION",
+        severity=SEVERITY_ERROR,
+        format="Divider calibration unusable: R1 %lu, R2 %lu",
+        params=(("u32", "dec"), ("u32", "dec")),
+        param_bytes=8,
+        wire_format="id_frame",
+    ),
     0xE0: MessageDef(
         id=0xE0,
         name="MSG_DATA_PROGRESS",
@@ -834,6 +865,23 @@ CATALOG: dict[int, MessageDef] = {
         format="<data chunk>",
         params=(("bytes", "hex"),),
         param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0xE7: MessageDef(
+        id=0xE7,
+        name="MSG_DATA_ADC_RAW",
+        severity=SEVERITY_DATA,
+        format="ADC mode %u: divider %u, bandgap %u, V %u mV, VCC %u mV, R1 %lu, R2 %lu",
+        params=(
+            ("u8", "dec"),
+            ("u16", "dec"),
+            ("u16", "dec"),
+            ("u16", "dec"),
+            ("u16", "dec"),
+            ("u32", "dec"),
+            ("u32", "dec"),
+        ),
+        param_bytes=17,
         wire_format="id_frame",
     ),
     0xF0: MessageDef(

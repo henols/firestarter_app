@@ -77,6 +77,7 @@
   
   Commands:
     blank   Checks if an EPROM is blank.
+    cal     Calibrate the voltage readings against a multimeter.
     config  Handles CONFIGURATION values.
     dev     Development and diagnostic commands for the RURP shield.
     erase   Erase an EPROM, if supported.
@@ -149,6 +150,7 @@
     --help  Show this message and exit.
   
   Commands:
+    adc                Read the raw ADC counts behind the VPP and VPE...
     addr               Direct access to address lines and control register.
     consistency-check  Read EPROM N consecutive times and report SHA-256...
     fault-inject       Demonstrate COBS resync: inject a corrupted frame...

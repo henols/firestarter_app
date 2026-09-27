@@ -70,9 +70,10 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
       effective==0xFF → "Rev{physical}" (no override)
       effective!=0xFF → "Rev{effective}, Override HW: Rev{physical}"
 
-    P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8
+    P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8,
+                       params[3]=bandgap_mv u16 (v1.43)
       override==0xFF → "R1: {r1}, R2: {r2}"
-      override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}"
+      override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}, Bandgap: {n} mV"
       Override clause now routes through
       _REVISION_SILKSCREEN so the same byte that surfaces as "Rev 2.0-class"
       via MSG_OK_REV no longer surfaces as "Rev2" on the adjacent ack line.
@@ -95,16 +96,19 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
         eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
         return f"{eff_str}, Override HW: {phys_str}"
 
-    if msg_id == MSG_OK_CFG and len(params) == 3:
-        r1, r2, override = params[0], params[1], params[2]
-        if override == 0xFF:
-            return f"R1: {r1}, R2: {r2}"
-        # Route the override byte through
-        # _REVISION_SILKSCREEN so the same byte that renders "Rev 2.0-class"
-        # on MSG_OK_REV no longer renders "Rev2" on this adjacent ack line.
-        # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
-        override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
-        return f"R1: {r1}, R2: {r2}, Override HW: {override_str}"
+    if msg_id == MSG_OK_CFG and len(params) == 4:
+        r1, r2, override, bandgap_mv = params[0], params[1], params[2], params[3]
+        head = f"R1: {r1}, R2: {r2}"
+        if override != 0xFF:
+            # Route the override byte through
+            # _REVISION_SILKSCREEN so the same byte that renders "Rev 2.0-class"
+            # on MSG_OK_REV no longer renders "Rev2" on this adjacent ack line.
+            # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
+            override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
+            head += f", Override HW: {override_str}"
+        # v1.43 appended the calibrated reference. Rendered last so the
+        # override clause keeps the position every prior release put it in.
+        return f"{head}, Bandgap: {bandgap_mv} mV"
 
     # Silkscreen-aware rendering for the two
     # boot-time INFO surfaces that carry the same revision byte as

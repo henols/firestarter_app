@@ -48,14 +48,17 @@ class TestFormatMessageRevision:
     def test_msg_ok_cfg_no_override(self):
         """MSG_OK_CFG: override==0xFF → 'R1: {r1}, R2: {r2}'."""
         entry = CATALOG[MSG_OK_CFG]
-        result = format_message(MSG_OK_CFG, [10000, 20000, 0xFF], entry)
-        assert result == "R1: 10000, R2: 20000"
+        result = format_message(MSG_OK_CFG, [10000, 20000, 0xFF, 1100], entry)
+        assert result == "R1: 10000, R2: 20000, Bandgap: 1100 mV"
 
     def test_msg_ok_cfg_with_override(self):
         """MSG_OK_CFG: override!=0xFF → adds ', Override HW: {silkscreen_str}'."""
         entry = CATALOG[MSG_OK_CFG]
-        result = format_message(MSG_OK_CFG, [10000, 20000, 0x02], entry)
-        assert result == "R1: 10000, R2: 20000, Override HW: Rev 2.0-class"
+        result = format_message(MSG_OK_CFG, [10000, 20000, 0x02, 1019], entry)
+        assert (
+            result
+            == "R1: 10000, R2: 20000, Override HW: Rev 2.0-class, Bandgap: 1019 mV"
+        )
 
     def test_msg_info_hw(self):
         """MSG_INFO_HW: single u8 → 'HW: {silkscreen_str}'."""
