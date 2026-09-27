@@ -3,6 +3,9 @@
 
 import io
 import logging
+import os
+
+import pytest
 
 from firestarter.logging_utils import SingleLineStatusHandler
 
@@ -120,3 +123,41 @@ def test_emit_handles_exception_via_handle_error() -> None:
         exc_info=None,
     )
     handler.emit(record)  # Should not raise
+
+
+def test_closed_pipe_stops_quietly_with_exit_1(capsys) -> None:
+    """A reader that closes the pipe (`firestarter list | head`) ends the run.
+
+    Before, logging's handleError printed a "--- Logging error ---" traceback
+    for every remaining line of the table.
+    """
+    read_fd, write_fd = os.pipe()
+    os.close(read_fd)
+    stream = os.fdopen(write_fd, "w")
+    handler = SingleLineStatusHandler(stream)
+    record = logging.LogRecord("t", logging.INFO, __file__, 1, "row", None, None)
+    try:
+        with pytest.raises(SystemExit) as exc:
+            handler.emit(record)
+        assert exc.value.code == 1
+        assert "Logging error" not in capsys.readouterr().err
+        # The stream now goes to /dev/null, so a later flush cannot fail.
+        stream.write("more")
+        stream.flush()
+    finally:
+        stream.close()
+
+
+def test_other_write_errors_still_go_to_handle_error(monkeypatch) -> None:
+    """Only a closed pipe is silenced. Other write errors still reach handleError."""
+
+    class _Failing(io.StringIO):
+        def write(self, s):
+            raise OSError("disk full")
+
+    handler = SingleLineStatusHandler(_Failing())
+    seen = []
+    monkeypatch.setattr(handler, "handleError", lambda record: seen.append(record))
+    record = logging.LogRecord("t", logging.INFO, __file__, 1, "row", None, None)
+    handler.emit(record)
+    assert seen == [record]
