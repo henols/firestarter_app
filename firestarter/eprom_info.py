@@ -7,6 +7,7 @@ Permission is hereby granted under MIT license.
 EPROM Information Module
 """
 
+import copy
 import json
 import logging
 import re
@@ -108,46 +109,6 @@ class EpromConsolePresenter:
             json_str,
         )
         return json_str
-
-    def _clean_config_for_export(self, raw_config: dict) -> dict:
-        """
-        Cleans and structures raw EPROM config for JSON export.
-        """
-        cleaned = {}
-        # Define expected keys and their defaults or how to fetch them
-        key_map = {
-            "name": "Unknown",
-            "pin-count": 0,
-            "can-erase": False,
-            "has-chip-id": False,
-            # "chip-id": "0x0", # Only if has-chip-id is True
-            # "pin-map": "default", # Handled below with variant
-            "protocol-id": "0x0",
-            "memory-size": "0x0",
-            "type": "unknown",  # String type from raw JSON
-            "voltages": {},
-            "pulse-delay": "0",
-            "flags": "0x00",
-            "verified": False,
-        }
-        for key, default_val in key_map.items():
-            cleaned[key] = raw_config.get(key, default_val)
-
-        if cleaned.get("has-chip-id"):
-            cleaned["chip-id"] = raw_config.get("chip-id", "0x0")
-        else:  # Remove chip-id if not present
-            if "chip-id" in cleaned:
-                del cleaned["chip-id"]
-
-        cleaned["pin-map"] = raw_config.get(
-            "pin-map", raw_config.get("variant", "default")
-        )
-
-        # Clean up voltages sub-dictionary if it exists
-        if "voltages" in cleaned and isinstance(cleaned["voltages"], dict):
-            cleaned["voltages"].pop("vdd", None)  # Remove 'vdd' if present
-            # 'vcc' is kept as per original logic, 'vpp' is also kept
-        return cleaned
 
     def prepare_detailed_eprom_data(
         self,
@@ -253,40 +214,39 @@ class EpromConsolePresenter:
         eprom_name: str,
     ) -> Dict | None:  # noqa: UP006
         """
-        Prepares EPROM and Pin Map configuration data formatted for export.
+        Prepare the chip's database entry and its pin map for export.
+
+        The entry is the row exactly as the shipped database holds it, so a
+        copy in ~/.firestarter/database.json loads and replaces that row.
         """
         if not (raw_config_data and manufacturer):
             logger.error(f"Could not retrieve raw config for {eprom_name} for export.")
             return None
 
-        cleaned_raw_config = self._clean_config_for_export(raw_config_data)
-        export_eprom_data_dict = {manufacturer: [cleaned_raw_config]}
-
+        entry = copy.deepcopy(raw_config_data)
         export_data_to_return = {
-            "eprom_config_title": f"{cleaned_raw_config['name']} EPROM config (for ~/.firestarter/database.json):",  # noqa: E501
+            "eprom_config_title": (
+                f"{entry.get('part_number', eprom_name)} database entry "
+                "(for ~/.firestarter/database.json):"
+            ),
             "eprom_config_json_str": self._json_output_formatted(
-                export_eprom_data_dict
+                {manufacturer: [entry]}
             ),
         }
 
-        pin_map_id = cleaned_raw_config.get("pin-map")
-        pin_count = cleaned_raw_config.get("pin-count")
-        if not pin_map_id == None and pin_count:  # noqa: E711
-            pin_map_details = self.db.get_pin_map(pin_count, pin_map_id)
-            if pin_map_details:
-                export_pin_map_dict = {
-                    str(pin_count): {str(pin_map_id): pin_map_details}
-                }
-                export_data_to_return["pin_map_config_title"] = (
-                    f"{eprom_name} Pin Map (for pin-maps.json):"
-                )
-                export_data_to_return["pin_map_config_json_str"] = (
-                    self._json_output_formatted(export_pin_map_dict)
-                )
-            else:
-                logger.warning(
-                    f"Pin map '{pin_map_id}' for {pin_count}-pin {eprom_name} not found for export."  # noqa: E501
-                )
+        pinout_key = entry.get("pinout")
+        pin_map = self.db.pin_maps.get(pinout_key) if pinout_key else None
+        if pin_map:
+            export_data_to_return["pin_map_config_title"] = (
+                f"{pinout_key} pin map (for ~/.firestarter/pin-maps.json):"
+            )
+            export_data_to_return["pin_map_config_json_str"] = (
+                self._json_output_formatted({pinout_key: copy.deepcopy(pin_map)})
+            )
+        elif pinout_key:
+            logger.warning(
+                f"Pin map '{pinout_key}' for {eprom_name} not found for export."
+            )
         return export_data_to_return
 
     def present_eprom_details(
@@ -513,7 +473,7 @@ def main():
 
     logger.info("\n--- Searching for '27C' ---")
     # Directly use the database method for searching
-    search_results = db_instance.search_eprom("27C", include_unverified=True)
+    search_results = db_instance.search_eprom("27C")
     if not search_results:
         logger.info(f"No EPROMs found matching '27C'.")  # noqa: F541
 

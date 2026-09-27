@@ -155,14 +155,10 @@ def test_get_eproms_returns_list(db: EpromDatabase) -> None:
     assert "name" in chips[0]
 
 
-def test_get_eproms_verified_filter(db: EpromDatabase) -> None:
-    """get_eproms(verified=True) returns only verified chips."""
-    all_chips = db.get_eproms()
-    verified_chips = db.get_eproms(verified=True)
-    assert len(verified_chips) <= len(all_chips)
-    # All returned chips must have verified=True
-    for chip in verified_chips:
-        assert chip.get("verified") is True
+def test_get_eproms_returns_one_dict_per_database_entry(db: EpromDatabase) -> None:
+    """get_eproms() has no filter: it returns each entry of the database once."""
+    entries = sum(len(ics) for ics in db.proms.values())
+    assert len(db.get_eproms()) == entries
 
 
 def test_search_eprom_returns_matches(db: EpromDatabase) -> None:

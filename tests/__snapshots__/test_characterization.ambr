@@ -125,8 +125,11 @@
     Handles CONFIGURATION values.
   
   Options:
-    --rev FLOAT            WARNING Overrides hardware revision (0-2), only use
-                           with HW mods. -1 disables override.
+    --rev INTEGER RANGE    Override the shield revision. Give the revision code,
+                           not the silkscreen number: 0 = Rev 0, 1 = Rev 1, 2 =
+                           Rev 2.0, 3 = Rev 2.1, 4 = Rev 2.2, 5 = Rev 2.3. -1
+                           removes the override. Use it only when the detected
+                           revision is wrong.  [-1<=x<=5]
     -r1, --r16 INTEGER     Set R16 resistance, resistor connected to VPE
     -r2, --r14r15 INTEGER  Set R14/R15 resistance, resistors connected to GND
     --help                 Show this message and exit.
@@ -324,8 +327,7 @@
     List all EPROMs in the database.
   
   Options:
-    -v, --verified  Only shows verified EPROMs
-    --help          Show this message and exit.
+    --help  Show this message and exit.
   
   '''
 # ---

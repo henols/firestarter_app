@@ -1243,6 +1243,35 @@ def test_config_returns_false(runner: CliRunner) -> None:
     assert result.exit_code == 1
 
 
+@pytest.mark.parametrize(("value", "sent"), [("-1", -1), ("0", 0), ("4", 4), ("5", 5)])
+def test_config_rev_sends_each_defined_code(
+    runner: CliRunner, value: str, sent: int
+) -> None:
+    """Each revision code from -1 to 5 reaches the hardware layer unchanged."""
+    hw = Mock(spec=HardwareManager)
+    hw.set_hardware_config.return_value = True
+    app = make_app_context(hardware_manager=hw)
+    result = runner.invoke(cli, ["config", "--rev", value], obj=app)
+    assert result.exit_code == 0, result.output
+    assert hw.set_hardware_config.call_args.args[0] == sent
+
+
+@pytest.mark.parametrize("value", ["2.2", "6", "-2", "2.0"])
+def test_config_rev_refuses_a_value_that_is_not_a_code(
+    runner: CliRunner, value: str
+) -> None:
+    """A silkscreen number or an undefined code is a usage error.
+
+    '--rev 2.2' used to become code 2 (Rev 2.0) with no message. Nothing may
+    reach the board for such a value.
+    """
+    hw = Mock(spec=HardwareManager)
+    app = make_app_context(hardware_manager=hw)
+    result = runner.invoke(cli, ["config", "--rev", value], obj=app)
+    assert result.exit_code == 2, result.output
+    hw.set_hardware_config.assert_not_called()
+
+
 def test_fw_install_happy_path(runner: CliRunner) -> None:
     """`firestarter fw -i` exits 0 when manage_firmware_update returns True."""
     fw_mgr = Mock(spec=FirmwareManager)
