@@ -193,16 +193,19 @@ class EpromDatabase:
         """
         for key, manual_items in manual_db.items():
             if key in db:
-                # An override row matches a shipped row by its exact
-                # part_number string, the key that `info -c` exports. It used
-                # to match on "name", a 2.x key that no 3.x row has, so an
-                # override of a shipped chip was appended and never used.
+                # An override row names the shipped row it replaces with the
+                # shipped part_number string. It can carry that string in
+                # `part_number`, the key that `info -c` exports, or in `name`,
+                # the key that 3.1.0 matched on and the wiki documents. Both
+                # must work, or an existing override file stops working.
                 existing = {item["part_number"]: item for item in db[key]}
                 for manual_item in manual_items:
-                    part_number = manual_item.get("part_number")
-                    if part_number in existing:
+                    target = manual_item.get("part_number")
+                    if target not in existing:
+                        target = manual_item.get("name")
+                    if target in existing:
                         # Top-level keys of the override replace the shipped ones.
-                        existing[part_number].update(manual_item)
+                        existing[target].update(manual_item)
                     else:
                         db[key].append(manual_item)
             else:

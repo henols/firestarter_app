@@ -102,6 +102,26 @@ def test_exported_row_replaces_the_shipped_row_as_an_override() -> None:
     assert len(local.proms[manufacturer]) == rows_before
 
 
+def test_override_keyed_by_name_replaces_the_shipped_row() -> None:
+    """3.1.0 matched override rows on `name`, and the wiki documents that key.
+
+    An override file written that way must keep working.
+    """
+    local = EpromDatabase(skip_local_override=True)
+    raw, manufacturer = local.get_eprom_config("W27C512")
+    rows_before = len(local.proms[manufacturer])
+    override = {
+        "name": raw["part_number"],
+        "programming": dict(raw["programming"], pulse_duration_us=4321),
+    }
+
+    local._merge_databases(local.proms, {manufacturer: [override]})
+
+    got, _ = local.get_eprom_config("W27C512")
+    assert got["programming"]["pulse_duration_us"] == 4321
+    assert len(local.proms[manufacturer]) == rows_before
+
+
 def test_override_with_a_new_part_number_is_added() -> None:
     local = EpromDatabase(skip_local_override=True)
     raw, manufacturer = local.get_eprom_config("W27C512")
