@@ -2,13 +2,16 @@
 fallback per CONTEXT — eprom_info.py at 19% is the largest gap).
 
 Targets the pure helper methods (``_json_output_formatted``,
-``_clean_config_for_export``, ``_prepare_export_configuration_data``) and the
+``_prepare_export_configuration_data``) and the
 not-found path through ``prepare_detailed_eprom_data``. The full
 ``prepare_detailed_eprom_data`` happy path is NOT exercised here because it
 triggers the pre-existing ic_layout ``vpp-pin <= pin_count`` TypeError (the
 list-vs-int bug pinned by Phase 36 ``test_info_known_chip_stderr`` snapshot).
 That snapshot is the GATE-1.8b witness; the bug is deferred to v1.9.
 """
+
+import copy
+import json
 
 import pytest
 
@@ -49,49 +52,68 @@ def test_json_output_formatted_compacts_number_lists(
     assert "[1, 2, 3, 4, 5]" in out
 
 
-def test_clean_config_for_export_strips_vdd(
-    presenter: EpromConsolePresenter,
+def test_export_is_the_shipped_row_under_its_manufacturer(
+    db: EpromDatabase, presenter: EpromConsolePresenter
 ) -> None:
-    """_clean_config_for_export drops the 'vdd' voltage but keeps 'vcc' / 'vpp'."""
-    raw = {
-        "name": "Test",
-        "voltages": {"vdd": 5.0, "vcc": 5.0, "vpp": 12.0},
-        "has-chip-id": True,
-        "chip-id": "0x42",
-    }
-    cleaned = presenter._clean_config_for_export(raw)
-    assert "vdd" not in cleaned["voltages"]
-    assert cleaned["voltages"]["vcc"] == 5.0
-    assert cleaned["voltages"]["vpp"] == 12.0
-    assert cleaned["chip-id"] == "0x42"
+    """`info -c` exports the database row unchanged, in the 3.x schema."""
+    raw, manufacturer = db.get_eprom_config("W27C512")
+    out = presenter._prepare_export_configuration_data(raw, manufacturer, "W27C512")
+    exported = json.loads(out["eprom_config_json_str"])
+    assert exported == {manufacturer: [raw]}
+    assert "database.json" in out["eprom_config_title"]
+    assert "Unknown" not in out["eprom_config_json_str"]
 
 
-def test_clean_config_without_chip_id_strips_chip_id_key(
-    presenter: EpromConsolePresenter,
+def test_export_carries_the_rows_pin_map(
+    db: EpromDatabase, presenter: EpromConsolePresenter
 ) -> None:
-    """When has-chip-id is False the chip-id key is removed."""
-    raw = {
-        "name": "Test",
-        "voltages": {},
-        "has-chip-id": False,
-    }
-    cleaned = presenter._clean_config_for_export(raw)
-    assert "chip-id" not in cleaned
+    raw, manufacturer = db.get_eprom_config("W27C512")
+    out = presenter._prepare_export_configuration_data(raw, manufacturer, "W27C512")
+    pin_map = json.loads(out["pin_map_config_json_str"])
+    assert pin_map == {raw["pinout"]: db.pin_maps[raw["pinout"]]}
 
 
-def test_clean_config_falls_back_to_variant_pin_map(
-    presenter: EpromConsolePresenter,
+def test_export_does_not_alias_the_database(
+    db: EpromDatabase, presenter: EpromConsolePresenter
 ) -> None:
-    """When pin-map is absent, pin-map falls back to 'variant', then to 'default'."""
-    # Variant fallback
-    raw = {"name": "X", "voltages": {}, "has-chip-id": False, "variant": "v1"}
-    cleaned = presenter._clean_config_for_export(raw)
-    assert cleaned["pin-map"] == "v1"
+    raw, manufacturer = db.get_eprom_config("W27C512")
+    before = copy.deepcopy(raw)
+    presenter._prepare_export_configuration_data(raw, manufacturer, "W27C512")
+    assert raw == before
 
-    # Default fallback when neither is present
-    raw_default = {"name": "Y", "voltages": {}, "has-chip-id": False}
-    cleaned_default = presenter._clean_config_for_export(raw_default)
-    assert cleaned_default["pin-map"] == "default"
+
+def test_exported_row_replaces_the_shipped_row_as_an_override() -> None:
+    """An exported row, edited and loaded as an override, wins over the shipped row.
+
+    The merge used to key override rows on "name", which no 3.x row has, so
+    the edited row was appended and get_eprom_config still returned the
+    shipped one.
+    """
+    local = EpromDatabase(skip_local_override=True)
+    raw, manufacturer = local.get_eprom_config("W27C512")
+    edited = copy.deepcopy(raw)
+    edited["programming"]["pulse_duration_us"] = 4321
+    rows_before = len(local.proms[manufacturer])
+
+    local._merge_databases(local.proms, {manufacturer: [edited]})
+
+    got, _ = local.get_eprom_config("W27C512")
+    assert got["programming"]["pulse_duration_us"] == 4321
+    assert len(local.proms[manufacturer]) == rows_before
+
+
+def test_override_with_a_new_part_number_is_added() -> None:
+    local = EpromDatabase(skip_local_override=True)
+    raw, manufacturer = local.get_eprom_config("W27C512")
+    new_row = copy.deepcopy(raw)
+    new_row["part_number"] = "MYTEST27C512"
+    rows_before = len(local.proms[manufacturer])
+
+    local._merge_databases(local.proms, {manufacturer: [new_row]})
+
+    assert len(local.proms[manufacturer]) == rows_before + 1
+    assert local.get_eprom_config("MYTEST27C512")[0] is not None
+    assert local.get_eprom_config("W27C512")[0]["part_number"] == raw["part_number"]
 
 
 def test_prepare_export_configuration_with_missing_inputs_returns_none(

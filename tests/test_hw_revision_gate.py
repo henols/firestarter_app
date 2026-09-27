@@ -140,15 +140,14 @@ def test_ungated_chips_pass_on_any_revision(command):
 def test_refusal_message_gives_the_exact_remedy():
     """The error must name the byte to write, not the silkscreen number.
 
-    `firestarter config --rev` casts through int(), so '--rev 2.2' truncates to
-    2 and silently selects the Rev 2.0 bucket -- the exact opposite of what an
-    operator typing it intends. The message has to pre-empt that.
+    An operator who reads "Rev 2.2" on the silkscreen types '--rev 2.2'.
+    `config --rev` refuses that, so the message must give the code 4.
     """
     with pytest.raises(HardwareRevisionUnsupportedError) as exc_info:
         _validate(GATED_CMD, REVISION_2_0)
     text = str(exc_info.value)
     assert "firestarter config --rev 4" in text
-    assert "--rev 2.2" in text and "truncates" in text
+    assert "--rev 2.2" in text and "refused" in text
     assert exc_info.value.detected == REVISION_2_0
 
 

@@ -546,18 +546,18 @@ def test_ti_key_less_rows_resolve_to_no_mechanism_without_raising() -> None:
         )
 
 
-def test_ten_non_supported_rows_all_resolve() -> None:
+def test_the_non_supported_row_resolves() -> None:
     """D-12 leg 6(b): every row whose `support_status` is not `"supported"`
-    -- 10 such rows in the committed database -- still resolves through the
-    walk without raising."""
+    -- 1 such row in the committed database, X88C64P -- still resolves
+    through the walk without raising."""
     db = _load_db()
     non_supported = []
     for vendor, chips in db.items():
         for chip in chips:
             if chip.get("support_status") != "supported":
                 non_supported.append((vendor, chip["part_number"]))
-    assert len(non_supported) == 10, (
-        f"D-12 leg 6(b): expected exactly 10 non-'supported' rows, measured "
+    assert len(non_supported) == 1, (
+        f"D-12 leg 6(b): expected exactly 1 non-'supported' row, measured "
         f"{len(non_supported)}: {non_supported}"
     )
     resolutions = _resolve_database_or_raise(db)

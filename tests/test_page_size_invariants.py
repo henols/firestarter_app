@@ -112,8 +112,60 @@ _NATIVE_0X0D_PAGE_SIZE_IDENTITIES = (
     _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_128 | _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_64
 )
 
+# DIP24_2816 rows are the one promoted class that carries page_size. Their
+# upstream records hold the real write granularity (1 = byte write), and the
+# 0x0D handler's 64-byte floor would load bytes during a byte-write part's
+# write cycle. Provenance: the upstream raw value on that layout.
+_DIP24_2816_PAGE_SIZE_IDENTITIES_16 = frozenset(
+    {
+        ("XICOR", "X2816B,X2816C"),
+        ("EXEL", "XLE28C16B,XLS28C16B"),
+    }
+)
+_DIP24_2816_PAGE_SIZE_IDENTITIES_1 = frozenset(
+    {
+        ("AMD", "AM28C16A"),
+        ("ATMEL", "AT28C04,AT28HC04"),
+        ("ATMEL", "AT28C04E,AT28C04F"),
+        ("ATMEL", "AT28C16,AT28HC16,AT28HC16L"),
+        ("ATMEL", "AT28C16E,AT28C16F"),
+        ("CATALYST(CSI)", "CAT28C16A,CAT28C16AI"),
+        ("EXEL", "XL2804A"),
+        ("EXEL", "XL2816A,XLE28C16A,XLS28C16A"),
+        ("MICROCHIP memory", "2804"),
+        ("MICROCHIP memory", "2816"),
+        ("MICROCHIP memory", "28C04A"),
+        ("MICROCHIP memory", "28C04AF"),
+        ("MICROCHIP memory", "28C16A"),
+        ("MICROCHIP memory", "28C16AF"),
+        ("NEC", "UPD28C04"),
+        ("XICOR", "X2804A,X2804AI"),
+        ("XICOR", "X2816A"),
+    }
+)
+_DIP24_2816_PAGE_SIZE_IDENTITIES = (
+    _DIP24_2816_PAGE_SIZE_IDENTITIES_1 | _DIP24_2816_PAGE_SIZE_IDENTITIES_16
+)
+
+# The nine DIP24_2816 rows that were adapter-required and are now supported.
+_PROMOTED_FROM_ADAPTER_REQUIRED = frozenset(
+    {
+        ("ATMEL", "AT28C04,AT28HC04"),
+        ("ATMEL", "AT28C04E,AT28C04F"),
+        ("ATMEL", "AT28C16,AT28HC16,AT28HC16L"),
+        ("ATMEL", "AT28C16E,AT28C16F"),
+        ("MICROCHIP memory", "28C04A"),
+        ("MICROCHIP memory", "28C04AF"),
+        ("MICROCHIP memory", "28C16A"),
+        ("MICROCHIP memory", "28C16AF"),
+        ("NEC", "UPD28C04"),
+    }
+)
+
 _ALL_PROVENANCE_CORROBORATED_IDENTITIES = (
-    _NATIVE_0X0D_PAGE_SIZE_IDENTITIES | _NATIVE_0X05_PAGE_SIZE_IDENTITIES
+    _NATIVE_0X0D_PAGE_SIZE_IDENTITIES
+    | _NATIVE_0X05_PAGE_SIZE_IDENTITIES
+    | _DIP24_2816_PAGE_SIZE_IDENTITIES
 )
 
 _AT28C256_PART_NUMBER_PREFIX = "AT28C256,"
@@ -202,22 +254,38 @@ def test_exactly_84_algorithm_0x0d_entries() -> None:
 # Leg 2: exactly 18 of the 84 carry page_size, and they are the named 18.
 
 
-def test_exactly_18_of_84_carry_page_size_and_are_the_named_rows() -> None:
+def test_exactly_37_of_84_carry_page_size_and_are_the_named_rows() -> None:
+    """18 upstream-native 0x0D rows plus the 19 DIP24_2816 rows."""
     db = _load_db(_DB_FILE)
     a13 = _select_0x0d_chips(db)
-    native_carriers = [
+    carriers = {
         (mfr, chip.get("part_number", "?"))
         for mfr, chip in a13
         if "page_size" in chip["programming"]
-    ]
-    assert len(native_carriers) == 18, (
-        f"expected exactly 18 of the 84 algorithm==13 rows to carry "
-        f"page_size, found {len(native_carriers)}: {native_carriers}"
+    }
+    expected = _NATIVE_0X0D_PAGE_SIZE_IDENTITIES | _DIP24_2816_PAGE_SIZE_IDENTITIES
+    assert len(carriers) == 37, (
+        f"expected exactly 37 of the 84 algorithm==13 rows to carry "
+        f"page_size, found {len(carriers)}: {sorted(carriers)}"
     )
-    assert set(native_carriers) == _NATIVE_0X0D_PAGE_SIZE_IDENTITIES, (
-        "the 18 native page_size carriers drifted from the named set -- "
-        f"symmetric difference: {set(native_carriers) ^ _NATIVE_0X0D_PAGE_SIZE_IDENTITIES}"
+    assert carriers == expected, (
+        "the algorithm==13 page_size carriers drifted from the named set -- "
+        f"symmetric difference: {carriers ^ expected}"
     )
+
+
+def test_dip24_2816_rows_carry_their_upstream_write_granularity() -> None:
+    db = _load_db(_DB_FILE)
+    values = {
+        (mfr, chip["part_number"]): chip["programming"].get("page_size")
+        for mfr, chips in db.items()
+        for chip in chips
+        if chip["pinout"] == "DIP24_2816"
+    }
+    assert set(values) == _DIP24_2816_PAGE_SIZE_IDENTITIES
+    for identity, value in values.items():
+        expected = 16 if identity in _DIP24_2816_PAGE_SIZE_IDENTITIES_16 else 1
+        assert value == expected, (identity, value)
 
 
 # Leg 3: of the 18, exactly 15 at 128 and 3 at 64.
@@ -230,6 +298,7 @@ def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
         (mfr, chip.get("part_number", "?"), chip["programming"]["page_size"])
         for mfr, chip in a13
         if "page_size" in chip["programming"]
+        and (mfr, chip.get("part_number", "?")) in _NATIVE_0X0D_PAGE_SIZE_IDENTITIES
     ]
     at_128 = [row for row in native if row[2] == 128]
     at_64 = [row for row in native if row[2] == 64]
@@ -239,14 +308,14 @@ def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
     assert {(m, p) for m, p, _v in at_64} == _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_64
 
 
-def test_exactly_45_page_size_carriers_across_all_746_rows() -> None:
+def test_exactly_64_page_size_carriers_across_all_746_rows() -> None:
     db = _load_db(_DB_FILE)
     total_rows = sum(len(chips) for chips in db.values())
     assert total_rows == 746, f"expected 746 total rows, found {total_rows}"
     carriers = _select_page_size_carriers(db)
-    assert len(carriers) == 45, (
-        f"expected exactly 45 page_size carriers (18 upstream-native 0x0D "
-        f"+ 27 upstream-native 0x05) across all 746 rows, found "
+    assert len(carriers) == 64, (
+        f"expected exactly 64 page_size carriers (18 upstream-native 0x0D "
+        f"+ 27 upstream-native 0x05 + 19 DIP24_2816) across all 746 rows, found "
         f"{len(carriers)}: "
         f"{[(m, c.get('part_number', '?')) for m, c in carriers]}"
     )
@@ -268,9 +337,9 @@ def test_every_page_size_carrier_is_curated_or_native_0x0d() -> None:
     db = _load_db(_DB_FILE)
     offenders = _provenance_offenders(db)
     assert not offenders, (
-        f"every page_size carrier must be either one of the 18 named "
-        f"upstream-native 0x0D rows or one of the 27 named upstream-native "
-        f"0x05 rows; no curated carrier remains; offenders: {offenders}"
+        f"every page_size carrier must be one of the 18 named "
+        f"upstream-native 0x0D rows, one of the 27 named upstream-native "
+        f"0x05 rows or one of the 19 DIP24_2816 rows; offenders: {offenders}"
     )
 
 
@@ -340,12 +409,19 @@ def test_support_status_byte_unchanged_across_all_84_0x0d_rows() -> None:
         f"between the live database and the baseline: "
         f"{set(live_idx) ^ set(base_idx)}"
     )
-    offenders = [
+    changed = {
         identity for identity in live_idx if live_idx[identity] != base_idx[identity]
-    ]
-    assert not offenders, (
-        f"support_status must be byte-unchanged for every algorithm==13 "
-        f"row; changed identities: {offenders}"
+    }
+    # The nine DIP24_2816 rows left adapter-required on purpose. Each of them
+    # must now be supported, and no other row may move.
+    assert changed == _PROMOTED_FROM_ADAPTER_REQUIRED, (
+        f"support_status must be byte-unchanged for every algorithm==13 row "
+        f"except the nine promoted DIP24_2816 rows; symmetric difference: "
+        f"{changed ^ _PROMOTED_FROM_ADAPTER_REQUIRED}"
+    )
+    assert all(live_idx[i] == "supported" for i in _PROMOTED_FROM_ADAPTER_REQUIRED)
+    assert all(
+        base_idx[i] == "adapter-required" for i in _PROMOTED_FROM_ADAPTER_REQUIRED
     )
 
 

@@ -134,7 +134,7 @@ def test_erase_accepted(
     assert erase_accepted(electrical_type, algorithm) is expected
 
 
-@pytest.mark.parametrize("chip", ["AT28C16", "X88C64P"])
+@pytest.mark.parametrize("chip", ["X88C64P"])
 def test_not_supported_erasable_chip_does_not_say_yes(
     db: EpromDatabase, chip: str
 ) -> None:
@@ -147,6 +147,25 @@ def test_not_supported_erasable_chip_does_not_say_yes(
     )
     assert data is not None
     assert data["can_erase_str"] == CAN_ERASE_NOT_SUPPORTED
+
+
+def test_dip24_2816_rows_say_erase_is_not_supported(
+    db: EpromDatabase, rows: list[tuple[dict, dict, dict]]
+) -> None:
+    """The 19 DIP24_2816 rows have no erase command, so info says so."""
+    dip24 = [s for ic, _, s in rows if ic["pinout"] == "DIP24_2816"]
+    assert len(dip24) == 19
+    assert all(s["can_erase_str"] == CAN_ERASE_NOT_SUPPORTED for s in dip24)
+
+
+@pytest.mark.parametrize(
+    ("pinout_key", "expected"),
+    [("DIP24_2816", False), ("DIP28_28C256", True), (None, True)],
+)
+def test_erase_accepted_excludes_only_the_dip24_2816_pin_map(
+    pinout_key: object, expected: bool
+) -> None:
+    assert erase_accepted("EEPROM", 0x0D, pinout_key) is expected
 
 
 def test_supported_erasable_chip_says_yes(db: EpromDatabase) -> None:

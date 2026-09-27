@@ -193,21 +193,18 @@ class EpromDatabase:
         """
         for key, manual_items in manual_db.items():
             if key in db:
-                # In new format, part_number is the key
-                existing_names = {item["part_number"]: item for item in db[key]}
+                # An override row matches a shipped row by its exact
+                # part_number string, the key that `info -c` exports. It used
+                # to match on "name", a 2.x key that no 3.x row has, so an
+                # override of a shipped chip was appended and never used.
+                existing = {item["part_number"]: item for item in db[key]}
                 for manual_item in manual_items:
-                    if (
-                        manual_item.get("name") in existing_names
-                    ):  # Overrides use 'name'
-                        # Replace existing item
-                        existing_names[manual_item["name"]].update(
-                            manual_item
-                        )  # This is a shallow update
+                    part_number = manual_item.get("part_number")
+                    if part_number in existing:
+                        # Top-level keys of the override replace the shipped ones.
+                        existing[part_number].update(manual_item)
                     else:
-                        # Add new item
-                        db[key].append(
-                            manual_item
-                        )  # This might not merge correctly if format differs
+                        db[key].append(manual_item)
             else:
                 # Add entirely new key
                 db[key] = manual_items
@@ -387,7 +384,6 @@ class EpromDatabase:
             "vpp_mv": electrical["vpp_mv"],
             "vcc_mv": electrical["vcc_mv"],
             "pulse-delay": programming["pulse_duration_us"],
-            "verified": bool(ic.get("verified", False)),
             "info-flags": info_flags,
             "flags": 0,
             "protocol-id": protocol_id,
@@ -419,28 +415,13 @@ class EpromDatabase:
                 data["bus-config"] = bus_config
         return data
 
-    def get_eproms(self, verified=None) -> list:
-        """
-        Retrieves a list of all EPROMs from the database.
-
-        Args:
-            verified (bool, optional): If True, only returns EPROMs marked as "verified".
-                                    If False or None, returns all EPROMs. Defaults to None.
-
-        Returns:
-            list: A list of dictionaries, where each dictionary represents an EPROM's data.
-        """  # noqa: E501
-        selected_proms = []
-        for manufacturer, ics in self.proms.items():
-            for ic_config in ics:
-                is_verified_in_db = bool(ic_config.get("verified", False))
-                if (
-                    verified is None
-                    or (verified and is_verified_in_db)
-                    or (not verified)
-                ):  # Corrected logic for verified filter
-                    selected_proms.append(self._map_data(ic_config, manufacturer))
-        return selected_proms
+    def get_eproms(self) -> list:
+        """Return every EPROM in the database, one mapped dict for each entry."""
+        return [
+            self._map_data(ic_config, manufacturer)
+            for manufacturer, ics in self.proms.items()
+            for ic_config in ics
+        ]
 
     def get_eprom_config(self, chip_name: str):
         """
@@ -578,30 +559,28 @@ class EpromDatabase:
         # same function.
         simple_flags = 0
         algo = programmer_data["algorithm"]  # already computed above from protocol-id
-        if erase_accepted(full_eprom_data.get("electrical-type", ""), algo):
+        if erase_accepted(
+            full_eprom_data.get("electrical-type", ""),
+            algo,
+            full_eprom_data.get("pin-map"),
+        ):
             simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 
         return programmer_data
 
-    def search_eprom(
-        self, chip_name_query: str, include_unverified: bool = True
-    ) -> list:
+    def search_eprom(self, chip_name_query: str) -> list:
+        """Return the EPROMs whose part number contains `chip_name_query`.
+
+        The match ignores case.
         """
-        Searches for EPROMs where `chip_name_query` is part of the EPROM's name.
-        `include_unverified`: If True, includes all text matches.
-                              If False, includes only verified text matches.
-        """
-        selected_proms = []
-        for manufacturer, ics in self.proms.items():
-            for ic_config in ics:
-                if chip_name_query.lower() in ic_config.get("part_number", "").lower():
-                    is_verified_in_db = bool(ic_config.get("verified", False))
-                    if (
-                        include_unverified or is_verified_in_db
-                    ):  # 'verified' is not in new DB, needs adding or logic change
-                        selected_proms.append(self._map_data(ic_config, manufacturer))
-        return selected_proms
+        query = chip_name_query.lower()
+        return [
+            self._map_data(ic_config, manufacturer)
+            for manufacturer, ics in self.proms.items()
+            for ic_config in ics
+            if query in ic_config.get("part_number", "").lower()
+        ]
 
     def search_chip_id(self, chip_id_val: int) -> list:
         """

@@ -23,6 +23,7 @@ from rich.console import Console
 
 from firestarter import __version__ as version
 from firestarter import (
+    dip24_2816_erase_gate,
     flash4_erase_gate,
     jp5_gate,
     log_capture,
@@ -157,7 +158,7 @@ def _complete_eprom(
     db = EpromDatabase()
     return [
         click.shell_completion.CompletionItem(e["name"])
-        for e in db.get_eproms(False)
+        for e in db.get_eproms()
         if e["name"].lower().startswith(incomplete.lower())
     ]
 
@@ -475,12 +476,11 @@ def cli(ctx: click.Context, verbose: bool, port: str | None) -> None:
 
 
 @cli.command(name="list")
-@click.option("-v", "--verified", is_flag=True, help="Only shows verified EPROMs")
 @click.pass_obj
 @map_typed_errors
-def _list_cmd(app: AppContext, verified: bool) -> None:
+def _list_cmd(app: AppContext) -> None:
     """List all EPROMs in the database."""
-    eprom_data_list = app.db.get_eproms(verified=verified)
+    eprom_data_list = app.db.get_eproms()
     if eprom_data_list:
         print_eprom_list_table(eprom_data_list, app.eprom_presenter.spec_builder)
         sys.exit(0)
@@ -528,7 +528,7 @@ def info(app: AppContext, eprom: str, config: bool, adapter: bool) -> None:
 @map_typed_errors
 def search(app: AppContext, text: str) -> None:
     """Search for EPROMs in the database."""
-    search_results = app.db.search_eprom(text, include_unverified=True)
+    search_results = app.db.search_eprom(text)
     if search_results:
         print_eprom_list_table(search_results, app.eprom_presenter.spec_builder)
         sys.exit(0)
@@ -1358,6 +1358,11 @@ def erase(
         click.echo(flash4_erase_gate.refusal_text(eprom))
         sys.exit(0 if ignore_unsupported else 1)
 
+    full_record = app.db.get_eprom(eprom) or {}
+    if dip24_2816_erase_gate.is_affected(full_record.get("pin-map")):
+        click.echo(dip24_2816_erase_gate.refusal_text(eprom))
+        sys.exit(0 if ignore_unsupported else 1)
+
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "erase"):
         sys.exit(1)
 
@@ -1581,9 +1586,14 @@ def _echo_calibration_effect(bandgap_mv: int) -> None:
 @cli.command(name="config")
 @click.option(
     "--rev",
-    type=float,
+    type=click.IntRange(-1, 5),
     default=None,
-    help="WARNING Overrides hardware revision (0-2), only use with HW mods. -1 disables override.",  # noqa: E501
+    help=(
+        "Override the shield revision. Give the revision code, not the "
+        "silkscreen number: 0 = Rev 0, 1 = Rev 1, 2 = Rev 2.0, 3 = Rev 2.1, "
+        "4 = Rev 2.2, 5 = Rev 2.3. -1 removes the override. Use it only when "
+        "the detected revision is wrong."
+    ),
 )
 @click.option(
     "-r1",
@@ -1605,17 +1615,16 @@ def _echo_calibration_effect(bandgap_mv: int) -> None:
 @map_typed_errors
 def config(
     app: AppContext,
-    rev: float | None,
+    rev: int | None,
     r16: int | None,
     r14r15: int | None,
 ) -> None:
     """Handles CONFIGURATION values."""
-    # set_hardware_config expects Optional[int]; the Click option accepts float
-    # so users can write `--rev 2.0` interchangeably with `--rev 2`. Cast to int
-    # at the boundary (rev=-1 sentinel + integer rev values preserved verbatim).
-    rev_int = int(rev) if rev is not None else None
+    # --rev is an IntRange: '--rev 2.2' used to go through float() and int()
+    # and silently select code 2 (Rev 2.0). Click now refuses it before any
+    # serial byte is sent, and refuses a code the firmware does not define.
     ok = app.hardware_manager.set_hardware_config(
-        rev_int, r16, r14r15, flags=_build_op_flags()
+        rev, r16, r14r15, flags=_build_op_flags()
     )
     sys.exit(0 if ok else 1)
 

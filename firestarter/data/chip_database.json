@@ -570,6 +570,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -2058,12 +2059,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2081,12 +2082,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2127,12 +2128,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2150,12 +2151,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3446,6 +3447,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -5072,6 +5074,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -5094,6 +5097,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -5138,6 +5142,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 16,
+        "page_size": 16,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -9047,6 +9052,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -9069,6 +9075,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -9113,12 +9120,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9136,12 +9143,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9159,12 +9166,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9182,12 +9189,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10047,12 +10054,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -16403,6 +16410,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -16425,6 +16433,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 1,
+        "page_size": 1,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0
@@ -16447,6 +16456,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "infoic_page_size_raw": 16,
+        "page_size": 16,
         "protect_off_before": false,
         "protect_on_after": false,
         "pulse_duration_us": 0

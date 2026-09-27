@@ -167,6 +167,8 @@ _DELTAS_194 = _HERE / "golden" / "wire_dict_expected_deltas_194.json"
 _DELTAS_197 = _HERE / "golden" / "wire_dict_expected_deltas_197.json"
 _DELTAS_198 = _HERE / "golden" / "wire_dict_expected_deltas_198.json"
 _DELTAS_199 = _HERE / "golden" / "wire_dict_expected_deltas_199.json"
+# Applied LAST: it sets flags=0 on 19 records that the 153 layer set to 2.
+_DELTAS_DIP24_2816 = _HERE / "golden" / "wire_dict_expected_deltas_dip24_2816.json"
 
 _GOLDEN_PAGE_SIZE_RECORD_KEYS = {
     "WINBOND|W29C020,W29C020C,W29C022|7",
@@ -268,6 +270,7 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
     deltas_197 = json.loads(_DELTAS_197.read_text(encoding="utf-8"))["deltas"]
     deltas_198 = json.loads(_DELTAS_198.read_text(encoding="utf-8"))["deltas"]
     deltas_199 = json.loads(_DELTAS_199.read_text(encoding="utf-8"))["deltas"]
+    deltas_dip24 = json.loads(_DELTAS_DIP24_2816.read_text(encoding="utf-8"))["deltas"]
 
     golden_page_size_keys = {
         key for key, wire in recorded.items() if "page-size" in wire
@@ -463,6 +466,17 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         "dict.update composition order-independent."
     )
 
+    # DIP24_2816 layer: exactly the 19 records of that pin map. It is the one
+    # layer that overlaps another on purpose -- it clears the flags=2 that the
+    # 153 layer set -- so it must name only 153 records, change their flags,
+    # and add a page-size that none of them had.
+    assert len(deltas_dip24) == 19, sorted(deltas_dip24)
+    assert set(deltas_dip24) <= set(deltas_153)
+    for key, delta_wire in deltas_dip24.items():
+        assert set(delta_wire) == {"page-size", "flags"}, key
+        assert delta_wire["flags"] != deltas_153[key]["flags"], key
+        assert "page-size" not in recorded[key], key
+
     expected = copy.deepcopy(recorded)
     for key, delta_wire in deltas_149.items():
         expected[key].update(delta_wire)
@@ -477,6 +491,8 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
     for key, delta_wire in deltas_198.items():
         expected[key].update(delta_wire)
     for key, delta_wire in deltas_199.items():
+        expected[key].update(delta_wire)
+    for key, delta_wire in deltas_dip24.items():
         expected[key].update(delta_wire)
 
     live = _capture_wire_dicts(_REAL_DB)
@@ -495,7 +511,9 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         "the 2 named Phase 198 deltas "
         "(tests/golden/wire_dict_expected_deltas_198.json) plus exactly "
         "the 1 named Phase 199 delta "
-        "(tests/golden/wire_dict_expected_deltas_199.json); "
+        "(tests/golden/wire_dict_expected_deltas_199.json) plus exactly "
+        "the 19 DIP24_2816 deltas, applied last "
+        "(tests/golden/wire_dict_expected_deltas_dip24_2816.json); "
         "if this is a legitimate NEW wire-value change, it must be added "
         "to a delta list deliberately, naming which chips and which keys "
         f"moved, in the commit message. Diff: {_describe_record_diff(expected, live)}"
@@ -565,6 +583,7 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
     deltas_197 = json.loads(_DELTAS_197.read_text(encoding="utf-8"))["deltas"]
     deltas_198 = json.loads(_DELTAS_198.read_text(encoding="utf-8"))["deltas"]
     deltas_199 = json.loads(_DELTAS_199.read_text(encoding="utf-8"))["deltas"]
+    deltas_dip24 = json.loads(_DELTAS_DIP24_2816.read_text(encoding="utf-8"))["deltas"]
 
     expected = copy.deepcopy(recorded)
     for key, delta_wire in deltas_149.items():
@@ -578,6 +597,10 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
     for key, delta_wire in deltas_198.items():
         expected[key].update(delta_wire)
     for key, delta_wire in deltas_199.items():
+        expected[key].update(delta_wire)
+    # The DIP24_2816 layer puts flags back to the golden value on its 19
+    # records, so only the other 65 of the 84 still differ, on flags alone.
+    for key, delta_wire in deltas_dip24.items():
         expected[key].update(delta_wire)
 
     live = _capture_wire_dicts(_REAL_DB)
@@ -596,8 +619,8 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
             changed_keys.append(key)
             changed_fields |= differing
 
-    assert len(changed_keys) == 84, (
-        f"expected exactly 84 records to change (golden+149 vs live), found "
+    assert len(changed_keys) == 65, (
+        f"expected exactly 65 records to change (golden+149 vs live), found "
         f"{len(changed_keys)}: {changed_keys}"
     )
     assert changed_fields == {"flags"}, (

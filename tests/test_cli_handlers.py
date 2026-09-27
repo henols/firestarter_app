@@ -38,7 +38,12 @@ from firestarter.messages import (
     MSG_MAIN_DONE,
 )
 
-from .conftest import build_frame
+from .conftest import (
+    ADAPTER_REQUIRED_TEST_CHIP,
+    ADAPTER_REQUIRED_TEST_REASON,
+    adapter_required_db,
+    build_frame,
+)
 
 
 @pytest.fixture
@@ -256,15 +261,15 @@ def test_info_nmos_25v_no_crash(runner: CliRunner) -> None:
 
 
 def test_info_adapter_required_no_crash(runner: CliRunner) -> None:
-    """`firestarter info AT28C16` exits 0 — adapter-required 24-pin EEPROM.
+    """`firestarter info` exits 0 for an adapter-required chip (synthetic row).
 
     info does NOT refuse adapter-required chips — it displays them. This is the
     correct Phase 68 behavior: the capability guard fires only in resolve_chip
     (the chip-op path), not in the info display path. REAL presenter required.
     """
-    db = EpromDatabase(skip_local_override=True)
+    db = adapter_required_db()
     app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
-    result = runner.invoke(cli, ["info", "AT28C16"], obj=app)
+    result = runner.invoke(cli, ["info", ADAPTER_REQUIRED_TEST_CHIP], obj=app)
     assert result.exit_code == 0
     assert "Traceback (most recent call last)" not in result.output
     assert "ChipNotImplementedError" not in result.output
@@ -335,22 +340,23 @@ def test_read_operator_returns_false(runner: CliRunner) -> None:
 
 
 def test_read_non_supported_typed_refusal(runner: CliRunner) -> None:
-    """`firestarter read AT28C04 out.bin` exits 1 with typed support_status refusal.
+    """`firestarter read` of an adapter-required chip exits 1 with a typed refusal.
 
     SC#3 non-supported chip. The Phase 66 ChipNotImplementedError guard in
     resolve_chip refuses before any wire dict is built. The @map_typed_errors
     decorator converts ChipNotImplementedError -> exit 1 + "Chip not usable:"
     message. No Traceback in output.
 
-    Re-anchored from M2716 in Phase 79: M2716 graduated to 'supported' (NMOS-02),
-    so the 'vpp-exceeds-max' category is empty — AT28C04 (adapter-required) is the
-    still-non-supported exemplar.
+    The chip is the synthetic adapter-required row from conftest: the shipped
+    database has no adapter-required row.
     """
-    app = make_app_context()
-    result = runner.invoke(cli, ["read", "AT28C04", "out.bin"], obj=app)
+    app = make_app_context(db=adapter_required_db())
+    result = runner.invoke(
+        cli, ["read", ADAPTER_REQUIRED_TEST_CHIP, "out.bin"], obj=app
+    )
     assert result.exit_code == 1
     assert "Traceback (most recent call last)" not in result.output
-    assert "AT28C04" in result.output
+    assert ADAPTER_REQUIRED_TEST_CHIP in result.output
 
 
 def test_read_protocol_not_implemented_typed_refusal(runner: CliRunner) -> None:
@@ -1243,6 +1249,35 @@ def test_config_returns_false(runner: CliRunner) -> None:
     assert result.exit_code == 1
 
 
+@pytest.mark.parametrize(("value", "sent"), [("-1", -1), ("0", 0), ("4", 4), ("5", 5)])
+def test_config_rev_sends_each_defined_code(
+    runner: CliRunner, value: str, sent: int
+) -> None:
+    """Each revision code from -1 to 5 reaches the hardware layer unchanged."""
+    hw = Mock(spec=HardwareManager)
+    hw.set_hardware_config.return_value = True
+    app = make_app_context(hardware_manager=hw)
+    result = runner.invoke(cli, ["config", "--rev", value], obj=app)
+    assert result.exit_code == 0, result.output
+    assert hw.set_hardware_config.call_args.args[0] == sent
+
+
+@pytest.mark.parametrize("value", ["2.2", "6", "-2", "2.0"])
+def test_config_rev_refuses_a_value_that_is_not_a_code(
+    runner: CliRunner, value: str
+) -> None:
+    """A silkscreen number or an undefined code is a usage error.
+
+    '--rev 2.2' used to become code 2 (Rev 2.0) with no message. Nothing may
+    reach the board for such a value.
+    """
+    hw = Mock(spec=HardwareManager)
+    app = make_app_context(hardware_manager=hw)
+    result = runner.invoke(cli, ["config", "--rev", value], obj=app)
+    assert result.exit_code == 2, result.output
+    hw.set_hardware_config.assert_not_called()
+
+
 def test_fw_install_happy_path(runner: CliRunner) -> None:
     """`firestarter fw -i` exits 0 when manage_firmware_update returns True."""
     fw_mgr = Mock(spec=FirmwareManager)
@@ -1508,22 +1543,18 @@ def test_dev_fault_inject_fail(runner: CliRunner) -> None:
 
 
 def test_info_non_supported_shows_status(runner: CliRunner, caplog) -> None:
-    """`firestarter info AT28C04` shows "Support status" and "adapter" in log output.
+    """`firestarter info` shows "Support status" and "adapter" for an adapter-required chip.
 
-    DB-04 SC#1: non-supported chips must render a status-specific line in info.
-    AT28C04 is adapter-required (24-pin 5V EEPROM). Exit must be 0 — info displays,
-    never refuses. Log captured via caplog (WARNING level).
-
-    Re-anchored from M2716 in Phase 79: M2716 graduated to 'supported' (NMOS-02),
-    so the 'vpp-exceeds-max' category is empty — AT28C04 is the still-non-supported
-    exemplar for the info status-line contract.
+    DB-04 SC#1: non-supported chips render a status-specific line in info. The
+    chip is the synthetic adapter-required row from conftest. Exit must be 0 --
+    info displays, never refuses. Log captured via caplog (WARNING level).
     """
     import logging
 
-    db = EpromDatabase(skip_local_override=True)
+    db = adapter_required_db()
     app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
     with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
-        result = runner.invoke(cli, ["info", "AT28C04"], obj=app)
+        result = runner.invoke(cli, ["info", ADAPTER_REQUIRED_TEST_CHIP], obj=app)
     assert result.exit_code == 0
     log_text = " ".join(r.getMessage() for r in caplog.records)
     assert "Support status" in log_text
@@ -1531,18 +1562,16 @@ def test_info_non_supported_shows_status(runner: CliRunner, caplog) -> None:
 
 
 def test_info_adapter_required_shows_status(runner: CliRunner, caplog) -> None:
-    """`firestarter info AT28C16` shows "Support status" and "adapter" in log output.
+    """`firestarter info` of an adapter-required chip exits 0 and shows its status.
 
-    DB-04 SC#1: adapter-required status must be surfaced in the info display.
-    AT28C16 is a 24-pin 5V EEPROM that needs a dedicated DIP24 adapter.
-    Exit must be 0 — info does not refuse adapter-required chips.
+    DB-04 SC#1: the adapter-required status is surfaced in the info display.
     """
     import logging
 
-    db = EpromDatabase(skip_local_override=True)
+    db = adapter_required_db()
     app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
     with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
-        result = runner.invoke(cli, ["info", "AT28C16"], obj=app)
+        result = runner.invoke(cli, ["info", ADAPTER_REQUIRED_TEST_CHIP], obj=app)
     assert result.exit_code == 0
     log_text = " ".join(r.getMessage() for r in caplog.records)
     assert "Support status" in log_text
@@ -1574,18 +1603,15 @@ def test_info_protocol_not_impl_shows_status(runner: CliRunner, caplog) -> None:
 
 
 def test_read_non_supported_status_refusal(runner: CliRunner) -> None:
-    """`firestarter read AT28C04 out.bin` exits 1 with the status reason verbatim.
+    """`firestarter read` of an adapter-required chip exits 1 with the reason verbatim.
 
     DB-04 SC#2/#4: the reason string is rendered directly (no "Chip not usable:"
-    prefix). The guard fires in resolve_chip before any serial byte. AT28C04 is
-    adapter-required.
-
-    Re-anchored from M2716 in Phase 79: M2716 graduated to 'supported' (NMOS-02),
-    so the 'vpp-exceeds-max' category is empty — AT28C04 is the still-non-supported
-    exemplar for the verbatim-reason refusal contract.
+    prefix). The guard fires in resolve_chip before any serial byte.
     """
-    app = make_app_context()
-    result = runner.invoke(cli, ["read", "AT28C04", "out.bin"], obj=app)
+    app = make_app_context(db=adapter_required_db())
+    result = runner.invoke(
+        cli, ["read", ADAPTER_REQUIRED_TEST_CHIP, "out.bin"], obj=app
+    )
     assert result.exit_code == 1
     assert "adapter" in result.output.lower()
     assert "Chip not usable:" not in result.output
@@ -1593,16 +1619,16 @@ def test_read_non_supported_status_refusal(runner: CliRunner) -> None:
 
 
 def test_read_adapter_required_status_refusal(runner: CliRunner) -> None:
-    """`firestarter read AT28C16 out.bin` exits 1 with adapter-required reason verbatim.
+    """The adapter-required refusal prints the row's own reason text.
 
-    DB-04 SC#2/#4 adapter-required: AT28C16 is a 24-pin 5V EEPROM that requires
-    a DIP24 adapter. Reason string rendered directly (no "Chip not usable:" prefix).
     Guard fires in resolve_chip before any serial byte.
     """
-    app = make_app_context()
-    result = runner.invoke(cli, ["read", "AT28C16", "out.bin"], obj=app)
+    app = make_app_context(db=adapter_required_db())
+    result = runner.invoke(
+        cli, ["read", ADAPTER_REQUIRED_TEST_CHIP, "out.bin"], obj=app
+    )
     assert result.exit_code == 1
-    assert "adapter" in result.output.lower()
+    assert ADAPTER_REQUIRED_TEST_REASON in result.output
     assert "Chip not usable:" not in result.output
     assert "Traceback (most recent call last)" not in result.output
 
