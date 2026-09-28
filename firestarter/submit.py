@@ -65,13 +65,6 @@ from firestarter.diagnostic_report import is_submittable
 # host + firmware + shield and cannot reliably attribute itself to one layer,
 # so the cross-repository tracker is also the only correct destination for it.
 SUBMIT_REPO = "henols/firestarter"
-# GSD_INBOX_LABEL is a maintainer-side triage tag ONLY (quick 260728-ahy):
-# never sent on the `gh issue create` argv (that arg is triage/write-gated and a
-# community tester lacks it); a maintainer applies it post-hoc via
-# `gh issue edit <n> --add-label gsd-inbox`. Detection stays on the `[dev test]`
-# title marker + fenced-JSON `schema_version`, unaffected by this constant.
-GSD_INBOX_LABEL = "gsd-inbox"
-
 # Encoded-URL byte thresholds: escalate (drop fenced JSON) past this,
 # hard-stop (never open the browser) past the hard cap.
 _URL_ESCALATE_BYTES = 7500

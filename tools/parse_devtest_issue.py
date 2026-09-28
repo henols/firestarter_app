@@ -6,12 +6,9 @@ Permission is hereby granted under MIT license.
 
 Community `dev test` Issue Triage Parser
 
-Stdlib-only CLI a maintainer runs during `gsd-inbox` triage against a
-community `dev test` GitHub issue. It does NOT edit the installed
-`.claude/gsd-core/workflows/inbox.md` -- that workflow's job is
-fetching/labeling issues; this module's job is understanding the ONE
-issue shape `firestarter/submit.py` produces and is INVOKED standalone,
-e.g.:
+Stdlib-only CLI a maintainer runs while triaging a community `dev test`
+GitHub issue. It understands the one issue shape `firestarter/submit.py`
+produces and is invoked standalone, e.g.:
 
     gh issue view <n> --json title -q .title   # feed to --title
     gh issue view <n> --json body  -q .body    # feed to --body-file/stdin
