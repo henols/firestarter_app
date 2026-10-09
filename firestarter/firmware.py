@@ -41,6 +41,7 @@ from firestarter.exceptions import (
 )
 from firestarter.fw_release_gate import require_installable_release
 from firestarter.serial_comm import SerialCommunicator
+from firestarter.timestamps import iso_text_to_cet
 
 logger = logging.getLogger("Firmware")
 
@@ -62,7 +63,7 @@ class ReleaseInfo(TypedDict):
     version: str  # tag_name from GitHub API
     tag: str  # raw tag_name (same as version for firmware releases)
     channel: str  # "stable" or "prerelease"
-    published: str  # ISO-8601 from published_at field
+    published: str  # published_at as ISO 8601 in CET
     asset_url: str  # browser_download_url for the board-matching .hex asset
 
 
@@ -468,7 +469,7 @@ class FirmwareManager:
                     version=tag,
                     tag=tag,
                     channel="prerelease" if is_pre else "stable",
-                    published=r.get("published_at") or "",
+                    published=iso_text_to_cet(r.get("published_at") or ""),
                     asset_url=asset_url,
                 )
             )

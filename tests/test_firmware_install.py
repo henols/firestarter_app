@@ -694,6 +694,8 @@ class TestFirmwareList:
         assert releases[1]["version"] == "3.1.0b10"  # b10 > b1 requires Version sort
         assert releases[2]["version"] == "3.1.0b1"
         assert releases[3]["version"] == "3.0.0"
+        # GitHub's UTC published_at is shown as ISO 8601 in CET (CEST in May)
+        assert releases[0]["published"] == "2026-05-20T11:00:00+02:00"
         # Each element must have all 5 required keys
         required_keys = {"version", "tag", "channel", "published", "asset_url"}
         for r in releases:
