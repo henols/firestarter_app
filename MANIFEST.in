@@ -9,3 +9,12 @@ include firestarter/main.py
 include firestarter/__init__.py
 include README.md
 include LICENSE
+
+# setuptools-scm adds every git-tracked file to the sdist. Keep repo tooling,
+# datasheets and editor config out of the published archive.
+prune .github
+prune .vscode
+prune datasheets
+prune tools
+exclude .git-blame-ignore-revs .gitignore .pre-commit-config.yaml
+exclude CLAUDE.md DEVELOPMENT.md SUPPORT.md requirements.txt *.sh

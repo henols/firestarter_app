@@ -1,94 +1,124 @@
-name: Create a new patch release
+name: Release
+# A release happens ONLY when a version tag is pushed. A push to a branch never
+# publishes.
+#
+#   3.2.0b1, 3.2.0rc1  -> GitHub pre-release + PyPI pre-release
+#   3.2.0              -> GitHub release marked Latest + PyPI release
+#
+# The tag IS the version: setuptools-scm reads it at build time, so no file in
+# the repository holds the version and no bot commits a bump. To release:
+#
+#   git tag 3.2.0b1 <commit-on-main> && git push origin 3.2.0b1
+#
+# or run tools/release.sh, which adds some checks first.
 on:
   push:
-    branches:
-    - main
-    paths-ignore:
-    - '**.md'
-    - '**.sh'
-    - '.gitignore'
-    - 'docs/**'
-    - 'images/**'
-    - '.github/**'
-    - '.vscode/**'
-    - 'tools/**'
+    tags: ['[0-9]+.[0-9]+.[0-9]+*']
 
-# The version is READ from firestarter/__init__.py, never computed and pushed
-# back. This workflow used to run update_version.py and commit the bump to
-# main with git-auto-commit-action. That push is rejected -- main's ruleset
-# requires a pull request, GitHub Actions is not a bypass actor, and the
-# rejection (GH013) failed the step and aborted the job BEFORE the release was
-# ever cut. Nothing has been published from main by automation since
-# 2026-09-01; 2.0.9 was cut by hand twelve minutes after run 34784468070 died
-# exactly this way.
-#
-# So the version now lives in the pull request that promotes the release. Set
-# it there, and this workflow tags it, releases it and publishes it. main's
-# file and the release tag always agree, because one is read from the other.
-#
-# The pypi job is the second half of the fix. The stable path had no such job
-# and relied on publish.yml's `release: published` trigger, which GitHub does
-# NOT deliver for a release created by a bot. That is why 2.0.8 exists on
-# GitHub and never reached PyPI, silently. beta-release.yml already solved
-# this by calling publish.yml directly through workflow_call; this is the same
-# pattern.
+# Never cancel a release half way. The group name must differ from ci.yml's
+# `${{ github.workflow }}-${{ github.ref }}`: ci.yml runs inside this workflow,
+# and a called workflow that shares its caller's group deadlocks.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  github:
+  check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      already_released: ${{ steps.version.outputs.already_released }}
-
+      prerelease: ${{ steps.tag.outputs.prerelease }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Read the version to release
-        id: version
+      - name: Check the tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          VERSION=$(python3 -c "
-          import re, sys
-          rx = re.compile(r'^__version__ = \"(?P<v>[^\"]+)\"')
-          for line in open('firestarter/__init__.py'):
-              m = rx.match(line)
-              if m:
-                  print(m.group('v'))
-                  sys.exit(0)
-          sys.exit('no __version__ found in firestarter/__init__.py')
-          ")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version on main: $VERSION"
-
-          # Idempotence. Not every push to main is a release: a source change
-          # that does not move the version must not try to re-cut an existing
-          # tag. Skip instead, and say so.
-          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
-            echo "already_released=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Tag $VERSION already exists. Nothing to release." \
-              | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            echo "already_released=false" >> "$GITHUB_OUTPUT"
+          if ! [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?$ ]]; then
+            echo "::error::tag '$TAG' is not X.Y.Z, X.Y.ZbN or X.Y.ZrcN"
+            exit 1
           fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag '$TAG' points at a commit that is not on main"
+            exit 1
+          fi
+          PRERELEASE=false
+          if [[ "$TAG" =~ (b|rc)[0-9]+$ ]]; then
+            PRERELEASE=true
+          fi
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG (pre-release: $PRERELEASE)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  ci:
+    needs: check
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: [check, ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build the sdist and the wheel
+        run: python3 -m pip install --upgrade build && python3 -m build
+
+      - name: Check that the build carries the tag's version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ls dist/
+          test -f "dist/firestarter-$TAG.tar.gz"
+          test -f "dist/firestarter-$TAG-py3-none-any.whl"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  github:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Release
-        if: steps.version.outputs.already_released == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          files: dist/*
+          prerelease: ${{ needs.check.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.check.outputs.prerelease == 'true' && 'false' || 'true' }}
+          generate_release_notes: true
 
+  # Uploads the same files that the GitHub release carries.
   pypi:
-    needs: github
-    if: needs.github.outputs.already_released == 'false'
-    uses: ./.github/workflows/publish.yml
-    with:
-      tag: ${{ needs.github.outputs.version }}
-    secrets: inherit
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          # A re-run of a failed job must not fail on files already uploaded.
+          skip-existing: true

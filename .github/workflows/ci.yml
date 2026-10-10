@@ -1,16 +1,6 @@
-# Host CI: ruff, pytest with coverage, and an entry-point smoke test. release.yml and publish.yml are tag/PyPI-only.
-# Phase 37 (D-06): pull_request trigger drops branches filter — runs on all PRs (v1.8-app-cleanup included).
-# Phase 37 (D-07): install uses .[test] extra; gate steps: ruff check, ruff format --check, pytest --cov.
-# Phase 127 (D-01/D-02): adds a manual dispatch trigger and a second, isolated
-# ci-py32 job that installs the [py32] extra and runs the real-pyusb API
-# surface tests. No automatic trigger changed.
-# CI runs on EVERY branch. The push trigger used to be main-only, so a push to
-# a milestone or fix branch ran no gate at all -- ruff and the coverage floor
-# were only enforced once a PR existed or once work reached main. Nothing in
-# this workflow publishes: it produces no release, no tag and
-# no PyPI upload, so there is no publish boundary to guard here. Artefact
-# publishing lives in release.yml (main), beta-release.yml (beta) and
-# publish.yml (release:published), and none of those triggers is touched.
+# Host CI: ruff, pytest with coverage, and an entry-point smoke test.
+# Nothing in this workflow publishes. release.yml calls it as the gate before a
+# release; release.yml publishes only on a version-tag push.
 name: Host CI
 on:
   push:
@@ -31,21 +21,24 @@ on:
     - '.vscode/**'
     - '.editorconfig'
   workflow_dispatch:
+  workflow_call:
 
-# A same-repo PR branch now matches both `push` and `pull_request`, so
-# supersede stale runs per ref instead of queueing both to completion.
-# main/beta are excluded from cancellation: their runs are what the
-# publishing workflows are judged against, and a cancelled gate reads as a
-# failed gate.
+# A same-repo PR branch matches both `push` and `pull_request`, so supersede
+# stale runs per ref instead of queueing both to completion. main is excluded
+# from cancellation: a cancelled gate reads as a failed gate.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref_type != 'tag' }}
 
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 so setuptools-scm finds the release tags. A shallow
+      # clone has none, and the package would build as version 0.1.dev1.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -64,10 +57,10 @@ jobs:
       - name: Run pytest with coverage
         # FIRESTARTER_DEV_TOOLS=1 because roughly fifty tests drive `dev`
         # subcommands that channel.py registers only on a pre-release build.
-        # Until 3.1.0 every branch carried a pre-release version, so the suite
-        # passed without this and the dependency was invisible. On a stable
-        # version string those commands are correctly absent and the tests fail
-        # on a premise, not a defect. The env var is the documented escape and
+        # A build between tags is a .devN pre-release, but a build on a stable
+        # tag (the release.yml gate) is not. On a stable version string those
+        # commands are correctly absent and the tests fail on a premise, not a
+        # defect. The env var is the documented escape and
         # fails CLOSED -- it enables them only when set to exactly "1".
         #
         # This does not blind the channel gates. Board gating (BETA_ONLY_BOARDS,
@@ -93,7 +86,11 @@ jobs:
   ci-py32:
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 so setuptools-scm finds the release tags. A shallow
+      # clone has none, and the package would build as version 0.1.dev1.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
