@@ -797,8 +797,8 @@ class SerialCommunicator:
             f"If this board really is a Rev 2.2 or 2.3, ADC detection cannot "
             f"tell it apart from a Rev 2.0, so you must assert it once with "
             f"'firestarter config --rev 4' (4 = Rev 2.2, 5 = Rev 2.3). Note "
-            f"that --rev takes the revision BYTE, not the silkscreen number: "
-            f"'--rev 2.2' truncates to 2 and selects the Rev 2.0 bucket.",
+            f"that --rev takes the revision code, not the silkscreen number: "
+            f"'--rev 2.2' is refused.",
             detected=detected,
         )
 

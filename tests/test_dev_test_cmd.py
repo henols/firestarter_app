@@ -72,7 +72,11 @@ from firestarter.exceptions import (
 from firestarter.hardware import HardwareManager, ProgrammerIdentity
 from firestarter.sdp_capability import sdp_capability, sdp_capability_for_entry
 
-from .conftest import make_app_context
+from .conftest import (
+    ADAPTER_REQUIRED_TEST_CHIP,
+    adapter_required_db,
+    make_app_context,
+)
 from .fixtures.synthetic_nonzero_chip_id import (
     SYNTHETIC_CHIP_NAME,
     SyntheticNonzeroChipIdDatabase,
@@ -1409,15 +1413,18 @@ class TestAbsentChipHardFail:
     def test_dev_test_present_but_unsupported_still_sweeps(
         self, runner: CliRunner
     ) -> None:
-        """AT28C16 IS in the DB (get_eprom truthy) but `resolve_chip` refuses
-        it (adapter-required, ChipNotImplementedError). The guard must NOT
-        swallow this -- the sweep still runs (hardware read reached, report
-        rendered) and the refusal is recorded as SKIPPED findings, never a
-        bare exit -- proving the guard keys off `get_eprom` emptiness only."""
-        chip = "AT28C16"
+        """The synthetic adapter-required row IS in the DB (get_eprom truthy)
+        but `resolve_chip` refuses it (ChipNotImplementedError). The guard
+        must NOT swallow this -- the sweep still runs (hardware read reached,
+        report rendered) and the refusal is recorded as SKIPPED findings,
+        never a bare exit -- proving the guard keys off `get_eprom` emptiness
+        only. The shipped database has no adapter-required row."""
+        chip = ADAPTER_REQUIRED_TEST_CHIP
         operator = make_clean_operator()
         hw = make_hardware_manager()
-        app = make_app_context(eprom_operator=operator, hardware_manager=hw)
+        app = make_app_context(
+            db=adapter_required_db(), eprom_operator=operator, hardware_manager=hw
+        )
         result = runner.invoke(cli, ["dev", "test", chip], obj=app)
         assert result.exit_code == 0, result.output
         hw.read_programmer_identity.assert_called()

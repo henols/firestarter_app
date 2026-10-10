@@ -1,0 +1,91 @@
+{
+  "deltas": {
+    "AMD|AM28C16A|22": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "ATMEL|AT28C04,AT28HC04|23": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "ATMEL|AT28C04E,AT28C04F|24": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "ATMEL|AT28C16,AT28HC16,AT28HC16L|26": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "ATMEL|AT28C16E,AT28C16F|27": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "CATALYST(CSI)|CAT28C16A,CAT28C16AI|7": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "EXEL|XL2804A|0": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "EXEL|XL2816A,XLE28C16A,XLS28C16A|1": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "EXEL|XLE28C16B,XLS28C16B|3": {
+      "page-size": 16,
+      "flags": 0
+    },
+    "MICROCHIP memory|2804|8": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "MICROCHIP memory|2816|9": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "MICROCHIP memory|28C04AF|12": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "MICROCHIP memory|28C04A|11": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "MICROCHIP memory|28C16AF|14": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "MICROCHIP memory|28C16A|13": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "NEC|UPD28C04|11": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "XICOR|X2804A,X2804AI|0": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "XICOR|X2816A|1": {
+      "page-size": 1,
+      "flags": 0
+    },
+    "XICOR|X2816B,X2816C|2": {
+      "page-size": 16,
+      "flags": 0
+    }
+  },
+  "meta": {
+    "decision": "tests/golden/wire_dict_baseline.json is preserved byte-unchanged. This layer is the expected change on the 19 DIP24_2816 records. It is applied LAST.",
+    "cause": "tools/build_db.py now emits the upstream write granularity as page_size for every DIP24_2816 row (1 on 17 rows, 16 on X2816B/C and XLE28C16B), and erase_support excludes the DIP24_2816 pin map, so FLAG_CAN_ERASE is clear on these rows. They have no command decoder: the software erase would store bytes as data.",
+    "overlap": "The 153 layer set flags=2 on these 19 records. This layer sets flags=0 on them again. That is the one intended field overlap between two layers, and the test applies this layer after all others.",
+    "counts": {
+      "records": 19,
+      "page_size_1": 17,
+      "page_size_16": 2
+    },
+    "how_to_update": "Change this file only together with the generator or erase_support change that moves these values, and name the chips in the commit message."
+  }
+}

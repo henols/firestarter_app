@@ -23,6 +23,7 @@ from rich.console import Console
 
 from firestarter import __version__ as version
 from firestarter import (
+    dip24_2816_erase_gate,
     flash4_erase_gate,
     jp5_gate,
     log_capture,
@@ -157,7 +158,7 @@ def _complete_eprom(
     db = EpromDatabase()
     return [
         click.shell_completion.CompletionItem(e["name"])
-        for e in db.get_eproms(False)
+        for e in db.get_eproms()
         if e["name"].lower().startswith(incomplete.lower())
     ]
 
@@ -475,12 +476,11 @@ def cli(ctx: click.Context, verbose: bool, port: str | None) -> None:
 
 
 @cli.command(name="list")
-@click.option("-v", "--verified", is_flag=True, help="Only shows verified EPROMs")
 @click.pass_obj
 @map_typed_errors
-def _list_cmd(app: AppContext, verified: bool) -> None:
+def _list_cmd(app: AppContext) -> None:
     """List all EPROMs in the database."""
-    eprom_data_list = app.db.get_eproms(verified=verified)
+    eprom_data_list = app.db.get_eproms()
     if eprom_data_list:
         print_eprom_list_table(eprom_data_list, app.eprom_presenter.spec_builder)
         sys.exit(0)
@@ -528,7 +528,7 @@ def info(app: AppContext, eprom: str, config: bool, adapter: bool) -> None:
 @map_typed_errors
 def search(app: AppContext, text: str) -> None:
     """Search for EPROMs in the database."""
-    search_results = app.db.search_eprom(text, include_unverified=True)
+    search_results = app.db.search_eprom(text)
     if search_results:
         print_eprom_list_table(search_results, app.eprom_presenter.spec_builder)
         sys.exit(0)
@@ -1358,6 +1358,11 @@ def erase(
         click.echo(flash4_erase_gate.refusal_text(eprom))
         sys.exit(0 if ignore_unsupported else 1)
 
+    full_record = app.db.get_eprom(eprom) or {}
+    if dip24_2816_erase_gate.is_affected(full_record.get("pin-map")):
+        click.echo(dip24_2816_erase_gate.refusal_text(eprom))
+        sys.exit(0 if ignore_unsupported else 1)
+
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "erase"):
         sys.exit(1)
 
@@ -1486,12 +1491,109 @@ def hw(app: AppContext) -> None:
     sys.exit(0 if ok else 1)
 
 
+_BANDGAP_NOMINAL_MV = 1100
+_DIVIDER_GAIN = 314000 / 44000
+
+
+@cli.command(name="cal")
+@click.option(
+    "--vcc",
+    type=float,
+    default=None,
+    metavar="VOLTS",
+    help="Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09",
+)
+@click.option(
+    "--reset",
+    is_flag=True,
+    help="Restore the nominal 1100 mV reference, undoing any calibration.",
+)
+@click.pass_obj
+@map_typed_errors
+def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
+    """Calibrate the voltage readings against a multimeter.
+
+    Every board reads its rails through its microcontroller's internal
+    reference. That reference is only specified to 1.0-1.2 V and differs from
+    chip to chip, so an uncalibrated board can report a voltage up to 10 percent
+    away from the real one. A board that reads high can refuse to program a
+    correctly set rail.
+
+    To calibrate, measure the 5V pin on the Arduino header with a multimeter
+    and give the reading. No potentiometer and no high voltage are involved,
+    and the chip can stay in the socket.
+
+        firestarter cal --vcc 5.09
+
+    Run with no options to see the current calibration.
+    """
+    if vcc is not None and reset:
+        raise click.UsageError("Use either --vcc or --reset, not both.")
+
+    if reset:
+        before = app.hardware_manager.read_calibration()
+        if before is not None:
+            click.echo(f"Reference now: {before['bandgap_mv']} mV")
+        click.echo(f"Restoring the nominal {_BANDGAP_NOMINAL_MV} mV.")
+        ok = app.hardware_manager.set_bandgap_mv(_BANDGAP_NOMINAL_MV)
+        sys.exit(0 if ok else 1)
+
+    if vcc is not None:
+        measured_mv = int(round(vcc * 1000))
+        before = app.hardware_manager.read_calibration()
+        if not app.hardware_manager.calibrate_bandgap(measured_mv):
+            click.echo(
+                "Calibration refused. The result was outside 1000-1200 mV, which "
+                "means the reading does not match this board. Check that the "
+                "multimeter is on the 5V pin and that the value is in volts."
+            )
+            sys.exit(1)
+        after = app.hardware_manager.read_calibration()
+        if before is not None and after is not None:
+            click.echo(
+                f"Reference: {before['bandgap_mv']} mV -> {after['bandgap_mv']} mV"
+            )
+            _echo_calibration_effect(after["bandgap_mv"])
+        sys.exit(0)
+
+    current = app.hardware_manager.read_calibration()
+    if current is None:
+        click.echo(
+            "Could not read the calibration. The firmware may be older than this CLI."
+        )
+        sys.exit(1)
+    click.echo(f"Reference: {current['bandgap_mv']} mV")
+    click.echo(f"Divider: R1 {current['r1']}, R2 {current['r2']}")
+    _echo_calibration_effect(current["bandgap_mv"])
+    sys.exit(0)
+
+
+def _echo_calibration_effect(bandgap_mv: int) -> None:
+    """Say what the stored reference means for the reported voltages."""
+    if bandgap_mv == _BANDGAP_NOMINAL_MV:
+        click.echo(
+            "This board uses the nominal reference. If it has not been "
+            "calibrated, the readings can be up to 10 percent out."
+        )
+        return
+    error = _BANDGAP_NOMINAL_MV / bandgap_mv - 1
+    click.echo(
+        f"Before calibration this board read {abs(error) * 100:.1f} percent "
+        f"{'high' if error > 0 else 'low'}."
+    )
+
+
 @cli.command(name="config")
 @click.option(
     "--rev",
-    type=float,
+    type=click.IntRange(-1, 5),
     default=None,
-    help="WARNING Overrides hardware revision (0-2), only use with HW mods. -1 disables override.",  # noqa: E501
+    help=(
+        "Override the shield revision. Give the revision code, not the "
+        "silkscreen number: 0 = Rev 0, 1 = Rev 1, 2 = Rev 2.0, 3 = Rev 2.1, "
+        "4 = Rev 2.2, 5 = Rev 2.3. -1 removes the override. Use it only when "
+        "the detected revision is wrong."
+    ),
 )
 @click.option(
     "-r1",
@@ -1513,17 +1615,16 @@ def hw(app: AppContext) -> None:
 @map_typed_errors
 def config(
     app: AppContext,
-    rev: float | None,
+    rev: int | None,
     r16: int | None,
     r14r15: int | None,
 ) -> None:
     """Handles CONFIGURATION values."""
-    # set_hardware_config expects Optional[int]; the Click option accepts float
-    # so users can write `--rev 2.0` interchangeably with `--rev 2`. Cast to int
-    # at the boundary (rev=-1 sentinel + integer rev values preserved verbatim).
-    rev_int = int(rev) if rev is not None else None
+    # --rev is an IntRange: '--rev 2.2' used to go through float() and int()
+    # and silently select code 2 (Rev 2.0). Click now refuses it before any
+    # serial byte is sent, and refuses a code the firmware does not define.
     ok = app.hardware_manager.set_hardware_config(
-        rev_int, r16, r14r15, flags=_build_op_flags()
+        rev, r16, r14r15, flags=_build_op_flags()
     )
     sys.exit(0 if ok else 1)
 
@@ -2249,6 +2350,46 @@ if _DEV_TOOLS_ENABLED:
 # so this command lives inside the same `_DEV_TOOLS_ENABLED` gate every
 # other bench subcommand above does.
 # ---------------------------------------------------------------------------
+
+if _DEV_TOOLS_ENABLED:
+
+    @dev.command(name="adc")
+    @click.pass_obj
+    @map_typed_errors
+    def dev_adc(app: AppContext) -> None:
+        """Read the raw ADC counts behind the VPP and VPE readings.
+
+        Sweeps three rail states in one pass -- rails off, VPP and VPE -- so
+        all three are measured at one potentiometer setting. Prints the raw
+        divider and bandgap counts alongside the millivolt figures, which the
+        vpp and vpe commands cannot show: their wire format carries only
+        tenths of a volt.
+
+        Use it with a multimeter to find how far this board's readings are
+        from the real voltages. Measure the 5 V pin and compare it with the
+        VCC figure to size the reference error; measure the rail and compare
+        it with the V figure to size the divider error.
+
+        No high voltage reaches the socket, so a chip may stay seated.
+        """
+        frames = app.hardware_manager.read_adc_raw()
+        if not frames:
+            click.echo(
+                "Could not read the ADC. Check that the firmware is a beta build."
+            )
+            sys.exit(1)
+        mode_names = {0: "rails off", 1: "VPP", 2: "VPE"}
+        for frame in frames:
+            name = mode_names.get(frame["mode"], f"mode {frame['mode']}")
+            click.echo(
+                f"{name:>9}: divider {frame['divider_adc']:>4} counts, "
+                f"bandgap {frame['bandgap_adc']:>4} counts, "
+                f"V {frame['voltage_mv']:>6} mV, VCC {frame['vcc_mv']:>5} mV"
+            )
+        first = frames[0]
+        click.echo(f"Calibration in use: R1 {first['r1']}, R2 {first['r2']}")
+        sys.exit(0)
+
 
 if _DEV_TOOLS_ENABLED:
 

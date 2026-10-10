@@ -177,62 +177,77 @@ class TestProtocolNotImplementedInclusion:
             )
 
 
-class TestAdapterRequired24Pin:
-    """DB-02: The 9 damage-hazard DIP24 EEPROMs appear as adapter-required."""
+class TestDip24_2816Family:
+    """The 24-pin 5V EEPROM family on DIP24_2816 is supported on 0x0D.
 
-    _EXPECTED_FAMILIES = [
-        "AT28C04",
-        "AT28C04E",
-        "AT28C04F",
-        "AT28C16",
-        "AT28C16E",
-        "AT28C16F",
-        "28C04A",
-        "28C04AF",
-        "28C16A",
-        "28C16AF",
-        "UPD28C04",
-    ]
+    AT28C04/16, 28C04A/16A and UPD28C04 were adapter-required: a guard for a
+    12V-on-WE path demoted them. That path does not exist on DIP24_2816, so the
+    guard exempts that layout and they join their supported siblings.
+    """
 
-    def test_adapter_required_24pin(self):
-        """Nine DIP24 damage-hazard EEPROMs must appear with support_status=
-        'adapter-required' and a non-empty unsupported_reason.
+    _PROMOTED = ["AT28C04", "AT28C16", "28C04A", "28C16A", "UPD28C04"]
+    # Upstream page_size 16: the only DIP24_2816 rows with a page buffer.
+    _PAGE_16 = {"X2816B,X2816C", "XLE28C16B,XLS28C16B"}
 
-        GREEN (Plan 03): the 9 DIP24 damage-hazard EEPROMs are included as adapter-required
-        (build_db.py Site B fall-through with status assignment).
-        """
-        db = _load_db()
-        adapter_chips = [
-            (mfg, chip)
-            for mfg, chip in _all_chips(db)
-            if chip.get("support_status") == "adapter-required"
+    def _rows(self):
+        return [
+            (m, c) for m, c in _all_chips(_load_db()) if c["pinout"] == "DIP24_2816"
         ]
 
-        assert adapter_chips, (
-            "No chips with support_status='adapter-required' found (DB-02 not implemented)"
-        )
+    def test_all_19_rows_are_supported_on_0x0d(self):
+        rows = self._rows()
+        assert len(rows) == 19
+        for mfg, chip in rows:
+            assert chip["support_status"] == "supported", (mfg, chip["part_number"])
+            assert chip["programming"]["algorithm"] == 0x0D
+            assert "unsupported_reason" not in chip
 
-        # All adapter-required chips must have a non-empty unsupported_reason
-        for mfg, chip in adapter_chips:
-            reason = chip.get("unsupported_reason", "")
-            assert reason, (
-                f"{mfg}/{chip.get('part_number')}: adapter-required chip missing unsupported_reason"
-            )
+    def test_the_formerly_blocked_parts_are_among_them(self):
+        names = " ".join(c["part_number"] for _, c in self._rows())
+        for part in self._PROMOTED:
+            assert part in names
 
-        # At least one of the known 24-pin EEPROM families must be present
-        adapter_part_numbers = {
-            chip.get("part_number", "") for _, chip in adapter_chips
-        }
-        family_found = [
-            family
-            for family in self._EXPECTED_FAMILIES
-            if any(family in pn for pn in adapter_part_numbers)
+    def test_page_size_is_the_upstream_write_granularity(self):
+        for _, chip in self._rows():
+            expected = 16 if chip["part_number"] in self._PAGE_16 else 1
+            assert chip["programming"]["page_size"] == expected, chip["part_number"]
+            assert chip["programming"]["infoic_page_size_raw"] == expected
+
+    def test_no_row_in_the_database_is_adapter_required(self):
+        assert not [
+            c
+            for _, c in _all_chips(_load_db())
+            if c["support_status"] == "adapter-required"
         ]
-        assert family_found, (
-            f"None of the expected 24-pin EEPROM families found in adapter-required chips. "
-            f"Expected families: {self._EXPECTED_FAMILIES[:5]}...; "
-            f"got: {sorted(adapter_part_numbers)[:10]}"
-        )
+
+
+class TestWeVppHazardGuard:
+    """The damage guard still fires off the DIP24_2816 layout."""
+
+    @staticmethod
+    def _guard(**kw):
+        from tools.build_db import is_24pin_we_vpp_hazard
+
+        args = dict(pin_count=24, proto_id=0x07, flags=0x10, pm_idx=5, variant=0x00)
+        args.update(kw)
+        return is_24pin_we_vpp_hazard(**args)
+
+    def test_fires_for_an_erasable_24pin_eprom_proto_row_on_another_layout(self):
+        assert self._guard() is True
+        assert self._guard(proto_id=0x0B) is True
+
+    def test_exempts_the_28c_family_layout(self):
+        assert self._guard(pm_idx=23, variant=0x4310) is False
+
+    def test_same_pm_idx_other_variant_is_not_exempt(self):
+        assert self._guard(pm_idx=23, variant=0x4300) is True
+
+    @pytest.mark.parametrize(
+        "kw",
+        [{"pin_count": 28}, {"proto_id": 0x0D}, {"flags": 0x00}],
+    )
+    def test_does_not_fire_outside_its_scope(self, kw):
+        assert self._guard(**kw) is False
 
 
 class TestNmosVppCorrection:
