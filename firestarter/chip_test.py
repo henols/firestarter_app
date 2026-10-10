@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from firestarter import messages
+from firestarter import dip24_2816_erase_gate, messages
 from firestarter.chip_resolver import resolve_chip
 from firestarter.compare import (
     _FF_RATIO_THRESHOLD,  # noqa: F401 -- re-exported; see comment below
@@ -685,6 +685,11 @@ def derive_plan(name: str, db: Any, *, write_scope: str) -> Plan:
             reason = "flash4 (0x05) auto-erases per page; no separate erase op"
         elif etype == "UV-EPROM":
             reason = "UV-EPROM has no electrical erase (UV light only)"
+        elif dip24_2816_erase_gate.is_affected(full.get("pin-map")):
+            reason = (
+                "this 24-pin 5V EEPROM has no erase command; no erase step is "
+                "planned for it"
+            )
         elif protocol == _PROTOCOL_EEPROM_28C:
             # DEFENSIVE FALLTHROUGH -- see
             # `_PROTOCOL_EEPROM_28C`'s own comment above for the full

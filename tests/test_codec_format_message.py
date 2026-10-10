@@ -38,17 +38,21 @@ def test_format_msg_ok_rev_with_override_includes_both() -> None:
 
 def test_format_msg_ok_cfg_no_override() -> None:
     """MSG_OK_CFG with override=0xFF returns the R1/R2-only summary."""
-    out = format_message(MSG_OK_CFG, [1000, 2000, 0xFF], CATALOG[MSG_OK_CFG])
+    out = format_message(MSG_OK_CFG, [1000, 2000, 0xFF, 1100], CATALOG[MSG_OK_CFG])
     assert out is not None
     assert "R1: 1000" in out
     assert "R2: 2000" in out
+    assert "Bandgap: 1100 mV" in out
 
 
 def test_format_msg_ok_cfg_with_override() -> None:
     """MSG_OK_CFG with a non-0xFF override appends 'Override HW: ...' via silkscreen."""
-    out = format_message(MSG_OK_CFG, [1000, 2000, REVISION_2_2], CATALOG[MSG_OK_CFG])
+    out = format_message(
+        MSG_OK_CFG, [1000, 2000, REVISION_2_2, 1019], CATALOG[MSG_OK_CFG]
+    )
     assert out is not None
     assert "Override HW" in out
+    assert "Bandgap: 1019 mV" in out
 
 
 def test_format_msg_info_hw_renders_silkscreen() -> None:

@@ -302,7 +302,8 @@ def test_corpus_census_is_pinned():
     unsupported_steps = sum(
         1 for plan in corpus.values() for s in plan.steps if not s.supported
     )
-    assert unsupported_steps == 4652, unsupported_steps
+    # 4652 before the 19 DIP24_2816 erase steps became unsupported.
+    assert unsupported_steps == 4671, unsupported_steps
 
 
 def test_no_shipped_plan_emits_a_write_without_a_verify():
@@ -707,8 +708,10 @@ def test_live_erase_population_is_pinned():
         for key, plan in corpus.items()
         if any(s.op == chip_test.OP_ERASE and s.supported for s in plan.steps)
     ]
-    assert len(live_erase_plans) == 304, (
-        f"live-erase plan count drifted to {len(live_erase_plans)}, expected 304"
+    # 304 before the 19 DIP24_2816 plans lost their erase step: those parts
+    # have no erase command, so no erase is planned for them.
+    assert len(live_erase_plans) == 285, (
+        f"live-erase plan count drifted to {len(live_erase_plans)}, expected 285"
     )
 
 
@@ -725,7 +728,7 @@ def test_removing_the_blank_check_flags_every_live_erase_plan():
         for key, plan in corpus.items()
         if any(s.op == chip_test.OP_ERASE and s.supported for s in plan.steps)
     }
-    assert len(live_erase) == 304, (
+    assert len(live_erase) == 285, (
         f"live-erase plan count drifted to {len(live_erase)} -- a sweep "
         "that visits zero rows must not pass"
     )
@@ -779,14 +782,16 @@ def test_the_28c_family_na_blank_check_carve_out_is_pinned():
                 carveout_plans.append(key)
                 reasons.add(behind[0].reason)
 
-    assert len(carveout_plans) == 81, (
+    # 81 before the 19 DIP24_2816 plans lost their erase step, and with it
+    # the blank-check that sat behind it.
+    assert len(carveout_plans) == 62, (
         f"28C-family NA blank-check carve-out plan count drifted to "
-        f"{len(carveout_plans)}, expected 81"
+        f"{len(carveout_plans)}, expected 62"
     )
     carveout_chips = set(carveout_plans)
-    assert len(carveout_chips) == 81, (
+    assert len(carveout_chips) == 62, (
         f"28C-family NA blank-check carve-out chip count drifted to "
-        f"{len(carveout_chips)}, expected 81"
+        f"{len(carveout_chips)}, expected 62"
     )
     assert reasons == {_28C_CARVE_OUT_REASON}, reasons
 

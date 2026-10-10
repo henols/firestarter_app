@@ -146,6 +146,24 @@ with open(PINOUT_FILE) as _f:
 # 4. PROCESSING FUNCTIONS
 
 
+def is_24pin_we_vpp_hazard(
+    pin_count: int, proto_id: int, flags: int, pm_idx: int, variant: int
+) -> bool:
+    """True when a row must be demoted to adapter-required by the damage guard.
+
+    A 24-pin erasable part filed under an EPROM algorithm (0x07/0x08/0x0B)
+    would get 12V VPP on pin 21, which is WE on a 5V EEPROM. Rows on the
+    28C-family layout (pm_idx 23, variant_lo 0x10) are exempt: they resolve to
+    DIP24_2816 and classify() sends them to 0x0D, which never drives VPP on WE.
+    """
+    return (
+        pin_count == 24
+        and proto_id in (0x07, 0x08, 0x0B)
+        and bool(flags & 0x10)
+        and not (pm_idx == 23 and (variant & 0xFF) == 0x10)
+    )
+
+
 def resolve_pinout_key(
     pin_count, variant, flags_int, pm_idx=None, proto_id=None, type_int=1, mem_size=0
 ):
@@ -601,31 +619,31 @@ def main():
                         "8051 multiplexed-bus interface (ALE/WR/RD); feasible-candidate, handler not implemented)"
                     )
 
-                # HARDWARE-DAMAGE GUARD. 24-pin 5V parallel EEPROMs (AT28C04/16,
-                # AT28HC16, UPD28C04, 28C04A/16A) arrive on EPROM algorithms
-                # 0x07/0x08/0x0B. Those dispatch to configure_eprom, which engages
-                # the 12V VPP regulator — and DIP24_2716 puts VPP on pin 21, which
-                # on these parts is WE. That is 12V onto a 5V write-enable pin.
+                # HARDWARE-DAMAGE GUARD. A 24-pin erasable part filed upstream under
+                # an EPROM algorithm (0x07/0x08/0x0B) would dispatch to
+                # configure_eprom, which engages the 12V VPP regulator. On a
+                # 24-pin 5V EEPROM, pin 21 is WE, so that is 12V onto a 5V pin.
                 #
-                # So proto_id is demoted to NON_DISPATCHABLE_ALGO. They stay in the
-                # catalog as adapter-required rather than being dropped.
+                # Rows on the 28C-family layout (pm_idx 23, variant_lo 0x10) are
+                # exempt. resolve_pinout_key gives them DIP24_2816 whatever the
+                # proto, and classify() sends every DIP24_2816 row to 0x0D, which
+                # never energises VPP on WE. AT28C04/16, 28C04A/16A and UPD28C04
+                # differ from their supported siblings (X2816A, CAT28C16A...) only
+                # in flags & 0x10, which is not a reliable discriminator here.
                 #
-                # ORDERING: this must run BEFORE resolve_pinout_key, so proto_id is
-                # already 0x00 at pinout resolution. These chips resolve to
-                # DIP24_2716, not None, so the fail-safe skip does not catch them.
-                if (
-                    pin_count == 24
-                    and proto_id in (0x07, 0x08, 0x0B)
-                    and (flags & 0x10)
-                ):
+                # The guard stays as a fail-closed tripwire for any other 24-pin
+                # erasable EPROM-proto row: proto_id is demoted to
+                # NON_DISPATCHABLE_ALGO and the row stays in the catalog as
+                # adapter-required. ORDERING: this runs BEFORE resolve_pinout_key.
+                if is_24pin_we_vpp_hazard(pin_count, proto_id, flags, pm_idx, variant):
                     _support_status = "adapter-required"
                     # Reason string begins with
                     # "adapter required:" so the host can render it verbatim.
                     # Non-empty adapter note required.
                     _unsupported_reason = (
-                        "adapter required: requires a dedicated DIP24 EEPROM adapter "
-                        "or firmware handler — socket pin 21 = WE, which the RURP "
-                        "DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+                        "adapter required: this 24-pin erasable part is filed under "
+                        "an EPROM algorithm that puts 12V on pin 21, which is WE on a "
+                        "5V EEPROM (hardware-damage path)"
                     )
                     print(
                         f"INFO: including {mfg_name}/{name} as adapter-required — "
@@ -763,9 +781,16 @@ def main():
                         # before classify() reassigns it — so rows promoted into
                         # 0x0D from another protocol never match, and keep the
                         # firmware's AT28C floor.
+                        #
+                        # The one exception is DIP24_2816. Its upstream records
+                        # carry the real write granularity (1 = byte write, 16 on
+                        # X2816B/C and XLE28C16B), and without it the 0x0D
+                        # handler's 64-byte floor loads bytes during the write
+                        # cycle of a byte-write part, so every write fails.
                         **(
                             {"page_size": raw_page_size}
                             if _upstream_proto_id in (0x0D, 0x05)
+                            or pinout_key == "DIP24_2816"
                             else {}
                         ),
                     },

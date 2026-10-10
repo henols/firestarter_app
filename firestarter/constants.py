@@ -97,6 +97,12 @@ COMMAND_HW_VERSION = 15
 # CMD_X -> COMMAND_X naming rule.
 COMMAND_LOCK_STATUS = 16
 
+# Firmware sync: firestarter.h CMD_DEV_ADC. Dev-gated on BOTH sides -- the
+# firmware defines it only under -D DEV_TOOLS, which the beta channel injects
+# and the stable build does not, so a stable image answers MSG_ERR_UNKNOWN_CMD.
+# 17 is the next unused ordinal; 4 and 6 are retired and never reused.
+COMMAND_DEV_ADC = 17
+
 COMMAND_NAMES = {
     COMMAND_READ: "READ",
     COMMAND_WRITE: "WRITE",
@@ -112,6 +118,7 @@ COMMAND_NAMES = {
     COMMAND_CONFIG: "CONFIG",
     COMMAND_HW_VERSION: "HW_VERSION",
     COMMAND_LOCK_STATUS: "LOCK_STATUS",
+    COMMAND_DEV_ADC: "DEV_ADC",
 }
 
 # Control Flags — Firmware sync: firestarter.h

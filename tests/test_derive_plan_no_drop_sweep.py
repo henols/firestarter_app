@@ -169,13 +169,14 @@ def test_every_plan_yields_one_result_per_step():
 
 def test_every_unsupported_step_result_carries_the_na_verdict():
     """The NA-on-unsupported half of PRUNE-05, over the whole shipped
-    database: 4,652 of 4,652 `supported=False` steps produce a result whose
+    database: 4,671 of 4,671 `supported=False` steps produce a result whose
     verdict is `VERDICT_NA`. The unsupported count is asserted as an
     absolute, non-zero floor first -- a sweep that visited no unsupported
     steps would otherwise report zero violations and pass vacuously."""
     report = _run_whole_database_sweep()
-    assert report.unsupported_count == 4652, (
-        f"swept {report.unsupported_count} unsupported steps, expected 4652 "
+    # 4652 before the 19 DIP24_2816 erase steps became unsupported.
+    assert report.unsupported_count == 4671, (
+        f"swept {report.unsupported_count} unsupported steps, expected 4671 "
         "-- the ballast population moved and must be re-measured"
     )
     assert report.na_violations == (), (

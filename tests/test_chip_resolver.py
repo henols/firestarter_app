@@ -24,6 +24,8 @@ from firestarter.chip_resolver import resolve_chip
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
 
+from .conftest import ADAPTER_REQUIRED_TEST_CHIP, adapter_required_db
+
 
 @pytest.fixture
 def db():
@@ -84,15 +86,23 @@ def test_resolve_chip_nmos_graduated_resolves(db):
     assert result.get("algorithm") == 11
 
 
-def test_resolve_chip_adapter_required_raises_not_implemented(db):
-    """AT28C04 (adapter-required 24-pin EEPROM) must raise ChipNotImplementedError.
+def test_resolve_chip_adapter_required_raises_not_implemented():
+    """An adapter-required row must raise ChipNotImplementedError.
 
-    Proves the guard is driven by support_status, not the incidental etype string:
-    AT28C04 is Flash/EEPROM (etype-based mem_type=2, no configure_eprom) yet the host
-    still refuses because support_status='adapter-required'. The guard is universal.
+    Proves the guard is driven by support_status, not the incidental etype
+    string: the synthetic row is a copy of a supported EEPROM row, and only its
+    support_status differs. The shipped database has no adapter-required row.
     """
     with pytest.raises(ChipNotImplementedError):
-        resolve_chip("AT28C04", db=db)
+        resolve_chip(ADAPTER_REQUIRED_TEST_CHIP, db=adapter_required_db())
+
+
+def test_the_promoted_dip24_2816_rows_resolve(db):
+    """AT28C04 and AT28C16 were adapter-required. They now resolve on 0x0D."""
+    for chip in ("AT28C04", "AT28C16", "28C16A", "UPD28C04"):
+        wire = resolve_chip(chip, db=db)
+        assert wire["algorithm"] == 0x0D
+        assert wire["page-size"] == 1
 
 
 def test_resolve_chip_supported_still_resolves(db):

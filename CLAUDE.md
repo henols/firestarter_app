@@ -29,15 +29,19 @@ these steps in this order:
 The second job installs `.[test,py32]`. It imports `pyusb` and records the installed version. Then
 it runs `pytest tests/test_pyusb_api_surface.py -q`.
 
-**A push to `beta` publishes this package.** `beta-release.yml` runs on each push to `beta`:
+**Only a version tag publishes this package.** A push to a branch never publishes. A push of a tag
+`X.Y.Z`, `X.Y.ZbN` or `X.Y.ZrcN` that points at a commit on `main` starts `release.yml`:
 
-1. Its `github` job creates a GitHub pre-release.
-2. Its `pypi` job calls `publish.yml` directly, with `secrets: inherit`, and **uploads to PyPI**.
+1. It runs `ci.yml` as the gate.
+2. It builds the sdist and the wheel once.
+3. It creates the GitHub release (a pre-release for `b`/`rc`, otherwise Latest) and **uploads the
+   same files to PyPI**. PyPI never accepts the same version two times.
 
-The `pypi` job calls `publish.yml` directly for this reason: the `github` job creates the release
-with `PERSONAL_ACCESS_TOKEN`. That token does not have the `workflow` scope, so GitHub does not send
-the `release: published` event. **The workflow has no path filter.** A documentation-only push
-therefore publishes a new version too. PyPI never accepts the same version two times.
+**The version comes from the tag.** `setuptools-scm` writes `firestarter/_version.py` (gitignored) at
+install and build time. Between tags the version is `<next>.devN+g<sha>`, a PEP 440 pre-release, so
+a dev checkout behaves as a beta build. A checkout with no tags (a shallow clone) builds as
+`0.1.devN`, so CI checks out with `fetch-depth: 0`. `tools/release.sh X.Y.Z` checks the version and
+pushes the tag. `publish.yml` is a manual re-publish of an existing tag.
 
 **`mypy` is not a CI gate.** Only the local `pre-commit` config runs it. That config runs
 `ruff-check`, then `ruff-format`, then `mypy`.
@@ -106,7 +110,7 @@ serial_comm.py                      # send it over serial, read the response
 ### Release-Channel Gate
 
 `channel.py` decides what a build shows. `is_prerelease_build()` returns true for a PEP 440
-pre-release, which is a build from `beta`. Two lists control the gate:
+pre-release: a `b`/`rc` tag, or any build between tags. Two lists control the gate:
 
 - `BETA_ONLY_BOARDS` — boards that only a pre-release build shows. Two places enforce it.
   `cli_handlers.py` makes `_BOARD_CHOICES` at import, so `fw --help` on a stable build never shows a

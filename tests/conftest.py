@@ -331,3 +331,34 @@ def app_context() -> AppContext:
     being forced onto a single shared fixture (D-10).
     """
     return make_app_context()
+
+
+# The shipped database has no adapter-required row since the DIP24_2816 family
+# was promoted to 0x0D. The status and its host code path still exist: the
+# generator guard can still emit one for a 24-pin erasable EPROM-proto row on
+# another pin map. Tests of that path use this synthetic row.
+ADAPTER_REQUIRED_TEST_CHIP = "ADAPTERTEST24"
+ADAPTER_REQUIRED_TEST_REASON = (
+    "adapter required: synthetic test row for the adapter-required host path"
+)
+
+
+def adapter_required_db() -> EpromDatabase:
+    """A hardware-free database plus one synthetic adapter-required row.
+
+    The row is a copy of the AT28C16 row with its own part number, so every
+    field that the host reads is realistic. Only the name, the status and the
+    reason differ.
+    """
+    import copy
+
+    from firestarter.database import EpromDatabase
+
+    db = EpromDatabase(skip_local_override=True)
+    raw, manufacturer = db.get_eprom_config("AT28C16")
+    row = copy.deepcopy(raw)
+    row["part_number"] = ADAPTER_REQUIRED_TEST_CHIP
+    row["support_status"] = "adapter-required"
+    row["unsupported_reason"] = ADAPTER_REQUIRED_TEST_REASON
+    db.proms[manufacturer].append(row)
+    return db

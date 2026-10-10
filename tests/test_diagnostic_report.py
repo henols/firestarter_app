@@ -932,12 +932,12 @@ def test_ladder_state_single_source_in_to_dict():
 def test_db_diff_real_db_read():
     from firestarter.diagnostic_report import build_db_diff
 
-    name = "AT28C04,AT28HC04"
+    name = "X88C64P,X88C64S"
     raw_config, _manufacturer = _REAL_DB.get_eprom_config(name)
     expected = raw_config.get("support_status", "supported")
     assert (
-        expected == "adapter-required"
-    )  # sanity: known fixture from test_chip_test.py
+        expected == "protocol-not-implemented"
+    )  # sanity: the one non-supported row of the shipped database
 
     results = [StepResult(op="id", verdict=VERDICT_OK)]
     diff = build_db_diff(name, _REAL_DB, results)

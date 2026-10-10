@@ -8,6 +8,7 @@ Custom Logging Utilities
 """
 
 import logging
+import os
 import sys
 
 
@@ -49,5 +50,16 @@ class SingleLineStatusHandler(logging.StreamHandler):
                 self._status_line_active = False  # Ensure it's reset
 
             self.flush()
+        except BrokenPipeError:
+            # The reader closed the pipe, for example `firestarter list | head`.
+            # There is nobody left to write to: stop quietly. Point the stream
+            # at /dev/null first, so the flush at interpreter exit does not
+            # raise the same error again.
+            try:
+                devnull = os.open(os.devnull, os.O_WRONLY)
+                os.dup2(devnull, self.stream.fileno())
+            except (AttributeError, OSError, ValueError):
+                pass
+            sys.exit(1)
         except Exception as e:  # noqa: F841  # bind 'as e' uniformly
             self.handleError(record)

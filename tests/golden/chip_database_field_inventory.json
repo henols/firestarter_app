@@ -12,7 +12,8 @@
     "db_is_generated": "firestarter/data/chip_database.json is produced by tools/build_db.py from the upstream tools/infoic.xml (plus the hand-curated tools/extra_chips.json supplement) and is never hand-edited, which is why this gate also reads the generator.",
     "generator_scan_scope": "generator_emitted_chip_entry_keys is NOT purely an ast walk of build_db.py's `chip_entry` construction -- five of the eleven top-level keys (datasheet, provenance, source, verification_note, verification_status) are never assigned through a variable named chip_entry at all. They enter chip_database.json via the VAR-05/D-10 post-decode merge (`complete_db.setdefault(mfg, []).extend(extra_chips)`) that reads tools/extra_chips.json wholesale and appends its two hand-curated chip records verbatim. Confirmed in-session: an ast walk scoped to `chip_entry` alone finds exactly 21 names, 5 short of this file's 26 -- the missing 5 are precisely the sparse-subset keys `why_counts_not_names` warns about. The gate's live derivation is therefore the UNION of an ast walk over build_db.py's `chip_entry` construction and a key scan of tools/extra_chips.json; both paths are covered, so a new field entering through either one is caught.",
     "phase_149_update": "Phase 149 Plan 03 (PGSZ-01) re-derived programming.page_size from 2 to 20 via the same independent traversal this file's own how_to_update instructs -- never hand-edited. build_db.py's provenance-keyed emit arm now also emits page_size for the 18 upstream-native protocol_id == 0x0D rows (15 at 128, 3 at 64), on top of the 2 pre-existing datasheet-curated _PAGE_SIZE_BY_PART rows this field's original count-of-2 recorded. Every other number in this file is unchanged; confirmed by an independent re-derivation of every level, not just this one key.",
-    "phase_194_update": "Phase 194 Plan 03 (PAGE-02, D-01/D-02) re-derived programming.page_size from 20 to 45 via the same independent traversal -- never hand-edited. build_db.py's _PAGE_SIZE_BY_PART curated table was deleted; the emit arm's condition now reads the row's own upstream protocol_id being 0x0D or 0x05, with no curated arm remaining. The 25-row delta is the 27 upstream-native 0x05 rows minus the 2 that already carried the curated value. Every other number in this file -- including infoic_page_size_raw, still 744 -- was re-derived in the same traversal and confirmed unchanged."
+    "phase_194_update": "Phase 194 Plan 03 (PAGE-02, D-01/D-02) re-derived programming.page_size from 20 to 45 via the same independent traversal -- never hand-edited. build_db.py's _PAGE_SIZE_BY_PART curated table was deleted; the emit arm's condition now reads the row's own upstream protocol_id being 0x0D or 0x05, with no curated arm remaining. The 25-row delta is the 27 upstream-native 0x05 rows minus the 2 that already carried the curated value. Every other number in this file -- including infoic_page_size_raw, still 744 -- was re-derived in the same traversal and confirmed unchanged.",
+    "dip24_2816_update": "The DIP24_2816 family change re-derived two counts via the same independent traversal -- never hand-edited. programming.page_size 45 -> 64: build_db.py now emits the upstream write granularity for the 19 DIP24_2816 rows. top-level unsupported_reason 10 -> 1: the damage guard exempts the DIP24_2816 layout, so its 9 adapter-required rows became supported and X88C64P is the only row with a reason. Every other number was re-derived in the same traversal and is unchanged."
   },
   "totals": {
     "manufacturers": 59,
@@ -25,7 +26,7 @@
       "pinout": 746,
       "programming": 746,
       "support_status": 746,
-      "unsupported_reason": 10,
+      "unsupported_reason": 1,
       "datasheet": 2,
       "provenance": 2,
       "source": 2,
@@ -40,7 +41,7 @@
       "infoic_page_size_raw": 744,
       "protect_off_before": 744,
       "protect_on_after": 744,
-      "page_size": 45
+      "page_size": 64
     },
     "electrical": {
       "pin_count": 746,

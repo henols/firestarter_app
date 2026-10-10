@@ -35,3 +35,6 @@ anything.txt
 CLAUDE.md
 
 .coverage
+
+# Written by setuptools-scm from the git tag.
+firestarter/_version.py

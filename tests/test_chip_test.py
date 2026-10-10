@@ -272,7 +272,7 @@ def test_fingerprint_evidence_fields():
 #   AS29F002T    -- protocol 0x06, Flash/EEPROM, real nonzero chip-id (21168),
 #                   FLAG_CAN_ERASE set (algorithm != 5)
 #   DS1220(RW)   -- protocol 0x28, SRAM, blank-check must be NA
-#   AT28C04,AT28HC04 -- support_status "adapter-required" (resolve_chip refuses)
+#   X88C64P,X88C64S -- support_status "protocol-not-implemented" (resolve_chip refuses)
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
@@ -365,9 +365,9 @@ def test_derive_plan_never_calls_resolve_chip(monkeypatch):
 
 
 def test_derive_bypasses_guard_for_non_supported_chip():
-    name = "AT28C04,AT28HC04"
+    name = "X88C64P,X88C64S"
     raw_config, _manufacturer = _REAL_DB.get_eprom_config(name)
-    assert raw_config.get("support_status") == "adapter-required"
+    assert raw_config.get("support_status") == "protocol-not-implemented"
 
     # must NOT raise ChipNotImplementedError
     plan = derive_plan(name, _REAL_DB, write_scope="full")

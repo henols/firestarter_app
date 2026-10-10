@@ -498,29 +498,24 @@ def test_host04_named_pre_sdp_class_is_refused() -> None:
     )
 
 
-# Leg 8: all 9 adapter-required parts are refused by capability
+# Leg 8: all 19 DIP24_2816 parts are refused by capability
 
 
-def test_all_nine_adapter_required_parts_are_refused_by_capability() -> None:
-    """Makes D-08's capability-before-support-status ordering load-bearing on
-    all nine adapter-required parts, not a hypothetical subset: an
-    adapter-required 0x0D part with no SDP must hear "this part has no SDP"
-    rather than "get an adapter", because no adapter would have helped."""
+def test_all_nineteen_dip24_2816_parts_are_refused_by_capability() -> None:
+    """The DIP24_2816 family has no SDP. Nine of its parts were adapter-required
+    and are now supported, so the capability refusal is what keeps the SDP
+    unlock off every one of them."""
     db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
     selected = _select_0x0d_chips(db)
 
-    adapter_required = [
-        (mfr, chip)
-        for mfr, chip in selected
-        if chip.get("support_status") == "adapter-required"
-    ]
-    assert len(adapter_required) == 9, (
-        "HOST-04: expected exactly 9 algorithm==13 entries with "
-        f"support_status == 'adapter-required', found {len(adapter_required)}."
+    dip24 = [(mfr, chip) for mfr, chip in selected if chip["pinout"] == "DIP24_2816"]
+    assert len(dip24) == 19, (
+        f"expected exactly 19 algorithm==13 entries on DIP24_2816, found {len(dip24)}."
     )
+    assert all(chip["support_status"] == "supported" for _, chip in dip24)
 
     offenders = []
-    for mfr, chip in adapter_required:
+    for mfr, chip in dip24:
         part_number = chip.get("part_number", "?")
         entry = {"name": part_number, "protocol-id": chip["programming"]["algorithm"]}
         allowed, reason = sdp.sdp_capability_for_entry(entry, part_number)
@@ -530,8 +525,8 @@ def test_all_nine_adapter_required_parts_are_refused_by_capability() -> None:
             )
 
     assert not offenders, (
-        "HOST-04: every adapter-required algorithm==13 part must be refused "
-        "by capability. Offenders:\n" + "\n".join(offenders)
+        "every DIP24_2816 part must be refused by capability. "
+        "Offenders:\n" + "\n".join(offenders)
     )
 
 

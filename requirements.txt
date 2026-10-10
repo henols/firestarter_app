@@ -4,7 +4,7 @@
 pyserial>=3.5
 requests>=2.20
 tqdm>=4.60
-click>=8.1
+click>=8.5
 rich>=14.0
 packaging>=21.0
 urllib3>=2.6.3 # not directly required, pinned by Snyk to avoid a vulnerability
