@@ -78,7 +78,7 @@ def test_probe_port_recovers_from_spurious_empty_input_ahead_of_real_ack() -> No
 
     with (
         patch.object(SerialCommunicator, "__init__", _make_init(fake_ser)),
-        patch.object(SerialCommunicator, "send_json_command", return_value=15),
+        patch.object(SerialCommunicator, "send_command", return_value=15),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
     ):
         comm = SerialCommunicator._probe_port(
@@ -108,7 +108,7 @@ def test_probe_port_recovers_from_two_spurious_empty_input_frames_ahead_of_real_
 
     with (
         patch.object(SerialCommunicator, "__init__", _make_init(fake_ser)),
-        patch.object(SerialCommunicator, "send_json_command", return_value=15),
+        patch.object(SerialCommunicator, "send_command", return_value=15),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
     ):
         comm = SerialCommunicator._probe_port(
@@ -132,7 +132,7 @@ def test_probe_port_still_fails_on_a_genuine_unrecoverable_error() -> None:
 
     with (
         patch.object(SerialCommunicator, "__init__", _make_init(fake_ser)),
-        patch.object(SerialCommunicator, "send_json_command", return_value=15),
+        patch.object(SerialCommunicator, "send_command", return_value=15),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),
     ):

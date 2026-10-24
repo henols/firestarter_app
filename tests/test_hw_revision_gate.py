@@ -359,7 +359,7 @@ def test_exactly_two_pinouts_emit_the_gated_vpp_line():
 def _probe(command, revision):
     with (
         patch.object(SerialCommunicator, "expect_ack", return_value=(True, "Ready")),
-        patch.object(SerialCommunicator, "send_json_command", return_value=42),
+        patch.object(SerialCommunicator, "send_command", return_value=42),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),
         patch.object(SerialCommunicator, "firmware_identity", "3.0.0:uno"),

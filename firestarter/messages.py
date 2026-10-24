@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 83
+Total messages: 84
 """
 
 from dataclasses import dataclass
@@ -92,7 +92,7 @@ MSG_WARN_SDP_UNLOCK_SKIPPED = 0x86
 MSG_WARN_SDP_TBLC_EXCEEDED = 0x87
 MSG_WARN_VCC_IMPLAUSIBLE = 0x88
 MSG_WARN_NOT_CALIBRATED = 0x89
-MSG_ERR_BAD_JSON = 0xA0
+MSG_ERR_BAD_FRAME = 0xA0
 MSG_ERR_NO_CMD = 0xA1
 MSG_ERR_SETUP = 0xA2
 MSG_ERR_PARSE_CFG = 0xA3
@@ -126,6 +126,7 @@ MSG_ERR_ENERGY_CAP = 0xBE
 MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_ERR_FL4_PAGE_ALIGN = 0xC0
 MSG_ERR_CALIBRATION = 0xC1
+MSG_ERR_BAD_COMMAND = 0xC2
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -509,9 +510,9 @@ CATALOG: dict[int, MessageDef] = {
     ),
     0xA0: MessageDef(
         id=0xA0,
-        name="MSG_ERR_BAD_JSON",
+        name="MSG_ERR_BAD_FRAME",
         severity=SEVERITY_ERROR,
-        format="Bad JSON",
+        format="Unsupported command frame",
         params=(),
         param_bytes=0,
         wire_format="id_frame",
@@ -813,6 +814,15 @@ CATALOG: dict[int, MessageDef] = {
         param_bytes=8,
         wire_format="id_frame",
     ),
+    0xC2: MessageDef(
+        id=0xC2,
+        name="MSG_ERR_BAD_COMMAND",
+        severity=SEVERITY_ERROR,
+        format="Command refused, reason %d",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
     0xE0: MessageDef(
         id=0xE0,
         name="MSG_DATA_PROGRESS",
@@ -900,7 +910,7 @@ CATALOG: dict[int, MessageDef] = {
 DBG_FIRESTARTER_STARTED = 0x00
 DBG_FIRMWARE_VERSION = 0x01
 DBG_HARDWARE_REVISION = 0x02
-DBG_PARSE_JSON = 0x03
+DBG_PARSE_COMMAND = 0x03
 DBG_CMD = 0x04
 DBG_SETUP = 0x05
 DBG_CMD_FINISHED = 0x06
@@ -984,9 +994,9 @@ DEBUG_CATALOG: dict[int, MessageDef] = {
     ),
     0x03: MessageDef(
         id=0x03,
-        name="DBG_PARSE_JSON",
+        name="DBG_PARSE_COMMAND",
         severity=SEVERITY_DATA,
-        format="Parse JSON",
+        format="Parse command",
         params=(),
         param_bytes=0,
         wire_format="id_frame",

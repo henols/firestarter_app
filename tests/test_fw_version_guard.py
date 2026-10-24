@@ -3,7 +3,7 @@ SerialCommunicator._validate_firmware_version.
 
 The staticmethod takes a version_str + bool and never reads os.environ
 (D-02). These tests exercise the policy directly — no serial mock, no
-_probe_port involvement, no patching of expect_ack/send_json_command/
+_probe_port involvement, no patching of expect_ack/send_command/
 consume_remaining_input/disconnect/__init__. The complementary file
 test_fwguard.py covers the integration path through _probe_port; both
 coexist.

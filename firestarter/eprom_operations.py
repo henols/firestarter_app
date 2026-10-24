@@ -1651,7 +1651,7 @@ class EpromOperator:
         # Outgoing: the hook is threaded into _operation_context so it corrupts the
         #   SETUP command frame at connection time. This is the ONLY corruptible
         #   host->fw command frame — a READ's MAIN phase emits plaintext acks
-        #   (send_string), never send_json_command, so the previous "set the hook
+        #   (send_string), never send_command, so the previous "set the hook
         #   after setup" wiring never fired -- a false negative. The firmware rejects the
         #   corrupt frame (CRC8-before-parse / inter-byte timeout) -> connection setup
         #   fails with a bounded error == the expected outcome.
@@ -1921,7 +1921,7 @@ class EpromOperator:
             comm.consume_remaining_input()
 
             # 1. Baseline clean command on the open connection.
-            comm.send_json_command(fw_cmd)
+            comm.send_command(fw_cmd)
             baseline_ok, _ = comm.expect_ack()
             comm.consume_remaining_input()
             if not baseline_ok:
@@ -1930,7 +1930,7 @@ class EpromOperator:
                 # 2. One corrupted command frame, timed to the firmware error response.
                 comm._fault_inject_outgoing = hook  # type: ignore[attr-defined]
                 _t0 = time.monotonic()
-                comm.send_json_command(fw_cmd)
+                comm.send_command(fw_cmd)
                 try:
                     corrupt_is_ok, corrupt_msg = comm.expect_ack()
                 except SerialTimeoutError as e:
@@ -1944,7 +1944,7 @@ class EpromOperator:
                 )
 
                 # 3. Recovery: clean command on the SAME open connection.
-                comm.send_json_command(fw_cmd)
+                comm.send_command(fw_cmd)
                 try:
                     recovery_ok, _ = comm.expect_ack()
                 except SerialTimeoutError:

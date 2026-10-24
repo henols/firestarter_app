@@ -71,7 +71,9 @@ database._map_data()                # get algorithm, vpp_mv, pinout
      ↓
 database.convert_to_programmer()    # change DIP pins to bus config
      ↓
-eprom_operations.py                 # make the JSON command
+eprom_operations.py                 # make the command dict
+     ↓
+command_codec.py                    # encode the dict as a binary command frame
      ↓
 serial_comm.py                      # send it over serial, read the response
 ```
@@ -88,6 +90,8 @@ serial_comm.py                      # send it over serial, read the response
 - `firestarter/compare.py` — the one host-side comparison engine. `verify_eprom`, `chip_test` and
   the write guard all use it.
 - `firestarter/serial_comm.py` — the serial protocol, as an INIT/MAIN/END state machine.
+- `firestarter/command_codec.py` — encodes a command dict as a binary command frame. It uses the
+  layout in the generated `firestarter/command_frame.py`.
 - `firestarter/frame_parser.py` — CRC8, `cobs_encode`, `cobs_decode`, `_decode_param`,
   `MAGIC_PREAMBLE`, and the `Response` and `LogMessage` types. You can test it without serial I/O.
 - `firestarter/codec.py` — `format_message`, `decode_id_frame` and the revision-silkscreen text.
@@ -124,25 +128,33 @@ is `FIRESTARTER_DEV_TOOLS`. It enables the gated `dev` subcommands only when its
 
 ### Wire Protocol
 
-The host sends each command as COBS-framed JSON with a CRC8, at 250000 baud
-(`serial_comm.py::send_json_command`). The `algorithm` field holds the upstream `protocol_id`
-integer. The firmware dispatches on it.
+The host sends each command as one binary command frame, framed as COBS with a CRC8, at 250000
+baud (`serial_comm.py::send_command`). The code builds a command dict, and
+`command_codec.encode_command` encodes the dict as the frame:
 
-Example write command:
-
-```json
-{
-  "cmd": 2,
-  "algorithm": 7,
-  "memory-size": 65536,
-  "vpp_mv": 12000,
-  "pulse-delay": 0,
-  "pin-count": 28,
-  "chip-id": 42495,
-  "flags": 2,
-  "bus-config": { ... }
-}
 ```
+[0xF5 magic][version u8][cmd u8][flags u16 BE][length u16 BE][payload]
+```
+
+Each multi-byte field is big-endian. The payload has a fixed layout for each command: a 58-byte
+memory payload, a 14-byte config payload, or no payload. The `algorithm` key goes into the
+`protocol` field. The firmware dispatches on it.
+
+**`firestarter/command_frame.py` is a generated file. Do not edit it.** The source of truth is
+`tools/protocol/command_frame.toml` in the meta repository. Codegen runs only there
+(`tools/protocol/sync_to_subrepos.sh`). The same run writes the golden vectors in
+`tests/golden/command_vectors.json`. The firmware native tests decode the same frames.
+
+The encoder raises `CommandEncodeError` for a key that the frame cannot carry, and for a value
+that is out of range. It raises before the host opens a port. The firmware makes the same checks.
+If a check fails, the firmware sends `MSG_ERR_BAD_COMMAND` (`0xC2`). Its parameter is a reason
+code from `command_frame.REFUSALS`.
+
+**Firmware older than the binary protocol** answers each binary frame with `MSG_ERR_BAD_FRAME`
+(`0xA0`), because its JSON parser refuses the `0xF5` byte. `setup_command` then raises
+`FirmwareOutdatedError`. One exception applies: the firmware-update read path (`fw`) sends the
+version query again as the JSON `{"state":13}`. It does this so that it can read the version and the
+board of the firmware that it is about to replace. No other path sends JSON.
 
 The firmware sends INIT, MAIN, END and status messages as catalog message ID frames. It still sends
 `OK` and `DATA` as text lines. The host parser accepts the text prefixes `OK`, `DATA`, `ERROR`,
@@ -210,14 +222,14 @@ that pin is correct.
 
 ### Constants
 
-`firestarter/constants.py` duplicates values from the firmware. Change both sides together.
+`firestarter/constants.py` duplicates values from the firmware. Change both sides together. The
+command frame layout is not in this table: it is generated (see Wire Protocol).
 
 | Block in `constants.py` | Firmware source of truth | Keep the same |
 |---|---|---|
 | Command codes, control flags, `CMD_FRAME_MAX` | `firestarter_fw/include/firestarter.h` | values |
 | `CTRL_*` control-register bits | `firestarter_fw/include/rurp_pinout.h` | names and hex values |
 | `REVISION_*` hardware revisions | `firestarter_fw/include/rurp_shield.h` | names and byte values |
-| `JSON_KEY_*` command keys | `firestarter_fw/src/json_parser.c` | key strings |
 
 The project reserves two revision bytes. `0xFF` shows that no EEPROM override is present. `0xFE`
 (`REVISION_UNKNOWN`) shows that the ADC band-gap check found no band.

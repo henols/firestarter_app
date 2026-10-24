@@ -154,7 +154,7 @@ def test_c_probe_port_propagates_protocol_not_implemented_error() -> None:
       - 0xBB ERROR id-frame (the user-command ack — raises ProtocolNotImplementedError)
 
     consume_remaining_input is mocked to a no-op so it does not drain the 0xBB frame.
-    send_json_command is mocked to a no-op (no real serial write).
+    send_command is mocked to a no-op (no real serial write).
     disconnect is mocked to a no-op (avoids interacting with the fake serial on error).
     """
     fake_ser = _FakeSerial()
@@ -173,7 +173,7 @@ def test_c_probe_port_propagates_protocol_not_implemented_error() -> None:
 
     with (
         patch.object(SerialCommunicator, "__init__", mock_init),
-        patch.object(SerialCommunicator, "send_json_command", return_value=None),
+        patch.object(SerialCommunicator, "send_command", return_value=None),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),
     ):
@@ -274,7 +274,7 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
 
     with (
         patch.object(SerialCommunicator, "__init__", mock_init),
-        patch.object(SerialCommunicator, "send_json_command", return_value=None),
+        patch.object(SerialCommunicator, "send_command", return_value=None),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),
         patch.object(
@@ -336,7 +336,7 @@ def test_a_cli_read_0xbb_at_probe_time_surfaces_unsupported_protocol(
     try:
         with (
             patch.object(SerialCommunicator, "__init__", mock_init),
-            patch.object(SerialCommunicator, "send_json_command", return_value=None),
+            patch.object(SerialCommunicator, "send_command", return_value=None),
             patch.object(
                 SerialCommunicator, "consume_remaining_input", return_value=None
             ),

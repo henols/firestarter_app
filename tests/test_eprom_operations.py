@@ -1676,7 +1676,7 @@ class TestFaultInjectCycle:
         captured: dict = {}
 
         # Capture the hooks by intercepting _operation_context and reading the armed
-        # hook off a throwaway comm via send_json_command behavior is covered in
+        # hook off a throwaway comm via send_command behavior is covered in
         # test_serial_comm; here we assert the hook transforms a sample frame.
         from contextlib import contextmanager
 
@@ -1724,7 +1724,7 @@ class _FakeNakComm:
     def consume_remaining_input(self, *a, **kw) -> None:
         pass
 
-    def send_json_command(self, cmd) -> int:
+    def send_command(self, cmd) -> int:
         self.sends.append(self._fault_inject_outgoing is not None)
         return 1
 

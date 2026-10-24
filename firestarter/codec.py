@@ -12,6 +12,7 @@ import logging
 import struct
 from typing import Any, List  # noqa: UP035
 
+from firestarter.command_frame import REFUSALS
 from firestarter.constants import (
     COMMAND_NAMES,
     REVISION_0,
@@ -29,6 +30,7 @@ from firestarter.messages import (
     DEBUG_CATALOG,
     MSG_DATA_CHUNK,
     MSG_DEBUG,
+    MSG_ERR_BAD_COMMAND,
     MSG_INFO_CMD,
     MSG_INFO_HW,
     MSG_INFO_PHYSICAL_HW,
@@ -121,6 +123,10 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
     if msg_id == MSG_INFO_PHYSICAL_HW and len(params) == 1:
         byte = params[0]
         return f"Physical HW: {_REVISION_SILKSCREEN.get(byte, f'Rev{byte}')}"
+
+    if msg_id == MSG_ERR_BAD_COMMAND and len(params) == 1:
+        code = params[0]
+        return f"Command refused: {REFUSALS.get(code, f'reason {code}')}"
 
     if msg_id == MSG_INFO_CMD and len(params) == 1:
         cmd = params[0]

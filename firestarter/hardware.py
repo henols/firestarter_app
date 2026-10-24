@@ -101,7 +101,7 @@ class HardwareManager:
             # If the command sent by find_and_connect was just to establish connection,
             # and the actual data command needs to be sent *after* connection,
             # then we'd do:
-            # comm.send_json_command(actual_data_command_dict)
+            # comm.send_command(actual_data_command_dict)
             # is_ok, msg = comm.expect_ack()
             # For HW_VERSION, FW_VERSION, CONFIG, the initial command IS the data command.  # noqa: E501
 
