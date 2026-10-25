@@ -6031,7 +6031,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -6058,7 +6061,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -15106,7 +15112,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -15133,7 +15142,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -16273,7 +16285,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -16486,7 +16501,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -16513,7 +16531,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -19156,7 +19177,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -19369,7 +19393,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -19396,7 +19423,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -20214,7 +20244,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -20394,7 +20427,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -20421,7 +20457,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -21742,7 +21781,10 @@
           11,
           12
         ],
-        "rw-pin": 14
+        "rw-pin": 14,
+        "static-high": [
+          13
+        ]
       },
       "chip-id": 0,
       "flags": 0,

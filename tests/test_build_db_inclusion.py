@@ -63,7 +63,7 @@ class TestVariantDecodeClassification:
     These two assertions describe the POST-Plan-02 state, as amended by
     197-04 (D-08/D-17):
       - FM1608  : GREEN against the current DB (algorithm 40 / SRAM /
-                  DIP28_JEDEC_SRAM_8K — the type=4 SRAM arm; the Phase-84
+                  DIP28_6264 — the type=4 SRAM arm; the Phase-84
                   'FRAM' relabel was deleted as a defect in 197-04, which
                   also moved electrical.vcc_mv from 3300 to 5000 because the
                   relabel had been bypassing the SRAM single-rail rewrite).
@@ -83,7 +83,7 @@ class TestVariantDecodeClassification:
         consistent with its Ramtron siblings FM1208/FM16W08/FM1808/FM18L08,
         which already read SRAM), electrical.vcc_mv 5000 (up from 3300 --
         the relabel had been bypassing the SRAM single-rail rewrite), and
-        pinout 'DIP28_JEDEC_SRAM_8K'. GREEN against the current DB.
+        pinout 'DIP28_6264'. GREEN against the current DB.
         """
         db = _load_db()
         found = []
@@ -111,8 +111,8 @@ class TestVariantDecodeClassification:
                 f"(SRAM single-rail rewrite, no longer bypassed by the relabel), "
                 f"got {vcc_mv!r}"
             )
-            assert pinout == "DIP28_JEDEC_SRAM_8K", (
-                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_JEDEC_SRAM_8K', "
+            assert pinout == "DIP28_6264", (
+                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_6264', "
                 f"got {pinout!r}"
             )
 
@@ -390,7 +390,7 @@ class TestSramPinoutCorrections:
       Previously: DIP24_2716 (vpp-pin=[21] — wrong, no WE strobe).
 
     Group 2a — 5 x 28-pin SRAM, 8K (DS1225, BQ4010YMA, W2464/2465, 6164/6264):
-      Correct pinout: DIP28_JEDEC_SRAM_8K (13 address bits, WE at pin 27).
+      Correct pinout: DIP28_6264 (13 address bits, WE at pin 27).
       Previously: DIP28_2764 (EPROM pinout — wrong, no WE strobe).
 
     Group 2b — 5 x 28-pin SRAM, 32K (DS1230, BQ4011YMA, W24256/24257A, 61256/62256):
@@ -399,7 +399,7 @@ class TestSramPinoutCorrections:
 
     Evidence:
       - DIP24_6116: rw-pin=[21] (WE); DS1220 datasheet pin 21 = WE (piersfinlayson/one-rom verified)
-      - DIP28_JEDEC_SRAM_8K: 13 address bits (A0-A12) for 8K per pinouts.json comment
+      - DIP28_6264: 13 address bits (A0-A12) for 8K per pinouts.json comment
       - DIP28_28C256: 15 address bits (A0-A14) + rw-pin=[27]; JEDEC 62256 standard A14 at pin 1
     """
 
@@ -430,9 +430,9 @@ class TestSramPinoutCorrections:
             )
 
     def test_group2a_8k_28pin_sram_gets_dip28_jedec_sram_8k(self):
-        """6264 (8K 28-pin SRAM) must have pinout == 'DIP28_JEDEC_SRAM_8K' after DB-02 regen.
+        """6264 (8K 28-pin SRAM) must have pinout == 'DIP28_6264' after DB-02 regen.
 
-        DIP28_JEDEC_SRAM_8K has 13 address bits (A0-A12) and rw-pin=[27] (WE).
+        DIP28_6264 has 13 address bits (A0-A12) and rw-pin=[27] (WE).
         DIP28_2764 (wrong) is an EPROM pinout with no WE strobe.
         """
         db = _load_db()
@@ -445,8 +445,8 @@ class TestSramPinoutCorrections:
         assert found, "6264 not found in chip_database.json"
         for mfg, chip in found:
             pinout = chip.get("pinout")
-            assert pinout == "DIP28_JEDEC_SRAM_8K", (
-                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_JEDEC_SRAM_8K' "
+            assert pinout == "DIP28_6264", (
+                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_6264' "
                 f"(8K SRAM, 13 addr bits + WE), got {pinout!r} (DB-02 Group 2a not fixed)"
             )
             assert chip.get("support_status") == "supported", (

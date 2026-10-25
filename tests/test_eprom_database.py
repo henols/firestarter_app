@@ -218,6 +218,22 @@ class TestDipToRurpPinTranslation:
         assert len(chip["bus-config"]["bus"]) == bus_lines
         assert chip["memory-size"] == 1 << bus_lines
 
+    @pytest.mark.parametrize("name", ["6164", "W2464", "M48T08", "FM1608"])
+    def test_8k_sram_holds_pin_26_high_for_cs2(self, name):
+        """Pin 26 is CS2 (active high) on a 6264 and NC on FM1608; an
+        undriven line would sit low and deselect the 6264."""
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom(name)
+        assert chip["pin-map"] == "DIP28_6264"
+        assert chip["bus-config"]["static-high"] == [pin_conversions[28][26]]
+        assert len(chip["bus-config"]["bus"]) == 13
+
+    def test_32k_sram_keeps_pin_26_as_a13(self):
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom("FM1808")
+        assert chip["pin-map"] == "DIP28_28C256"
+        assert "static-high" not in chip["bus-config"]
+
     def test_dip28_w27c512_bus_has_16_lines(self):
         """W27C512 has 16 address lines (A0-A15) — bus list must have 16 entries."""
         db = EpromDatabase(skip_local_override=True)
