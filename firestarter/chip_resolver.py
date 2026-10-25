@@ -9,7 +9,7 @@ Single chokepoint between CLI dispatch and the EPROM database lookup/conversion.
 
 from typing import Any
 
-from firestarter.database import EpromDatabase
+from firestarter.database import ROM_CE, ROM_OE, EpromDatabase
 from firestarter.exceptions import (
     AmbiguousChipNameError,
     ChipNotFoundError,
@@ -133,6 +133,15 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     # A pin map with fewer address lines than the chip's size needs would
     # repeat one window of the chip across the whole operation, silently.
     bus = data.get("bus-config", {}).get("bus")
+    # The shield wires one socket pin to its CE driver and one to its OE
+    # driver. get_bus_config gives an address pin there the ROM_CE / ROM_OE
+    # sentinel, which is not a bus line the firmware can drive.
+    if bus and {ROM_CE, ROM_OE} & set(bus):
+        raise ChipNotImplementedError(
+            f"{name}: its pin map puts an address line on a socket pin that the "
+            "shield drives as CE or OE. The programmer cannot drive that "
+            "address line."
+        )
     if bus and data["memory-size"] > 1 << len(bus):
         raise ChipNotImplementedError(
             f"{name}: its pin map has {len(bus)} address lines, which reach "

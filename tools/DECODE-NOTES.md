@@ -627,7 +627,7 @@ The filter is every row with `electrical.vpp_mv` at 18000 mV or more. The map is
 | direct-vpe | 25000 mV | SGS-THOMSON | ETC2716,M2716 | 0x0B | DIP24_2716 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 25000 mV | ST | ETC2716,M2716 | 0x0B | DIP24_2716 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2516 | 0x0B | DIP24_2716 | Hardcoded in the supplement (`tools/extra_chips.json`), `UNVERIFIED`, no write proof. Not from the decode or the override file. |
-| direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2532 | 0x0B | DIP24_2532 | Hardcoded in the supplement (`tools/extra_chips.json`), `UNVERIFIED`, no write proof. Not from the decode or the override file. |
+| direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2532 | 0x0B | DIP24_2532 | Hardcoded in the supplement (`tools/extra_chips.json`), `UNVERIFIED`, no write proof. Not from the decode or the override file. `adapter-required`: the shield drives its pin 18 (A11) as CE. |
 | direct-vpe | 21000 mV | SGS-THOMSON | M2732A | 0x0B | DIP24_2732 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 21000 mV | ST | M2732A | 0x0B | DIP24_2732 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 18000 mV | AMD | AM2716 | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |

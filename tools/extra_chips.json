@@ -29,9 +29,10 @@
       "datasheet": "firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf",
       "provenance": "VAR-05 / D-10 — TI 2532 is a physically real 4KB 24-pin UV-EPROM with a NON-JEDEC pinout (2532 != JEDEC 2732); absent from minipro infoic.xml. The 2516_EPROM.pdf is the TI 2500-series UV-EPROM family datasheet covering the 2516/2532 lineage; VPP=pin 21 / A11=pin 18 / !PD-PGM=pin 20 distinguishes the 2532 from the DIP24_2732 layout. Modeled by the new DIP24_2532 pinout entry. Carries the same UNVERIFIED posture as the 2516 row (no on-hand bench proof).",
       "part_number": "2532",
-      "support_status": "supported",
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 18 as CE and pin 20 as OE, but on the 2532 pin 18 is A11 and pin 20 is PD/PGM. The shield cannot drive A11, so only the lower 2 KB can be addressed, and the program pulse would go to A11. An adapter must move those pins.",
       "verification_status": "UNVERIFIED",
-      "verification_note": "SAFE-04 / D-11: resolvable for read/info but NOT write-graduated — no on-hand 2532 silicon was bench-tested. Non-JEDEC 24-pin oddball; the DIP24_2532 pinout is a tentative leaf layout requiring bench validation. VPP lands on pin 21 (DIP24_2532 vpp-pin) per the TI family datasheet — the GATE-03 structural VPP guard is satisfied.",
+      "verification_note": "SAFE-04 / D-11: no on-hand 2532 silicon was bench-tested. Non-JEDEC 24-pin oddball; the DIP24_2532 pinout is a tentative leaf layout requiring bench validation. VPP lands on pin 21 (DIP24_2532 vpp-pin) per the TI family datasheet — the GATE-03 structural VPP guard is satisfied. Socket pin 18 is the shield's CE driver, not an address latch, so host 3.2.4 sent bus line 256 (ROM_CE) for A11; firmware 3.2.1 truncated it to line 0, and later firmware refuses the frame. resolve_chip now refuses the row on its status.",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,

@@ -191,5 +191,18 @@ def test_resolve_chip_refuses_a_pin_map_narrower_than_the_chip(db):
         resolve_chip("D27011", db)
 
 
+@pytest.mark.parametrize("name", ["2532", "MBM27C1000"])
+def test_resolve_chip_refuses_an_address_line_on_a_ce_or_oe_pin(db, name):
+    """2532 has A11 on pin 18 and the 27C301 layout has A16 on pin 24: the
+    shield drives those pins as CE and OE. The rows are adapter-required; an
+    override that marks one supported is still refused before any wire."""
+    raw, _ = db.get_eprom_config(name)
+    assert raw["support_status"] == "adapter-required"
+    raw["support_status"] = "supported"
+    del raw["unsupported_reason"]
+    with pytest.raises(ChipNotImplementedError, match="drives as CE or OE"):
+        resolve_chip(name, db)
+
+
 def test_resolve_chip_accepts_a_bus_that_covers_the_chip(db):
     assert len(resolve_chip("AM27C010", db)["bus-config"]["bus"]) == 17

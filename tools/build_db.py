@@ -1027,6 +1027,24 @@ def main():
         for mfg_name, extra_chips in extra_db.items():
             if not isinstance(extra_chips, list):
                 continue
+            # A supplement row arrives fully specified, so the generator does
+            # not set its status. It refuses one that says supported on a
+            # pin map the shield cannot drive.
+            for extra in extra_chips:
+                _extra_pins = extra["electrical"]["pin_count"]
+                _misdriven = shield_misdriven_pins(
+                    extra["pinout"],
+                    _extra_pins,
+                    address_width(extra["electrical"]["size_bytes"]),
+                )
+                if _misdriven and extra.get("support_status") == "supported":
+                    raise ValueError(
+                        f"{mfg_name}/{extra['part_number']}: supported in "
+                        f"{EXTRA_CHIPS_FILE}, but pin map {extra['pinout']} needs "
+                        f"other functions on pins {_misdriven}, which the shield "
+                        f"drives as CE/OE {SHIELD_CE_OE_PINS[_extra_pins]} -- "
+                        f"refusing to write {OUTPUT_FILE}"
+                    )
             complete_db.setdefault(mfg_name, []).extend(extra_chips)
             supplement_count += len(extra_chips)
         print(

@@ -244,7 +244,8 @@ class TestShieldDrivesCeAndOeInPlace:
             for key in build_db.VALID_PINOUT_KEYS
         }
         # DIP24_2532 is used only by the extra_chips.json 2532 row, which the
-        # generator does not decode.
+        # generator does not decode; the merge refuses it unless it says
+        # adapter-required.
         assert {k: v for k, v in misdriven.items() if v} == {
             "DIP32_27C301": [2, 24],
             "DIP24_2532": [18, 20],
@@ -262,6 +263,7 @@ class TestShieldDrivesCeAndOeInPlace:
             if c["support_status"] == "adapter-required"
         ]
         assert sorted(c["part_number"] for c in rows) == [
+            "2532",
             "HN27C301AG,HN27C301AP,HN27C301AFP",
             "HN27C301G",
             "M27C1000",
@@ -269,8 +271,25 @@ class TestShieldDrivesCeAndOeInPlace:
             "MBM27C2000P,MBM27C2000",
         ]
         for chip in rows:
-            assert chip["pinout"] == "DIP32_27C301"
+            assert chip["pinout"] in ("DIP32_27C301", "DIP24_2532")
             assert chip["unsupported_reason"].startswith("adapter required:")
+
+    def test_no_supported_row_drives_an_address_line_on_a_ce_or_oe_pin(self):
+        """Every bus line of a supported row is a real bus line. ROM_CE /
+        ROM_OE (0x100 / 0x101) in a bus means an address pin sits on the
+        shield's CE or OE driver; the firmware cannot drive it."""
+        from firestarter.database import EpromDatabase
+
+        db = EpromDatabase(skip_local_override=True)
+        bad = []
+        for mfg, chips in db.proms.items():
+            for chip in chips:
+                if chip.get("support_status", "supported") != "supported":
+                    continue
+                bus = db.map_chip_record(chip, mfg).get("bus-config", {}).get("bus", [])
+                if any(line >= 24 for line in bus):
+                    bad.append((mfg, chip["part_number"], bus))
+        assert not bad
 
 
 class TestWeVppHazardGuard:
