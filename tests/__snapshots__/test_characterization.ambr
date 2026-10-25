@@ -1452,7 +1452,7 @@
   | W27C04,W27C040,W27E…| WINBOND          |   32 | 0xDA86     | EEPROM      | 12.0v|
   | W27C257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   | W27C512,W27E512     | WINBOND          |   28 | 0xDA08     | EEPROM      | 12.0v|
-  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 13.5v|
+  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   | W29C010,W29C011,W29…| WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| -    |
   | W29C020,W29C020C,W2…| WINBOND          |   32 | 0xDA45     | Flash/EEPROM| -    |
   | W29C040,W29C042     | WINBOND          |   32 | 0xDA46     | Flash/EEPROM| -    |
@@ -1581,7 +1581,7 @@
   | W27C04,W27C040,W27E…| WINBOND          |   32 | 0xDA86     | EEPROM      | 12.0v|
   | W27C257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   | W27C512,W27E512     | WINBOND          |   28 | 0xDA08     | EEPROM      | 12.0v|
-  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 13.5v|
+  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   +---------------------+------------------+------+------------+-------------+------+
   
   '''

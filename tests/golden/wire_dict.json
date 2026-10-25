@@ -22032,7 +22032,7 @@
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 100,
-      "vpp_mv": 13500
+      "vpp_mv": 12000
     },
     "WINBOND|W29C010,W29C011,W29C011A,W29EE010,W29EE012|6": {
       "algorithm": 5,

@@ -395,6 +395,11 @@ With the completed table they decode to 1800 mV. A 1.8 V program rail is not cre
 `UNSOURCED` entries in `tools/datasheet_overrides.json` hold that value. Index `0x06` stays in the
 table.
 
+**The VPP byte gives the same kind of value.** `W27E257` has VPP index `0x80`, which decodes to
+13500 mV. Its datasheet (`datasheets/W27E257.pdf`, Revision A3, page 7) gives a program voltage of
+11.75-12.25 V, and 14 V (VPE) only for erase. The `WINBOND/W27E257` entry in
+`tools/datasheet_overrides.json` holds the row at 12000 mV (henols/firestarter#23).
+
 ### 9.4 The evidence
 
 **The positive match.** Five datasheets give a program VCC of 6.0 V ± 0.25 V. Three are Fujitsu:

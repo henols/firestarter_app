@@ -16677,7 +16677,7 @@
         "type": "EEPROM",
         "vcc_mv": 5000,
         "vdd_mv": 5000,
-        "vpp_mv": 13500
+        "vpp_mv": 12000
       },
       "part_number": "W27E257",
       "pinout": "DIP28_27256",
