@@ -217,6 +217,7 @@ def make_comm(fake_serial):
         instance.hw_revision = None
         instance.write_block_budget_s = None
         instance.seen_message_ids = set()
+        instance.setup_refusal = None
         return instance
 
     return _factory

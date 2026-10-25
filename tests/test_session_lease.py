@@ -57,6 +57,7 @@ class _FakeComm:
         fail_setup_on_call: int | None = None,
         fail_with: type[SerialError] = FirmwareOutdatedError,
         fail_drain: bool = False,
+        reject_setup_on_call: int | None = None,
     ) -> None:
         self._events = events
         self._name = name
@@ -64,6 +65,7 @@ class _FakeComm:
         self._fail_setup_on_call = fail_setup_on_call
         self._fail_with = fail_with
         self._fail_drain = fail_drain
+        self._reject_setup_on_call = reject_setup_on_call
         self._setup_calls = 0
 
     def is_connected(self) -> bool:
@@ -79,7 +81,7 @@ class _FakeComm:
         self._events.append((self._name, "setup"))
         if self._fail_setup_on_call == self._setup_calls:
             raise self._fail_with(f"simulated: {self._name} setup refused")
-        return True
+        return self._reject_setup_on_call != self._setup_calls
 
     def disconnect(self) -> None:
         self._events.append((self._name, "disconnect"))
@@ -398,6 +400,55 @@ def test_a_drain_failure_drops_the_lease_and_the_plan_continues(
         "exactly two connects: the initial lease connect, and the recovery "
         "connect after the drain-dropped link -- never a connect per call"
     )
+
+
+def test_a_rejected_leased_setup_drops_the_link_and_the_plan_continues(
+    monkeypatch,
+) -> None:
+    """A leased setup whose ack is not OK (setup_command returns False,
+    nothing raised) must drop the held link like a raised SerialError does,
+    so a later step does not reuse a link that can still carry the rejected
+    command's reply. The next operation cold-connects."""
+    events: list[tuple[str, str]] = []
+    comm1 = _FakeComm(events, "comm1", reject_setup_on_call=1)
+    comm2 = _FakeComm(events, "comm2")
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        _make_find_and_connect(events, [comm1, comm2]),
+    )
+
+    operator = EpromOperator(ConfigManager())
+    with operator.lease():
+        with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE) as (
+            cmd,
+            _buf,
+            _name,
+        ):
+            assert cmd is not None
+        assert operator.comm is comm1
+
+        # 2nd call: the leased setup on comm1 is rejected.
+        with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE) as (
+            cmd,
+            buf,
+            name,
+        ):
+            assert cmd is None and buf is None and name is None
+        assert operator.comm is None, "the rejected link must be dropped"
+        assert ("comm1", "disconnect") in events
+        assert operator._leased is True, "the block is still a lease"
+
+        # 3rd call: cold-connects on a fresh link.
+        with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE) as (
+            cmd,
+            _buf,
+            _name,
+        ):
+            assert cmd is not None
+        assert operator.comm is comm2
+
+    connects = [ev for ev in events if ev[1] == "connect"]
+    assert connects == [("comm1", "connect"), ("comm2", "connect")]
 
 
 def test_the_lease_always_disconnects_on_exit(monkeypatch) -> None:

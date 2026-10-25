@@ -60,6 +60,10 @@ from firestarter.chip_test import (
 )
 from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import (
+    CONFIG_R1_MAX,
+    CONFIG_R1_MIN,
+    CONFIG_R2_MAX,
+    CONFIG_R2_MIN,
     FIRESTARTER_RELEASES_URL,
     FLAG_CHIP_ENABLE,
     FLAG_OUTPUT_ENABLE,
@@ -564,6 +568,9 @@ def read(
 ) -> None:
     """Reads the content from an EPROM."""
     eprom_data = resolve_chip(eprom, db=app.db)
+    refusal = _address_size_refusal_exit_code(eprom=eprom, address=address, size=size)
+    if refusal is not None:
+        sys.exit(refusal)
     ok = app.eprom_operator.read_eprom(
         eprom,
         eprom_data,
@@ -999,6 +1006,41 @@ def write(
     sys.exit(1)
 
 
+_SIZE_TOO_SMALL_REFUSAL = "{eprom}: refused -- the size {size!r} is less than 1 byte."
+_EMPTY_INPUT_FILE_REFUSAL = "{eprom}: refused -- the input file is empty."
+_NEGATIVE_SECTOR_ADDRESS_REFUSAL = (
+    "{eprom}: refused -- the sector address {address!r} is negative."
+)
+
+
+def _address_size_refusal_exit_code(
+    *, eprom: str, address: str | None, size: str | None
+) -> int | None:
+    """Refuse a negative start address or a size below 1 byte before the
+    serial port opens.
+
+    The firmware refuses both at setup, with the same 'Bad JSON' answer that
+    firmware too old for this CLI gives, so without this check the operator
+    sees only "no programmer found". Returns 2 to refuse with, or `None`.
+    A malformed string is not refused here: `_setup_operation`'s own parse
+    handling still owns that error.
+    """
+    try:
+        write_blank_guard.require_non_negative_address(eprom, address)
+    except NegativeStartAddressError as e:
+        click.echo(str(e))
+        return 2
+    if size is not None:
+        try:
+            parsed_size = parse_size(size)
+        except ValueError:
+            return None
+        if parsed_size is not None and parsed_size < 1:
+            click.echo(_SIZE_TOO_SMALL_REFUSAL.format(eprom=eprom.upper(), size=size))
+            return 2
+    return None
+
+
 def _region_refusal_exit_code(
     *,
     eprom: str,
@@ -1040,7 +1082,14 @@ def _region_refusal_exit_code(
     also exit 2, via the existing setup-failure path. Returning `None` here
     lets that path run rather than parsing the string a second time with
     different error handling.
+
+    A negative start address, a size below 1 byte and an empty input file
+    are refused here too: the firmware refuses a zero-length region at
+    setup.
     """
+    refusal = _address_size_refusal_exit_code(eprom=eprom, address=address, size=size)
+    if refusal is not None:
+        return refusal
     try:
         start = parse_address(address) if address is not None else 0
     except ValueError:
@@ -1097,6 +1146,10 @@ def _region_refusal_exit_code(
         length = mem_size - start
     else:
         length = None
+
+    if explicit_size is None and input_file is not None and length == 0:
+        click.echo(_EMPTY_INPUT_FILE_REFUSAL.format(eprom=eprom.upper()))
+        return 2
 
     if length is not None and mem_size is not None and start + length > mem_size:
         click.echo(
@@ -1193,8 +1246,9 @@ def verify(
     Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, setup,
     or region failure. The three are distinct: a transport failure is not
     reported as a mismatch, and a region refusal -- an explicit --size
-    longer than the input file, or a region running past the chip's end --
-    is reported before the serial port ever opens.
+    longer than the input file, a region running past the chip's end, a
+    negative address, or an empty region -- is reported before the serial
+    port ever opens.
 
     Without --size, the compared region is the input file's own length;
     with it, --size wins.
@@ -1255,8 +1309,9 @@ def blank(
     Exits 0 when blank, 1 when at least one byte is not blank, 2 on a
     transport, hardware, setup, or region failure. The three are distinct:
     a transport failure is not reported as a not-blank verdict, and a
-    region refusal -- a region running past the chip's end -- is reported
-    before the serial port ever opens.
+    region refusal -- a region running past the chip's end, a negative
+    address, or a size of 0 -- is reported before the serial port ever
+    opens.
 
     Without --size, the checked region is the whole chip; with it, --size
     wins.
@@ -1351,6 +1406,18 @@ def erase(
     )
     if sector_blank_refusal is not None:
         sys.exit(sector_blank_refusal)
+
+    try:
+        negative_sector = (parse_address(sector_address) or 0) < 0
+    except ValueError:
+        negative_sector = False
+    if negative_sector:
+        click.echo(
+            _NEGATIVE_SECTOR_ADDRESS_REFUSAL.format(
+                eprom=eprom.upper(), address=sector_address
+            )
+        )
+        sys.exit(2)
 
     eprom_data = resolve_chip(eprom, db=app.db)
 
@@ -1492,13 +1559,12 @@ def hw(app: AppContext) -> None:
 
 
 _BANDGAP_NOMINAL_MV = 1100
-_DIVIDER_GAIN = 314000 / 44000
 
 
 @cli.command(name="cal")
 @click.option(
     "--vcc",
-    type=float,
+    type=click.FloatRange(min=0, min_open=True),
     default=None,
     metavar="VOLTS",
     help="Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09",
@@ -1545,7 +1611,9 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
             click.echo(
                 "Calibration refused. The result was outside 1000-1200 mV, which "
                 "means the reading does not match this board. Check that the "
-                "multimeter is on the 5V pin and that the value is in volts."
+                "multimeter is on the 5V pin and that the value is in volts. "
+                "A py32f071 board has no bandgap calibration and always "
+                "refuses it."
             )
             sys.exit(1)
         after = app.hardware_manager.read_calibration()
@@ -1599,17 +1667,17 @@ def _echo_calibration_effect(bandgap_mv: int) -> None:
     "-r1",
     "--r16",
     "r16",
-    type=int,
+    type=click.IntRange(CONFIG_R1_MIN, CONFIG_R1_MAX),
     default=None,
-    help="Set R16 resistance, resistor connected to VPE",
+    help="Set R16 resistance in ohms, resistor connected to VPE.",
 )
 @click.option(
     "-r2",
     "--r14r15",
     "r14r15",
-    type=int,
+    type=click.IntRange(CONFIG_R2_MIN, CONFIG_R2_MAX),
     default=None,
-    help="Set R14/R15 resistance, resistors connected to GND",
+    help="Set R14/R15 resistance in ohms, resistors connected to GND.",
 )
 @click.pass_obj
 @map_typed_errors
@@ -1623,6 +1691,8 @@ def config(
     # --rev is an IntRange: '--rev 2.2' used to go through float() and int()
     # and silently select code 2 (Rev 2.0). Click now refuses it before any
     # serial byte is sent, and refuses a code the firmware does not define.
+    # -r1 and -r2 are IntRanges for the same reason: the firmware refuses a
+    # value outside its band, so the host refuses it before the port opens.
     ok = app.hardware_manager.set_hardware_config(
         rev, r16, r14r15, flags=_build_op_flags()
     )
@@ -1989,6 +2059,9 @@ def dev_read(
 ) -> None:
     """Reads the content from an EPROM and prints data to console."""
     eprom_data = resolve_chip(eprom, db=app.db)
+    refusal = _address_size_refusal_exit_code(eprom=eprom, address=address, size=size)
+    if refusal is not None:
+        sys.exit(refusal)
     ok = app.eprom_operator.dev_read_eprom(
         eprom,
         eprom_data,
