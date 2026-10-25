@@ -235,6 +235,14 @@ class EpromDatabase:
                     pin_maps_base[key][sub_key] = (
                         sub_value  # Replace existing or add new
                     )
+        if "DIP28_2764" in manual_pin_map and not (
+            {"DIP28_27128", "DIP28_27011"} & manual_pin_map.keys()
+        ):
+            logger.warning(
+                "Your pin-map override for DIP28_2764 now applies only to 2764/27C64 "
+                "chips. 27128/27C128 chips use DIP28_27128 and 27011 chips use "
+                "DIP28_27011."
+            )
         return pin_maps_base
 
     def get_pin_map(self, pins: int, pin_map_id: str):
@@ -271,10 +279,14 @@ class EpromDatabase:
             )
             return None  # Cannot form bus without address pins
 
+        # A UV EPROM's PGM pin is its rw line: the firmware holds it high for
+        # read and low for write. A map with its own rw-pin keeps that pin.
+        rw_source = "rw-pin" if "rw-pin" in pin_map_data else "pgm-pin"
+
         # Handle pins that can be a single value or a list
-        for pin_func in ["rw-pin", "vpp-pin"]:
-            if pin_func in pin_map_data:
-                pin_val = pin_map_data[pin_func]
+        for pin_func, source in [("rw-pin", rw_source), ("vpp-pin", "vpp-pin")]:
+            if source in pin_map_data:
+                pin_val = pin_map_data[source]
                 # The value can be a list (e.g., [22]) or a single int.
                 # We'll take the first element if it's a list.
                 pin_to_check = pin_val[0] if isinstance(pin_val, list) else pin_val
@@ -286,7 +298,7 @@ class EpromDatabase:
                     map_config[pin_func] = resolved
                 else:
                     logger.warning(
-                        f"Pin function '{pin_func}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
+                        f"Pin function '{source}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
                     )
 
         if "static-high-pins" in pin_map_data and pins in pin_conversions:

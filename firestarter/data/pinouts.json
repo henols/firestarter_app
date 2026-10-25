@@ -22,7 +22,19 @@
         }
     },
     "DIP28_2764": {
-        "name": "JEDEC 2764/128",
+        "name": "JEDEC 2764/27C64",
+        "comment": "infoic.xml pin map 21, which leaves pin 26 unbonded: pin 26 NC, and pin 27 PGM. The host sends PGM as the rw line, so the firmware holds it high for read. See datasheets/TMS2764.pdf.",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
+            "pgm-pin": [27], "nc-pin": [26],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22]
+        }
+    },
+    "DIP28_27128": {
+        "name": "JEDEC 27128/27C128",
+        "comment": "infoic.xml pin map 22 (pin_map 0x00000c16), which bonds pin 26 as A13. Pin 27 is PGM; the host sends it as the rw line.",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
             "pgm-pin": [27],
@@ -31,20 +43,20 @@
             "ce-pin": [20], "oe-pin": [22]
         }
     },
-    "DIP28_2764_8K": {
-        "name": "JEDEC 2764/27C64 (8KB)",
-        "comment": "2764/27C64 pinout (infoic.xml pin map 21, which leaves pin 26 unbonded): A0-A12 only, pin 26 NC, and pin 27 PGM. PGM is also the rw-pin, so the firmware holds it high for read. See datasheets/TMS2764.pdf.",
+    "DIP28_27011": {
+        "name": "27011 page-addressed EPROM",
+        "comment": "infoic.xml pin map 22 with pin_map 0x90000c16, which only the 27011 rows carry. Connectivity is <maps> index 22. The pin functions are the 27128 functions these rows had before the split; no 27011 datasheet was found to confirm them. Page selection is not implemented (henols/firestarter#136).",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
-            "pgm-pin": [27], "rw-pin": [27], "nc-pin": [26],
-            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2],
+            "pgm-pin": [27],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26],
             "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
             "ce-pin": [20], "oe-pin": [22]
         }
     },
     "DIP28_JEDEC_SRAM_8K": {
         "name": "JEDEC 28-pin SRAM/FRAM 8K (6264/FM1608 family)",
-        "comment": "Standard JEDEC parallel SRAM/FRAM 28-pin layout. Same address bus as DIP28_2764 (A0-A12 at pins 10,9,...,2 — 13 address bits for 8K). Differs from DIP28_2764 at: pin 1 = NC (vs VPP), pin 27 = !WE (vs !PGM), pin 26 = NC. Used by 6264-class SRAM and Ramtron FM1608 FRAM. Tentative — bench-validation required for chip-specific layouts.",
+        "comment": "Standard JEDEC parallel SRAM/FRAM 28-pin layout. Same address bus as DIP28_2764 (A0-A12 at pins 10,9,...,2 — 13 address bits for 8K). Differs from DIP28_2764 at: pin 1 = NC (vs VPP), pin 27 = !WE (vs !PGM). Used by 6264-class SRAM and Ramtron FM1608 FRAM. Tentative — bench-validation required for chip-specific layouts.",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14],
             "rw-pin": [27], "nc-pin": [1, 26],

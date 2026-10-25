@@ -164,15 +164,27 @@ def is_24pin_we_vpp_hazard(
     )
 
 
+# The keys infoic pin maps 21 and 22 (variant_lo 0x13) resolve to.
+_2764_FAMILY = frozenset({"DIP28_2764", "DIP28_27128", "DIP28_27011"})
+
+
 def resolve_pinout_key(
-    pin_count, variant, flags_int, pm_idx=None, proto_id=None, type_int=1, mem_size=0
+    pin_count,
+    variant,
+    flags_int,
+    pm_idx=None,
+    proto_id=None,
+    type_int=1,
+    mem_size=0,
+    pin_map_raw=None,
 ):
     """Resolve the firestarter pinout key for a chip.
 
     A pure function of decoded minipro fields (pin_count, pm_idx, variant_lo,
-    type_int, mem_size, proto_id) — no per-IC names, no per-family tables.
-    pm_idx is the low byte of infoic.xml's pin_map attribute and identifies the
-    layout cluster; variant_lo (variant & 0xFF) sub-discriminates within it.
+    type_int, mem_size, proto_id, pin_map_raw) — no per-IC names, no per-family
+    tables. pm_idx is the low byte of infoic.xml's pin_map attribute and
+    identifies the layout cluster; variant_lo (variant & 0xFF) sub-discriminates
+    within it, and the full pin_map_raw splits a cluster that shares both.
 
     Returns a key such as "DIP24_2816", or None when the chip cannot be
     classified — None triggers the fail-safe skip in main().
@@ -209,13 +221,17 @@ def resolve_pinout_key(
                 key = "DIP28_27512"  # VPP on pin 22 (OE/VPP shared)
             elif variant_lo == 0x11:
                 key = "DIP28_27256"  # VPP on pin 1
+            elif pin_map_raw == 0x90000C16:
+                # [VERIFIED: infoic.xml — only the 27011 rows carry this
+                #  pin_map in the pm_idx=22, variant_lo=0x13 cluster]
+                key = "DIP28_27011"
             else:
-                key = "DIP28_2764"  # 27128/27C128 layout, A13 on pin 26
+                key = "DIP28_27128"  # A13 on pin 26
         elif pm_idx == 21:
             # 2764/27C64 family; pm_idx unique to this family.
             # [VERIFIED: infoic.xml <maps> index 21 leaves pin 26 unbonded;
             #  index 22 bonds it as A13]
-            key = "DIP28_2764_8K"
+            key = "DIP28_2764"
         elif pm_idx == 20:
             key = "DIP28_28C256"  # 28C256 EEPROM; no VPP
         elif pm_idx == 19:
@@ -287,7 +303,7 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
          protocol; algorithm 0x28 (SRAM_STD) when the chip arrived with an
          EPROM-family proto (0x07/0x08/0x0B), else proto_id.
       2. 5V-EEPROM pinout clusters — DIP24_2816 / DIP28_28C64 / DIP28_28C256, or
-         DIP28_2764 / DIP28_2764_8K with the erasable bit set → EEPROM / 0x0D
+         a 2764-family pinout with the erasable bit set → EEPROM / 0x0D
          (configure_eeprom28c, no VPP).
       3. EPROM-family proto (0x07/0x08/0x0B) → EEPROM if flags&0x10 else UV-EPROM,
          algorithm proto_id (keeps 12V VPP; W27C512 etc. land here).
@@ -320,8 +336,9 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
     #    These pinouts have no programming VPP; route to configure_eeprom28c (0x0D).
     #    SCOPE (matches the deleted Rule 1 + Rule 2 exactly — do NOT broaden):
     #      - DIP24_2816 (was Rule 1): force 0x0D for any proto (24-pin 28C family).
-    #      - DIP28_28C64 / DIP28_28C256 / (DIP28_2764 or DIP28_2764_8K with
-    #        flags&0x10) (was Rule 2):
+    #      - DIP28_28C64 / DIP28_28C256 / (a _2764_FAMILY key with flags&0x10)
+    #        (was Rule 2). _2764_FAMILY is the old single DIP28_2764 key split by
+    #        infoic pin_map into three keys; it covers the same rows.
     #        flip ONLY EPROM-family proto (0x07/0x08/0x0B) chips. Genuine 5V FLASH
     #        on the same DIP28 layout (AT29C256/AT29LV256, proto 0x05) is NOT a 28C
     #        EEPROM — it must keep its Flash algorithm (handled by arm 4 below). The
@@ -330,7 +347,7 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
         return "EEPROM", 0x0D, pinout_key
     if proto_id in {0x07, 0x08, 0x0B} and (
         pinout_key in {"DIP28_28C64", "DIP28_28C256"}
-        or (pinout_key in {"DIP28_2764", "DIP28_2764_8K"} and (flags & 0x10))
+        or (pinout_key in _2764_FAMILY and (flags & 0x10))
     ):
         return "EEPROM", 0x0D, pinout_key
 
@@ -675,6 +692,7 @@ def main():
                     proto_id=proto_id,
                     type_int=type_int,
                     mem_size=mem_size,
+                    pin_map_raw=pin_map_raw,
                 )
 
                 # Step 2: fail-safe — skip unclassifiable chips entirely.
