@@ -10289,8 +10289,8 @@
         "size_bytes": 16384,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5500,
-        "vpp_mv": 12000
+        "vdd_mv": 6000,
+        "vpp_mv": 21000
       },
       "part_number": "UPD27128",
       "pinout": "DIP28_27128",
@@ -10301,7 +10301,7 @@
         "infoic_page_size_raw": 0,
         "protect_off_before": false,
         "protect_on_after": false,
-        "pulse_duration_us": 100
+        "pulse_duration_us": 1000
       },
       "support_status": "supported"
     },

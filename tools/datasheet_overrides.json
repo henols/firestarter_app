@@ -95,6 +95,15 @@
       "electrical.vpp_mv": { "was": 18000, "is": 25000 }
     }
   },
+  "NEC/UPD27128": {
+    "datasheet": "datasheets/UPD27128.pdf",
+    "note": "Page 9-6's AC Characteristics table (Program, Program Verify, and Program Inhibit Modes) is measured at VPP = 21V +/- 0.5V, and its footnote gives VCC = 6V +/- 0.25V and tPW = 1 ms +/- 5% for high-speed programming. Page 9-7's High-speed Programming Mode applies 1 ms pulses up to 15 times, then a 4 ms over-program pulse per try, or a 60 ms pulse if 15 tries fail. The same table's 45/50/55 ms tPW and page 9-7's conventional mode are the wrong reading here: the firmware consumes programming.pulse_duration_us as the initial pulse width of a verify-per-pulse loop capped at 25 pulses with overprogram_factor = 0 on protocol 0x07, which is the high-speed algorithm's shape and not the conventional single-shot one. The corrected value still yields an incomplete high-speed algorithm: the firmware never emits the over-program or 60 ms pulses, and the shield holds VCC at 5V. All three fields -- programming.pulse_duration_us, electrical.vpp_mv and electrical.vdd_mv -- come from page 9-6's table and footnote.",
+    "fields": {
+      "programming.pulse_duration_us": { "was": 100, "is": 1000 },
+      "electrical.vpp_mv": { "was": 12000, "is": 21000 },
+      "electrical.vdd_mv": { "was": 5500, "is": 6000 }
+    }
+  },
   "SGS-THOMSON/M2716": {
     "datasheet": "UNSOURCED",
     "note": "Value 25000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, which sourced this figure from an Intel datasheet for the Intel NMOS 2716 and applied it to this SGS-THOMSON row with no SGS-THOMSON-specific datasheet backing it. No SGS-THOMSON datasheet for this part is vendored in this repository. Closed by: SGS-THOMSON's own datasheet for ETC2716/M2716, vendored and git-tracked under datasheets/.",
