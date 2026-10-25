@@ -6676,6 +6676,33 @@
         "pulse_duration_us": 0
       },
       "support_status": "supported"
+    },
+    {
+      "datasheet": "datasheets/HN482764.pdf",
+      "electrical": {
+        "pin_count": 28,
+        "size_bytes": 8192,
+        "type": "UV-EPROM",
+        "vcc_mv": 5000,
+        "vdd_mv": 6000,
+        "vpp_mv": 21000
+      },
+      "part_number": "HN482764,HN482764-3,HN482764-4,HN482764G,HN482764G-3,HN482764G-4",
+      "pinout": "DIP28_2764",
+      "programming": {
+        "algorithm": 7,
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000",
+        "infoic_page_size_raw": 0,
+        "protect_off_before": false,
+        "protect_on_after": false,
+        "pulse_duration_us": 1000
+      },
+      "provenance": "Physically real 28-pin NMOS UV-EPROM (Hitachi HN482764 / HN482764G family), absent from minipro infoic.xml (which only carries CMOS HN27C64G/FP). Pinout compatible with Intel 2764 (DIP28_2764: pin 26 NC, pin 27 PGM). Single 5V supply, 21V VPP. The vendored datasheets/HN482764.pdf is the first page of the data sheet only. It shows 8192 x 8, the 28-pin package, +21V program voltage, Intel 2764 compatibility, conventional programming with one 50 ms pulse, and that High Performance Programming is available. vdd_mv 6000 and pulse_duration_us 1000 assume the high-performance mode uses VCC 6V and a 1 ms initial pulse, as the contemporary NEC uPD27128/uPD27256 and Mitsubishi M5L2764K fast modes do, which fits the firmware's verify-per-pulse loop. The page that specifies that mode is not vendored, so those two values and the pin 26 / pin 27 assignment are not proven by the vendored file.",
+      "source": "non-upstream-supplement",
+      "support_status": "supported",
+      "verification_note": "Resolvable for read/info. VPP lands on pin 1 per JEDEC 2764 pinout. Physical write validation subject to hardware availability.",
+      "verification_status": "UNVERIFIED"
     }
   ],
   "HOLTEK": [

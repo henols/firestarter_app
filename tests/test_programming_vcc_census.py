@@ -26,8 +26,10 @@ Coverage:
   5. DATASHEET-CITED PROVENANCE -- the census rows that match a
      `tools/datasheet_overrides.json` key whose `fields` map touches
      `electrical.vdd_mv` with a non-`UNSOURCED` datasheet are exactly
-     `_EXPECTED_DATASHEET_CITED_KEYS`. Every other census row carries a pure
-     `VCC_VOLTAGES` rail-table slot. This is the measurement behind the
+     `_EXPECTED_DATASHEET_CITED_KEYS`. The non-upstream supplement rows in
+     the census are exactly `_EXPECTED_SUPPLEMENT_KEYS`: their `vdd_mv` is
+     hand-written in tools/extra_chips.json, not decoded. Every other census
+     row carries a pure `VCC_VOLTAGES` rail-table slot. This is the measurement behind the
      2026-09-19 amendment of D-04's verb from "programs at" to "decodes to".
   6. BOUNDARY -- the predicate is strictly above the shield's fixed rail, not
      at or above it: a synthetic record at exactly the rail is excluded and
@@ -88,9 +90,9 @@ _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
-_EXPECTED_DATABASE_ROWS = 746
-_EXPECTED_VDD_HISTOGRAM = {5500: 162, 6000: 10, 6250: 7, 6500: 105}
-_EXPECTED_ALGORITHM_HISTOGRAM = {7: 161, 8: 102, 11: 21}
+_EXPECTED_DATABASE_ROWS = 747
+_EXPECTED_VDD_HISTOGRAM = {5500: 162, 6000: 11, 6250: 7, 6500: 105}
+_EXPECTED_ALGORITHM_HISTOGRAM = {7: 162, 8: 102, 11: 21}
 _EXPECTED_VENDOR_COUNT = 34
 _VOLT03_VCC_MV = 5500
 _EXPECTED_VOLT03_ROWS = 28
@@ -101,11 +103,21 @@ _EXPECTED_DATASHEET_CITED_KEYS = (
     "NEC/UPD27128",
     "NEC/UPD27256",
 )
+_SUPPLEMENT_SOURCE = "non-upstream-supplement"
+_EXPECTED_SUPPLEMENT_KEYS = (
+    "HITACHI/HN482764",
+    "TEXAS INSTRUMENTS/2516",
+    "TEXAS INSTRUMENTS/2532",
+)
 
 _EXPECTED_TOTAL_ROWS = sum(_EXPECTED_VDD_HISTOGRAM.values())
 _EXPECTED_TYPE_HISTOGRAM = {"UV-EPROM": _EXPECTED_TOTAL_ROWS}
 _EXPECTED_STATUS_HISTOGRAM = {"supported": _EXPECTED_TOTAL_ROWS}
-_EXPECTED_PURE_DECODE_ROWS = _EXPECTED_TOTAL_ROWS - len(_EXPECTED_DATASHEET_CITED_KEYS)
+_EXPECTED_PURE_DECODE_ROWS = (
+    _EXPECTED_TOTAL_ROWS
+    - len(_EXPECTED_DATASHEET_CITED_KEYS)
+    - len(_EXPECTED_SUPPLEMENT_KEYS)
+)
 
 
 def _load_db() -> dict:
@@ -249,8 +261,10 @@ def test_datasheet_cited_vdd_overrides_are_exactly_the_expected_keys() -> None:
     """Pins the measurement behind the 2026-09-19 amendment of D-04's verb:
     the elevated rows that match a `datasheet_overrides.json` key whose
     `fields` map touches `electrical.vdd_mv` with a non-UNSOURCED datasheet
-    are exactly `_EXPECTED_DATASHEET_CITED_KEYS`, and every other elevated
-    row carries a pure `VCC_VOLTAGES` rail-table slot. A `part_number` field
+    are exactly `_EXPECTED_DATASHEET_CITED_KEYS`. The elevated non-upstream
+    supplement rows, keyed by their first alias, are exactly
+    `_EXPECTED_SUPPLEMENT_KEYS`. Every other elevated row carries a pure
+    `VCC_VOLTAGES` rail-table slot. A `part_number` field
     can hold several comma-joined aliases (e.g. `MBM27C1000P,MBM27C1000`),
     so each alias is matched separately -- an exact-string match on the raw
     field misses every multi-alias row and produces a wrong-but-plausible
@@ -285,9 +299,19 @@ def test_datasheet_cited_vdd_overrides_are_exactly_the_expected_keys() -> None:
         f"expected the matched key set to equal "
         f"{set(_EXPECTED_DATASHEET_CITED_KEYS)}, measured {matched}"
     )
-    assert len(rows) - len(matched) == _EXPECTED_PURE_DECODE_ROWS, (
+    supplement = {
+        f"{mfg}/{chip['part_number'].split(',')[0].strip()}"
+        for mfg, chip in rows
+        if chip.get("source") == _SUPPLEMENT_SOURCE
+    }
+    assert supplement == set(_EXPECTED_SUPPLEMENT_KEYS), (
+        f"expected the elevated supplement rows to equal "
+        f"{set(_EXPECTED_SUPPLEMENT_KEYS)}, measured {supplement}"
+    )
+    pure_decode_rows = len(rows) - len(matched) - len(supplement)
+    assert pure_decode_rows == _EXPECTED_PURE_DECODE_ROWS, (
         f"expected {_EXPECTED_PURE_DECODE_ROWS} pure-decode rows, measured "
-        f"{len(rows) - len(matched)}"
+        f"{pure_decode_rows}"
     )
 
 
@@ -458,7 +482,7 @@ _REQUIRED_TEST_NAMES = (
 )
 
 _DEFINITION_GUARD_COUNTS = {
-    "_EXPECTED_DATABASE_ROWS" + " = 746": 1,
+    "_EXPECTED_DATABASE_ROWS" + " = 747": 1,
     "_EXPECTED_VDD_HISTOGRAM" + " = {": 1,
     "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {": 1,
     "_EXPECTED_VENDOR_COUNT" + " = 34": 1,

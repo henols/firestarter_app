@@ -26,7 +26,8 @@ Coverage:
      direct-VPE path: see THE DROP-RESISTOR EXCEPTION below.
   5. DROP-RESISTOR EXCEPTION -- every drop-resistor row above the floor
      holds its electrical.vpp_mv through a datasheet-cited entry in
-     tools/datasheet_overrides.json.
+     tools/datasheet_overrides.json, or is a non-upstream supplement row
+     that cites a datasheet.
   6. BOUNDARY -- the filter is at-or-above 18000, not strictly above: a row
      one millivolt below the floor is excluded, and a row sitting exactly
      on the floor is counted.
@@ -81,14 +82,16 @@ two different sources:
     NMOS override entry carried over from an earlier phase or a row
     hardcoded in the non-upstream supplement file. None is
     upstream-attested.
-  - On the DROP-RESISTOR path, every above-floor row is a datasheet-backed
-    override that moved a row out of the 18000 bucket. Its figure IS
-    datasheet-backed, not unsourced.
+  - On the DROP-RESISTOR path, every above-floor row is either a
+    datasheet-backed override that moved a row out of the 18000 bucket or
+    a supplement row in tools/extra_chips.json that cites a datasheet. Its
+    figure IS datasheet-backed, not unsourced.
 
 That is why the drop-resistor path is not uniformly at 18000 mV, and why
 the direct-VPE path does not hold every row above the floor. Test 5 asserts
-the drop-resistor half of this split against the override file, so the
-list of parts lives in tools/datasheet_overrides.json and not here.
+the drop-resistor half of this split against the override file and the
+supplement rows' own provenance fields, so the list of parts lives in those
+two files and not here.
 
 Loads chip_database.json and datasheet_overrides.json directly, the way
 test_build_db_inclusion.py and test_b15_page_size_corroboration.py load the
@@ -116,7 +119,9 @@ _ALGORITHM_TO_VPP_PATH = {
 
 _UNMAPPED_PATH_LABEL = "unmapped"
 
-_EXPECTED_DROP_RESISTOR_MV_HISTOGRAM = {18000: 9, 21000: 3}
+_SUPPLEMENT_SOURCE = "non-upstream-supplement"
+
+_EXPECTED_DROP_RESISTOR_MV_HISTOGRAM = {18000: 9, 21000: 4}
 _EXPECTED_DIRECT_VPE_MV_HISTOGRAM = {18000: 12, 21000: 2, 25000: 6}
 
 _EXPECTED_PATH_HISTOGRAM = {
@@ -262,12 +267,21 @@ def test_per_path_algorithm_and_pin_count_are_uniform() -> None:
     )
 
 
+def _is_cited_supplement_row(chip: dict) -> bool:
+    return chip.get("source") == _SUPPLEMENT_SOURCE and chip.get("datasheet") not in (
+        None,
+        "",
+        "UNSOURCED",
+    )
+
+
 def test_every_drop_resistor_row_above_the_floor_is_datasheet_backed() -> None:
     """THE DROP-RESISTOR EXCEPTION, as an assertion: every drop-resistor row
     strictly above the floor matches a `datasheet_overrides.json` key whose
     `fields` map touches `electrical.vpp_mv` with a non-UNSOURCED
-    datasheet. A `part_number` field can hold several comma-joined aliases,
-    so each alias is matched separately.
+    datasheet, or is a non-upstream supplement row whose own `datasheet`
+    field is set and not UNSOURCED. A `part_number` field can hold several
+    comma-joined aliases, so each alias is matched separately.
     """
     overrides = _load_overrides()
     rows, _, _, _ = _census(_load_db())
@@ -286,7 +300,8 @@ def test_every_drop_resistor_row_above_the_floor_is_datasheet_backed() -> None:
     unbacked = [
         f"{mfg}/{chip['part_number']}"
         for mfg, chip in above_floor
-        if not any(
+        if not _is_cited_supplement_row(chip)
+        and not any(
             f"{mfg}/{alias.strip()}" in cited_keys
             for alias in chip["part_number"].split(",")
         )
@@ -303,7 +318,7 @@ def test_every_drop_resistor_row_above_the_floor_is_datasheet_backed() -> None:
     )
     assert unbacked == [], (
         f"drop-resistor rows above the floor with no datasheet-cited "
-        f"electrical.vpp_mv override: {unbacked}"
+        f"electrical.vpp_mv override or cited supplement entry: {unbacked}"
     )
 
 

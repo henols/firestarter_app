@@ -493,7 +493,7 @@ value is a routing ceiling in the firmware, not in the generator.
 `vpp_mv` against it with strict greater-than. The six rows at exactly 25000 therefore stay
 `supported`.
 
-A measured maximum near 16–18 V would change all thirty-two rows in §10.5 to `vpp-exceeds-max`.
+A measured maximum near 16–18 V would change all thirty-three rows in §10.5 to `vpp-exceeds-max`.
 `chip_resolver.py` turns any row that is not `supported` into a `ChipNotImplementedError`, which is a
 silent refusal. The generator therefore keeps 25000 and has no second constant. The routing ceiling
 is in the firmware (§10.3).
@@ -556,10 +556,11 @@ a rule on the reading would miss almost all of the rows that need the new route:
 - Required 18000 mV: the 95 % threshold is 17100 mV. The drop-path monitor reads 18700 mV, above
   the threshold, so there is no warning. The socket gets 17380 mV, which is 620 mV short.
 - Required 21000 mV: the threshold is 19950 mV. The 18700 mV reading is below it, so the warning
-  comes. These are the three rows (`FUJITSU/MBM27128`, `NEC/UPD27128`, `NEC/UPD27256`) whose
-  shortfall (3620 mV) is larger than the monitor error of about +7.6 %.
+  comes. These are the four drop-resistor rows at 21000 mV (`FUJITSU/MBM27128`, `NEC/UPD27128`,
+  `NEC/UPD27256`, `HITACHI/HN482764`) whose shortfall (3620 mV) is larger than the monitor error of
+  about +7.6 %.
 
-A trigger on the ADC reading would miss nine of the twelve drop-resistor rows in §10.5. The routing
+A trigger on the ADC reading would miss nine of the thirteen drop-resistor rows in §10.5. The routing
 therefore uses what the path can deliver at any pot setting. The ADC acceptance check does not
 change. It calls `eprom_hv_route_mask`, so it checks the rail that the routing selected. A better
 ADC calibration improves only the check. The routing does not depend on it.
@@ -587,23 +588,24 @@ The filter is every row with `electrical.vpp_mv` at 18000 mV or more. The map is
 `programming.algorithm` to path, with the table in `eprom_params.cpp`. The result agrees with
 `tests/test_vpp_rail_classification.py`:
 
-- **32 rows**: **21 at 18000 mV, 5 at 21000 mV, 6 at 25000 mV**. All are `support_status: supported`.
-- Twelve rows are on the drop-resistor path: algorithm `0x07`, pinout `DIP28_2764`,
+- **33 rows**: **21 at 18000 mV, 6 at 21000 mV, 6 at 25000 mV**. All are `support_status: supported`.
+- Thirteen rows are on the drop-resistor path: algorithm `0x07`, pinout `DIP28_2764`,
   `DIP28_27128` or `DIP28_27256`, `vpp-pin: [1]`.
 - Twenty rows are on the direct-VPE path: algorithm `0x0B`, pinout
   `DIP24_2716`/`DIP24_2732`/`DIP24_2532`, `vpp-pin: [21]`.
-- The measured drop-resistor ceiling of 17380 mV reaches **none** of the thirty-two. The nine rows
-  at 18000 mV are 620 mV short. The three at 21000 mV (`FUJITSU/MBM27128`, `NEC/UPD27128`,
-  `NEC/UPD27256`) are 3620 mV short.
-- With the routing change, all thirty-two use the direct-VPE route. The measured direct value of
-  22140 mV at socket pin 1 covers all twelve former drop-resistor rows. The smallest margin is
-  1140 mV, for the three rows at 21000 mV.
+- The measured drop-resistor ceiling of 17380 mV reaches **none** of the thirty-three. The nine
+  rows at 18000 mV are 620 mV short. The four at 21000 mV (`FUJITSU/MBM27128`, `NEC/UPD27128`,
+  `NEC/UPD27256`, `HITACHI/HN482764`) are 3620 mV short.
+- With the routing change, all thirty-three use the direct-VPE route. The measured direct value of
+  22140 mV at socket pin 1 covers all thirteen former drop-resistor rows. The smallest margin is
+  1140 mV, for the four drop-resistor rows at 21000 mV.
 
 | Path | Required VPP | Manufacturer | Part Number | Algorithm | Pinout | Reason |
 |---|---|---|---|---|---|---|
 | drop-resistor | 21000 mV | FUJITSU | MBM27128 | 0x07 | DIP28_27128 | Changed 2026-09-19 from its datasheet (Figure 3), 18000 → 21000, after issue #71. |
 | drop-resistor | 21000 mV | NEC | UPD27128 | 0x07 | DIP28_27128 | Changed from its datasheet (NEC data book p. 9-6), 12000 → 21000. Below the 18000 mV floor before the change. |
 | drop-resistor | 21000 mV | NEC | UPD27256 | 0x07 | DIP28_27256 | Changed from its datasheet (NEC data book p. 9-10), 12000 → 21000. Below the 18000 mV floor before the change. |
+| drop-resistor | 21000 mV | HITACHI | HN482764,HN482764-3,HN482764-4,HN482764G,HN482764G-3,HN482764G-4 | 0x07 | DIP28_2764 | Supplement row (`tools/extra_chips.json`), `UNVERIFIED`. Not in `infoic.xml`. 21 V is on the vendored first page of its datasheet. |
 | drop-resistor | 18000 mV | FUJITSU | MBM27C128P | 0x07 | DIP28_27128 | Upstream decode. VPP low byte `0xF0` saturates at the largest table entry (18000 mV), the model maximum. Not a per-part value. |
 | drop-resistor | 18000 mV | FUJITSU | MBM27C64 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
 | drop-resistor | 18000 mV | HITACHI | HN27C64G | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
@@ -672,7 +674,7 @@ for one Rev 2.0 shield, with the pot at maximum and the socket empty, in the ben
   The warning names the measured rail and the required voltage, and the operation continues. Its
   trigger is a 5 % window on a reading that is about 7.6 % high. A real shortfall smaller than that
   combined margin can pass with no warning.
-- **Nobody wrote to any of the thirty-two parts.** This section makes no claim that any of them
+- **Nobody wrote to any of the thirty-three parts.** This section makes no claim that any of them
   now programs. It records what a rail delivers and what the firmware decides. It does not record a
   write result.
 
