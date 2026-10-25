@@ -4,43 +4,52 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Phase 199 (RAIL-02) -- the 30-row VPP-rail classification, as a test.
+Phase 199 (RAIL-02) -- the VPP-rail classification, as a test.
 
 Coverage:
   1. ROW TOTAL AND VOLTAGE HISTOGRAM -- filtering the generated database for
-     rows whose electrical.vpp_mv is at or above 18000 yields exactly 30
-     rows, at exactly 21 rows at 18000, 3 at 21000 and 6 at 25000 -- the
-     POST-override state (plan 199-01 moved one FUJITSU row from the 18000
-     bucket to the 21000 bucket).
+     rows whose electrical.vpp_mv is at or above 18000 yields exactly
+     `_EXPECTED_TOTAL_ROWS` rows, with a voltage histogram of exactly
+     `_EXPECTED_VOLTAGE_HISTOGRAM` -- the POST-override state.
   2. PATH HISTOGRAM, NO UNMAPPED ALGORITHM -- mapping every row's
      programming.algorithm through the mirrored path constant below yields
-     exactly 10 rows on the drop-resistor path and 20 on the direct-VPE
-     path, and no row's algorithm falls outside the mapping.
-  3. ALL SUPPORTED -- every one of the 30 rows carries support_status ==
+     exactly `_EXPECTED_PATH_HISTOGRAM`, and no row's algorithm falls
+     outside the mapping.
+  3. ALL SUPPORTED -- every row in the census carries support_status ==
      "supported". Nothing in this phase moves a support_status; this is the
      assertion that would catch it if something did.
   4. PER-PATH SHAPE -- every drop-resistor row is algorithm 0x07 with
      pin_count 28, and every direct-VPE row is algorithm 0x0B with
-     pin_count 24, true across all 30 rows regardless of voltage. See THE
-     DROP-RESISTOR EXCEPTION below: the per-path voltage sub-histogram is
-     asserted here too, and it does not put every drop-resistor row at
-     18000 or every above-floor row on the direct-VPE path.
-  5. BOUNDARY -- the filter is at-or-above 18000, not strictly above: a row
+     pin_count 24, true across the whole census regardless of voltage. The
+     per-path voltage sub-histograms are asserted here too. They do not put
+     every drop-resistor row at 18000 or every above-floor row on the
+     direct-VPE path: see THE DROP-RESISTOR EXCEPTION below.
+  5. DROP-RESISTOR EXCEPTION -- every drop-resistor row above the floor
+     holds its electrical.vpp_mv through a datasheet-cited entry in
+     tools/datasheet_overrides.json, or is a non-upstream supplement row
+     that cites a datasheet.
+  6. BOUNDARY -- the filter is at-or-above 18000, not strictly above: a row
      one millivolt below the floor is excluded, and a row sitting exactly
      on the floor is counted.
-  6. NON-VACUITY, INJECTED ROW -- a synthetic 31st row injected into an
-     in-memory deep copy at or above the floor shifts the measured total
-     to 31, proving the total assertion can actually fail.
-  7. NON-VACUITY, REWRITTEN ALGORITHM -- rewriting one drop-resistor row's
+  7. NON-VACUITY, INJECTED ROW -- a synthetic row injected into an
+     in-memory deep copy at or above the floor adds one to the measured
+     total, proving the total assertion can actually fail.
+  8. NON-VACUITY, REWRITTEN ALGORITHM -- rewriting one drop-resistor row's
      algorithm to the direct-VPE algorithm, in an in-memory deep copy,
      shifts the path histogram, proving the path assertion can fail.
-  8. NON-VACUITY, REWRITTEN STATUS -- rewriting one row's support_status in
+  9. NON-VACUITY, REWRITTEN STATUS -- rewriting one row's support_status in
      an in-memory deep copy breaks the all-supported claim, proving that
      assertion can fail too.
-  9. SOURCE-SHAPE GUARD -- reads this module's own source and asserts every
-     census and non-vacuity test exists by name, that the load-bearing
-     count definitions have not been quietly relaxed, and that none of a
-     named list of weakening idioms has crept in.
+  10. SOURCE-SHAPE GUARD -- reads this module's own source and asserts every
+      census and non-vacuity test exists by name, that the load-bearing
+      count definitions have not been quietly relaxed, and that none of a
+      named list of weakening idioms has crept in.
+
+The two per-path voltage sub-histograms are the only literal counts in this
+module. The total, the voltage histogram, the path histogram and every
+non-vacuity expectation are computed from them, so a database change that
+moves a row across the floor or between buckets edits those two literals
+and nothing else.
 
 None of the three non-vacuity mutations ever touches chip_database.json on
 disk -- each loads the database once and mutates a `copy.deepcopy` of it,
@@ -62,29 +71,33 @@ a test that read the firmware source tree would pass in a devcontainer
 where that tree happens to sit as a sibling directory and prove nothing at
 all in CI -- a gate that fails open, which is worse than no gate.
 
-No row among the 30 carries algorithm 0x08. The mirrored mapping's middle
+No row in the census carries algorithm 0x08. The mirrored mapping's middle
 entry is therefore never exercised by this census; a later reader should
 not read that absence as an omission in the mapping.
 
-THE DROP-RESISTOR EXCEPTION -- of the nine rows above the 18000 mV floor,
-eight are unrelated to this phase's override: six are unsourced NMOS
-override entries carried over from an earlier phase, all on the direct-VPE
-path, and two are hardcoded in the non-upstream supplement file, also on
-the direct-VPE path -- none of the eight is upstream-attested. The ninth
-row is different in every way that matters here: it is the one row plan
-199-01's datasheet-backed override moved out of the 18000 bucket, it sits
-on the DROP-RESISTOR path rather than direct-VPE, and its 21000 mV figure
-IS datasheet-backed rather than unsourced. That is why the drop-resistor
-path is not uniformly at 18000 mV (nine of its ten rows are; the tenth is
-the moved row) and why the direct-VPE path does not hold every row above
-the floor (it holds eight of the nine; the ninth is the drop-resistor
-exception).
+THE DROP-RESISTOR EXCEPTION -- the rows above the 18000 mV floor come from
+two different sources:
 
-Loads chip_database.json directly, the way test_build_db_inclusion.py and
-test_b15_page_size_corroboration.py do, because the claim is about what the
-generator emits rather than about what EpromDatabase resolves. Keeps no
-part-number list -- every row property below is read from the loaded
-database.
+  - On the direct-VPE path, every above-floor row is either an UNSOURCED
+    NMOS override entry carried over from an earlier phase or a row
+    hardcoded in the non-upstream supplement file. None is
+    upstream-attested.
+  - On the DROP-RESISTOR path, every above-floor row is either a
+    datasheet-backed override that moved a row out of the 18000 bucket or
+    a supplement row in tools/extra_chips.json that cites a datasheet. Its
+    figure IS datasheet-backed, not unsourced.
+
+That is why the drop-resistor path is not uniformly at 18000 mV, and why
+the direct-VPE path does not hold every row above the floor. Test 5 asserts
+the drop-resistor half of this split against the override file and the
+supplement rows' own provenance fields, so the list of parts lives in those
+two files and not here.
+
+Loads chip_database.json and datasheet_overrides.json directly, the way
+test_build_db_inclusion.py and test_b15_page_size_corroboration.py load the
+database, because the claim is about what the generator emits rather than
+about what EpromDatabase resolves. Keeps no part-number list -- every row
+property below is read from the loaded files.
 """
 
 import collections
@@ -94,6 +107,7 @@ from pathlib import Path
 
 _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
+_OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
 _VPP_CENSUS_FLOOR_MV = 18000
 
@@ -105,13 +119,28 @@ _ALGORITHM_TO_VPP_PATH = {
 
 _UNMAPPED_PATH_LABEL = "unmapped"
 
-_EXPECTED_TOTAL_ROWS = 31
-_EXPECTED_VOLTAGE_HISTOGRAM = {18000: 21, 21000: 4, 25000: 6}
-_EXPECTED_PATH_HISTOGRAM = {"drop-resistor": 11, "direct-vpe": 20}
+_SUPPLEMENT_SOURCE = "non-upstream-supplement"
+
+_EXPECTED_DROP_RESISTOR_MV_HISTOGRAM = {18000: 9, 21000: 5}
+_EXPECTED_DIRECT_VPE_MV_HISTOGRAM = {18000: 12, 21000: 2, 25000: 6}
+
+_EXPECTED_PATH_HISTOGRAM = {
+    "drop-resistor": sum(_EXPECTED_DROP_RESISTOR_MV_HISTOGRAM.values()),
+    "direct-vpe": sum(_EXPECTED_DIRECT_VPE_MV_HISTOGRAM.values()),
+}
+_EXPECTED_VOLTAGE_HISTOGRAM = dict(
+    collections.Counter(_EXPECTED_DROP_RESISTOR_MV_HISTOGRAM)
+    + collections.Counter(_EXPECTED_DIRECT_VPE_MV_HISTOGRAM)
+)
+_EXPECTED_TOTAL_ROWS = sum(_EXPECTED_PATH_HISTOGRAM.values())
 
 
 def _load_db() -> dict:
     return json.loads(_DB_FILE.read_text(encoding="utf-8"))
+
+
+def _load_overrides() -> dict:
+    return json.loads(_OVERRIDES_FILE.read_text(encoding="utf-8"))
 
 
 def _all_chips(db: dict):
@@ -149,11 +178,18 @@ def _census(db: dict):
     return rows, voltage_histogram, path_histogram, status_histogram
 
 
+def _rows_on_path(rows, path: str) -> list:
+    return [
+        (mfg, chip)
+        for mfg, chip in rows
+        if _ALGORITHM_TO_VPP_PATH.get(chip["programming"]["algorithm"]) == path
+    ]
+
+
 def test_row_total_and_voltage_histogram_match_post_override_state() -> None:
-    """The live generated database yields exactly 30 rows at or above the
-    18000 mV floor, with a voltage histogram of exactly 21 at 18000, 3 at
-    21000 and 6 at 25000 -- the POST-override state (plan 199-01's override
-    is why this reads 21 / 3 / 6 rather than the pre-override 22 / 2 / 6).
+    """The live generated database yields exactly `_EXPECTED_TOTAL_ROWS`
+    rows at or above the 18000 mV floor, with a voltage histogram of
+    exactly `_EXPECTED_VOLTAGE_HISTOGRAM` -- the POST-override state.
     """
     rows, voltage_histogram, _, _ = _census(_load_db())
 
@@ -164,15 +200,15 @@ def test_row_total_and_voltage_histogram_match_post_override_state() -> None:
     )
     assert voltage_histogram == _EXPECTED_VOLTAGE_HISTOGRAM, (
         f"expected the voltage histogram {_EXPECTED_VOLTAGE_HISTOGRAM}, "
-        f"measured {voltage_histogram} -- either plan 199-01's override did "
-        f"not apply or an upstream voltage moved"
+        f"measured {voltage_histogram} -- either an override did not apply "
+        f"or an upstream voltage moved"
     )
 
 
 def test_path_histogram_has_no_unmapped_algorithm() -> None:
     """Mapping every row's algorithm through `_ALGORITHM_TO_VPP_PATH` yields
-    exactly 10 drop-resistor rows and 20 direct-VPE rows, with no row's
-    algorithm falling outside the mirrored mapping.
+    exactly `_EXPECTED_PATH_HISTOGRAM`, with no row's algorithm falling
+    outside the mirrored mapping.
     """
     _, _, path_histogram, _ = _census(_load_db())
 
@@ -187,7 +223,7 @@ def test_path_histogram_has_no_unmapped_algorithm() -> None:
 
 
 def test_every_row_in_the_census_is_supported() -> None:
-    """D-01: every one of the 30 rows carries support_status ==
+    """D-01: every row in the census carries support_status ==
     "supported". Nothing in this phase moves a support_status; this
     assertion is what would catch it if something did.
     """
@@ -201,45 +237,88 @@ def test_every_row_in_the_census_is_supported() -> None:
 def test_per_path_algorithm_and_pin_count_are_uniform() -> None:
     """Every drop-resistor row is algorithm 0x07 with pin_count 28, and
     every direct-VPE row is algorithm 0x0B with pin_count 24 -- true across
-    all 30 rows regardless of voltage. The per-path voltage sub-histogram is
-    asserted here too: see the module docstring's DROP-RESISTOR EXCEPTION.
+    the whole census regardless of voltage. The per-path voltage
+    sub-histograms are asserted here too: see the module docstring's
+    DROP-RESISTOR EXCEPTION.
     """
     rows, _, _, _ = _census(_load_db())
 
-    drop_resistor = [
-        chip
-        for _, chip in rows
-        if _ALGORITHM_TO_VPP_PATH.get(chip["programming"]["algorithm"])
-        == "drop-resistor"
-    ]
-    direct_vpe = [
-        chip
-        for _, chip in rows
-        if _ALGORITHM_TO_VPP_PATH.get(chip["programming"]["algorithm"]) == "direct-vpe"
-    ]
+    drop_resistor = [chip for _, chip in _rows_on_path(rows, "drop-resistor")]
+    direct_vpe = [chip for _, chip in _rows_on_path(rows, "direct-vpe")]
 
-    assert len(drop_resistor) == 11
     assert all(chip["programming"]["algorithm"] == 0x07 for chip in drop_resistor)
     assert all(chip["electrical"]["pin_count"] == 28 for chip in drop_resistor)
     drop_resistor_mv = dict(
         collections.Counter(chip["electrical"]["vpp_mv"] for chip in drop_resistor)
     )
-    assert drop_resistor_mv == {18000: 9, 21000: 2}, (
-        f"expected the drop-resistor voltage sub-histogram {{18000: 9, "
-        f"21000: 1}} (nine rows at the floor plus the one row plan 199-01 "
-        f"moved), measured {drop_resistor_mv}"
+    assert drop_resistor_mv == _EXPECTED_DROP_RESISTOR_MV_HISTOGRAM, (
+        f"expected the drop-resistor voltage sub-histogram "
+        f"{_EXPECTED_DROP_RESISTOR_MV_HISTOGRAM}, measured {drop_resistor_mv}"
     )
 
-    assert len(direct_vpe) == 20
     assert all(chip["programming"]["algorithm"] == 0x0B for chip in direct_vpe)
     assert all(chip["electrical"]["pin_count"] == 24 for chip in direct_vpe)
     direct_vpe_mv = dict(
         collections.Counter(chip["electrical"]["vpp_mv"] for chip in direct_vpe)
     )
-    assert direct_vpe_mv == {18000: 12, 21000: 2, 25000: 6}, (
-        f"expected the direct-VPE voltage sub-histogram {{18000: 12, "
-        f"21000: 2, 25000: 6}} (eight of the nine above-floor rows -- the "
-        f"ninth is the drop-resistor exception), measured {direct_vpe_mv}"
+    assert direct_vpe_mv == _EXPECTED_DIRECT_VPE_MV_HISTOGRAM, (
+        f"expected the direct-VPE voltage sub-histogram "
+        f"{_EXPECTED_DIRECT_VPE_MV_HISTOGRAM}, measured {direct_vpe_mv}"
+    )
+
+
+def _is_cited_supplement_row(chip: dict) -> bool:
+    return chip.get("source") == _SUPPLEMENT_SOURCE and chip.get("datasheet") not in (
+        None,
+        "",
+        "UNSOURCED",
+    )
+
+
+def test_every_drop_resistor_row_above_the_floor_is_datasheet_backed() -> None:
+    """THE DROP-RESISTOR EXCEPTION, as an assertion: every drop-resistor row
+    strictly above the floor matches a `datasheet_overrides.json` key whose
+    `fields` map touches `electrical.vpp_mv` with a non-UNSOURCED
+    datasheet, or is a non-upstream supplement row whose own `datasheet`
+    field is set and not UNSOURCED. A `part_number` field can hold several
+    comma-joined aliases, so each alias is matched separately.
+    """
+    overrides = _load_overrides()
+    rows, _, _, _ = _census(_load_db())
+
+    cited_keys = {
+        key
+        for key, entry in overrides.items()
+        if "electrical.vpp_mv" in entry.get("fields", {})
+        and entry.get("datasheet") != "UNSOURCED"
+    }
+    above_floor = [
+        (mfg, chip)
+        for mfg, chip in _rows_on_path(rows, "drop-resistor")
+        if chip["electrical"]["vpp_mv"] > _VPP_CENSUS_FLOOR_MV
+    ]
+    unbacked = [
+        f"{mfg}/{chip['part_number']}"
+        for mfg, chip in above_floor
+        if not _is_cited_supplement_row(chip)
+        and not any(
+            f"{mfg}/{alias.strip()}" in cited_keys
+            for alias in chip["part_number"].split(",")
+        )
+    ]
+
+    expected_above_floor = sum(
+        count
+        for mv, count in _EXPECTED_DROP_RESISTOR_MV_HISTOGRAM.items()
+        if mv > _VPP_CENSUS_FLOOR_MV
+    )
+    assert len(above_floor) == expected_above_floor, (
+        f"expected {expected_above_floor} drop-resistor rows above the floor, "
+        f"found {len(above_floor)}"
+    )
+    assert unbacked == [], (
+        f"drop-resistor rows above the floor with no datasheet-cited "
+        f"electrical.vpp_mv override or cited supplement entry: {unbacked}"
     )
 
 
@@ -282,20 +361,20 @@ def test_boundary_is_at_or_above_not_strictly_above() -> None:
     )
 
 
-def test_injecting_a_synthetic_row_makes_the_total_go_to_32() -> None:
+def test_injecting_a_synthetic_row_adds_one_to_the_total() -> None:
     """Non-vacuity, defect class closed: a census helper that silently
     matched anything -- an empty row list, a swallowed exception, a filter
     that never selected -- would pass every other test in this module.
     Injecting a synthetic row at the floor into an in-memory deep copy of
-    the loaded database must shift the measured total from 30 to 31. The
-    original database on disk is never written to.
+    the loaded database must add one to the measured total. The original
+    database on disk is never written to.
     """
     db = _load_db()
     mutated = copy.deepcopy(db)
     manufacturer = next(iter(sorted(mutated)))
     mutated[manufacturer].append(
         {
-            "part_number": "SYNTHETIC-THIRTY-FIRST-ROW",
+            "part_number": "SYNTHETIC-INJECTED-ROW",
             "support_status": "supported",
             "electrical": {"vpp_mv": _VPP_CENSUS_FLOOR_MV, "pin_count": 28},
             "programming": {"algorithm": 0x07},
@@ -305,11 +384,11 @@ def test_injecting_a_synthetic_row_makes_the_total_go_to_32() -> None:
     baseline_rows, _, _, _ = _census(db)
     mutated_rows, _, _, _ = _census(mutated)
 
-    assert len(baseline_rows) == 31
-    assert len(mutated_rows) == 32, (
+    assert len(baseline_rows) == _EXPECTED_TOTAL_ROWS
+    assert len(mutated_rows) == _EXPECTED_TOTAL_ROWS + 1, (
         f"injecting one synthetic row at the floor into an in-memory deep "
-        f"copy must shift the total from 30 to 31, measured "
-        f"{len(mutated_rows)}"
+        f"copy must shift the total from {_EXPECTED_TOTAL_ROWS} to "
+        f"{_EXPECTED_TOTAL_ROWS + 1}, measured {len(mutated_rows)}"
     )
 
 
@@ -317,26 +396,26 @@ def test_rewriting_an_algorithm_shifts_the_path_histogram() -> None:
     """Non-vacuity, defect class closed: a path split that could never
     disagree with the mirrored mapping would pass even if the mapping were
     deleted entirely. Rewriting one drop-resistor row's algorithm to the
-    direct-VPE algorithm, in an in-memory deep copy, must shift the path
-    histogram from 10/20 to 9/21.
+    direct-VPE algorithm, in an in-memory deep copy, must move one row from
+    the drop-resistor count to the direct-VPE count.
     """
     db = _load_db()
     mutated = copy.deepcopy(db)
     rows, _, _, _ = _census(mutated)
-    drop_resistor_chip = next(
-        chip
-        for _, chip in rows
-        if _ALGORITHM_TO_VPP_PATH.get(chip["programming"]["algorithm"])
-        == "drop-resistor"
-    )
+    _, drop_resistor_chip = _rows_on_path(rows, "drop-resistor")[0]
     drop_resistor_chip["programming"]["algorithm"] = 0x0B
 
     _, _, mutated_path_histogram, _ = _census(mutated)
 
-    assert mutated_path_histogram == {"drop-resistor": 10, "direct-vpe": 21}, (
+    expected_path_histogram = {
+        "drop-resistor": _EXPECTED_PATH_HISTOGRAM["drop-resistor"] - 1,
+        "direct-vpe": _EXPECTED_PATH_HISTOGRAM["direct-vpe"] + 1,
+    }
+    assert mutated_path_histogram == expected_path_histogram, (
         f"rewriting one drop-resistor row's algorithm to the direct-VPE "
         f"algorithm, in an in-memory deep copy, must shift the path "
-        f"histogram to 9 and 21, measured {mutated_path_histogram}"
+        f"histogram to {expected_path_histogram}, measured "
+        f"{mutated_path_histogram}"
     )
 
 
@@ -344,7 +423,7 @@ def test_rewriting_support_status_breaks_the_all_supported_claim() -> None:
     """Non-vacuity, defect class closed: an all-supported claim that could
     never disagree would pass even over a database where D-01 no longer
     holds. Rewriting one row's support_status, in an in-memory deep copy,
-    must break the all-30-supported claim.
+    must break the all-supported claim.
     """
     db = _load_db()
     mutated = copy.deepcopy(db)
@@ -367,18 +446,18 @@ _REQUIRED_TEST_NAMES = (
     "test_path_histogram_has_no_unmapped_algorithm",
     "test_every_row_in_the_census_is_supported",
     "test_per_path_algorithm_and_pin_count_are_uniform",
+    "test_every_drop_resistor_row_above_the_floor_is_datasheet_backed",
     "test_boundary_is_at_or_above_not_strictly_above",
-    "test_injecting_a_synthetic_row_makes_the_total_go_to_32",
+    "test_injecting_a_synthetic_row_adds_one_to_the_total",
     "test_rewriting_an_algorithm_shifts_the_path_histogram",
     "test_rewriting_support_status_breaks_the_all_supported_claim",
 )
 
 _DEFINITION_GUARD_COUNTS = {
-    "_EXPECTED_TOTAL_ROWS" + " = 31": 1,
-    "_EXPECTED_VOLTAGE_HISTOGRAM" + " = {18000: 21, 21000: 4, 25000: 6}": 1,
-    "_EXPECTED_PATH_HISTOGRAM" + ' = {"drop-resistor": 11, "direct-vpe": 20}': 1,
-    "=" + "= 32": 1,
-    "=" + "= 31": 1,
+    "_EXPECTED_DROP_RESISTOR_MV_HISTOGRAM" + " = {": 1,
+    "_EXPECTED_DIRECT_VPE_MV_HISTOGRAM" + " = {": 1,
+    "=" + "= _EXPECTED_TOTAL_ROWS + 1": 1,
+    ">" + "=": 1,
 }
 
 _WEAKENING_IDIOMS = (
@@ -386,9 +465,6 @@ _WEAKENING_IDIOMS = (
     "pytest.mark." + "skip",
     "issub" + "set",
     "firestarter" + "_fw",
-    ">" + "= 31",
-    ">" + "= 11",
-    ">" + "= 20",
 )
 
 
@@ -399,6 +475,9 @@ def test_module_source_shape_guards_against_weakening() -> None:
     this test noticing. Reads this module's own source rather than
     re-deriving the census, because the claim is about the FILE, not the
     database.
+
+    The one permitted at-or-above comparison is the census filter in
+    `_census`. Any second one is an exact count relaxed to a floor.
 
     Every entry in `_DEFINITION_GUARD_COUNTS` and `_WEAKENING_IDIOMS` above
     is assembled from two or more string fragments joined with `+`, rather

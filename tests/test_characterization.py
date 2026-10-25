@@ -371,10 +371,10 @@ def test_info_mbm27c1000(snapshot):
 def test_info_mbm27c4001(snapshot):
     """Pin info output for MBM27C4001 (Phase 200 VCC-01/VCC-02, datasheet-cited class).
 
-    MBM27C4001 is one of exactly three rows in the 284 elevated-supply rows
-    whose `electrical.vdd_mv` comes from a cited datasheet rather than a
-    `VCC_VOLTAGES` rail slot -- the other two are FUJITSU/MBM27128 and
-    FUJITSU/MBM27C1001 (200-RESEARCH.md § G-1, measured against
+    MBM27C4001 is one of the elevated-supply rows whose `electrical.vdd_mv`
+    comes from a cited datasheet rather than a `VCC_VOLTAGES` rail slot.
+    `_EXPECTED_DATASHEET_CITED_KEYS` in test_programming_vcc_census.py is
+    the authoritative list (200-RESEARCH.md § G-1, measured against
     `tools/datasheet_overrides.json` with the `part_number` field comma-split
     first, per CLAUDE.md's Database Pipeline warning -- an exact-string match
     misses multi-alias rows). Pinned alongside test_info_mbm27c1000 above so

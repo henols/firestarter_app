@@ -17,44 +17,44 @@
   },
   "totals": {
     "manufacturers": 59,
-    "chips": 747
+    "chips": 748
   },
   "levels": {
     "top": {
-      "electrical": 747,
-      "part_number": 747,
-      "pinout": 747,
-      "programming": 747,
-      "support_status": 747,
+      "electrical": 748,
+      "part_number": 748,
+      "pinout": 748,
+      "programming": 748,
+      "support_status": 748,
       "unsupported_reason": 1,
-      "datasheet": 3,
-      "provenance": 3,
-      "source": 3,
-      "verification_note": 3,
-      "verification_status": 3,
+      "datasheet": 4,
+      "provenance": 4,
+      "source": 4,
+      "verification_note": 4,
+      "verification_status": 4,
       "nc_pins": 221
     },
     "programming": {
-      "algorithm": 747,
-      "chip_id_check": 747,
-      "chip_id_value": 747,
-      "pulse_duration_us": 747,
-      "infoic_page_size_raw": 745,
-      "protect_off_before": 745,
-      "protect_on_after": 745,
+      "algorithm": 748,
+      "chip_id_check": 748,
+      "chip_id_value": 748,
+      "pulse_duration_us": 748,
+      "infoic_page_size_raw": 746,
+      "protect_off_before": 746,
+      "protect_on_after": 746,
       "page_size": 64
     },
     "electrical": {
-      "pin_count": 747,
-      "size_bytes": 747,
-      "type": 747,
-      "vcc_mv": 747,
-      "vdd_mv": 747,
-      "vpp_mv": 747
+      "pin_count": 748,
+      "size_bytes": 748,
+      "type": 748,
+      "vcc_mv": 748,
+      "vdd_mv": 748,
+      "vpp_mv": 748
     }
   },
   "protocol_chip_counts": {
-    "7": 171,
+    "7": 172,
     "8": 127,
     "11": 32
   },

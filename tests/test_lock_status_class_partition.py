@@ -187,8 +187,8 @@ def test_all_746_rows_resolve_exhaustively() -> None:
     """
     db = _load_db()
     resolutions = _resolve_database_or_raise(db)
-    assert len(resolutions) == 747, (
-        f"D-12 leg 1: expected 747 resolved rows, measured {len(resolutions)}"
+    assert len(resolutions) == 748, (
+        f"D-12 leg 1: expected 748 resolved rows, measured {len(resolutions)}"
     )
     unknown_tokens = {r.token for r in resolutions} - _ALL_GATE_TOKENS
     assert not unknown_tokens, (
@@ -232,7 +232,7 @@ def test_two_consecutive_walks_are_byte_equal() -> None:
 # Leg 3: the census, pinned as literals
 
 _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
-    0x07: 171,
+    0x07: 172,
     0x08: 127,
     0x0B: 32,
     0x0E: 20,
@@ -240,7 +240,7 @@ _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
     0x28: 34,
     0x29: 20,
 }
-_NO_MECHANISM_TOTAL = 406
+_NO_MECHANISM_TOTAL = 407
 assert sum(_NO_MECHANISM_ALGORITHM_COUNTS.values()) == _NO_MECHANISM_TOTAL
 
 _NOT_IMPLEMENTED_KEYS: frozenset[str] = frozenset(
@@ -337,14 +337,14 @@ assert (
 
 _NOT_READABLE_0X0D_TOTAL = 84
 
-_GRAND_TOTAL = 747
+_GRAND_TOTAL = 748
 assert (
     _NO_MECHANISM_TOTAL + 40 + _NOT_READABLE_0X0D_TOTAL + _CURATION_SURFACE_TOTAL
     == _GRAND_TOTAL
 )
 
 
-def test_no_mechanism_census_406_with_per_algorithm_decomposition() -> None:
+def test_no_mechanism_census_407_with_per_algorithm_decomposition() -> None:
     """`no_mechanism` resolves for exactly 405 rows, decomposed by algorithm
     into the seven counts D-09 names: 0x07 (170), 0x08 (127), 0x0B (32),
     0x0E (20), 0x27 (2), 0x28 (34), 0x29 (20). 405 is too large a bucket to
@@ -473,7 +473,7 @@ def test_0x05_0x06_curation_surface_217_matches_151_06_measurement() -> None:
     )
 
 
-def test_total_arithmetic_sums_to_747() -> None:
+def test_total_arithmetic_sums_to_748() -> None:
     """405 + 40 + 84 + 217 == 746, asserted as arithmetic over the ACTUAL
     measured counts (not the literal constants alone), so a future row
     that shifts one bucket without shifting the total is still caught."""

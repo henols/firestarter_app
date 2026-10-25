@@ -318,6 +318,9 @@ record when a datasheet gives two:
   conventional single-shot width.
 - For `FUJITSU/MBM27128`, that is the Quick Pro value of 1000 µs (`TPW = 1 ms ± 50 µs`, datasheet
   Figure 3). It is not the conventional 50 ms single-shot pulse on the page before it.
+- For `NEC/UPD27128` and `NEC/UPD27256`, that is the high-speed value of 1000 µs
+  (`tPW = 1 ms ± 5%`, data book pages 9-6 and 9-10). For the µPD27128 it is not the conventional
+  50 ms pulse in the same table.
 - A correct value still gives an incomplete fast algorithm. The firmware does not implement the
   `tOPW` over-program pulse of the datasheet, whatever value `pulse_duration_us` has.
 
@@ -332,7 +335,7 @@ No shipped row reaches this branch against the pinned `infoic.xml`. The only tes
 `tests/test_build_db_interpret_timing.py`, with synthetic input.
 
 Related entries in `tools/datasheet_overrides.json`: `FUJITSU/MBM27128`, `FUJITSU/MBM27C1000`,
-`FUJITSU/MBM27C1001`.
+`FUJITSU/MBM27C1001`, `NEC/UPD27128`, `NEC/UPD27256`.
 
 ---
 
@@ -393,10 +396,11 @@ table.
 
 ### 9.4 The evidence
 
-**The positive match.** Three Fujitsu datasheets give a program VCC of 6.0 V ± 0.25 V: `MBM27128`,
-`MBM27C1001` and `MBM27C4001`.
+**The positive match.** Five datasheets give a program VCC of 6.0 V ± 0.25 V. Three are Fujitsu:
+`MBM27128`, `MBM27C1001` and `MBM27C4001`. Two are NEC, from one data book extract: `UPD27128`
+and `UPD27256`.
 
-- All three rows decode to vdd index `0x04`. `VCC_VOLTAGES` maps that index to 5500 mV.
+- All five rows decode to vdd index `0x04`. `VCC_VOLTAGES` maps that index to 5500 mV.
 - `tools/datasheet_overrides.json` now holds each row at the datasheet value, 6000 mV.
 - The model rail at index `0x05` (6500 mV) is nearer to the datasheet band than index `0x04`.
   This shows again that the index selects a model slot and does not follow the datasheet value.
@@ -417,7 +421,7 @@ upstream comment says this `[VERIFIED: database.c#L125-L126 @ a8efaedc]`:
 Cite lines 125-126. Line 123 of the same comment block reads
 `* The Vcc and Vpp settings are linked through the 'voltages'`. It is not the quoted sentence.
 
-**The arithmetic.** The band of the three Fujitsu datasheets is 5.75-6.25 V. The two nearest model
+**The arithmetic.** The band of the five datasheets is 5.75-6.25 V. The two nearest model
 rails are `VCC_VOLTAGES[0x04]` = 5500 and `VCC_VOLTAGES[0x05]` = 6500. Neither 5.5 V nor 6.5 V is
 inside 5.75-6.25 V. The field cannot hold the datasheet value, so it does not record it. It records
 the nearest rail that the model can drive.
@@ -451,10 +455,12 @@ population. `build_db.py` does not assert this predicate at build time.
 
 ### 9.5 Limits
 
-- **The datasheet evidence is n = 3, all from Fujitsu.** This document makes no claim that the
-  Fujitsu 6.0 V ± 0.25 V value applies to other manufacturers at the same index.
-- **This document makes no claim about the 167 other rows at vdd index `0x04`.**
-  `VCC_VOLTAGES[0x04]` = 5500 is the index of the three Fujitsu rows before their override. 167 more rows decode to that index.
+- **The datasheet evidence is n = 5, from two manufacturers: three Fujitsu and two NEC parts.**
+  This document makes no claim that the 6.0 V ± 0.25 V value applies to other manufacturers at the
+  same index.
+- **This document makes no claim about the 165 other rows at vdd index `0x04`.**
+  `VCC_VOLTAGES[0x04]` = 5500 is the index of the five datasheet-cited rows before their override.
+  165 more rows decode to that index.
   Nobody has examined them yet. Each needs its own datasheet.
 - **The result does not say that the value of a row is correct.** It says what the field is: a
   programmer rail index. It does not say that a decoded or overridden voltage is right for a part.
@@ -469,8 +475,9 @@ population. `build_db.py` does not assert this predicate at build time.
   different part families. This is a second example of the result of this section.
 
 Sources: `tools/datasheet_overrides.json` entries `FUJITSU/MBM27128`, `FUJITSU/MBM27C1001`,
-`FUJITSU/MBM27C4001` and the twelve `0x06` entries. `database.c#L125-L126`, `database.c#L161-L170`,
-`database.c#L182-L190` and `minipro.h#L84-L85`, all @ a8efaedc.
+`FUJITSU/MBM27C4001`, `NEC/UPD27128`, `NEC/UPD27256` and the twelve `0x06` entries.
+`database.c#L125-L126`, `database.c#L161-L170`, `database.c#L182-L190` and `minipro.h#L84-L85`,
+all @ a8efaedc.
 
 ---
 
@@ -486,7 +493,7 @@ value is a routing ceiling in the firmware, not in the generator.
 `vpp_mv` against it with strict greater-than. The six rows at exactly 25000 therefore stay
 `supported`.
 
-A measured maximum near 16–18 V would change all thirty rows in §10.5 to `vpp-exceeds-max`.
+A measured maximum near 16–18 V would change all thirty-four rows in §10.5 to `vpp-exceeds-max`.
 `chip_resolver.py` turns any row that is not `supported` into a `ChipNotImplementedError`, which is a
 silent refusal. The generator therefore keeps 25000 and has no second constant. The routing ceiling
 is in the firmware (§10.3).
@@ -549,10 +556,11 @@ a rule on the reading would miss almost all of the rows that need the new route:
 - Required 18000 mV: the 95 % threshold is 17100 mV. The drop-path monitor reads 18700 mV, above
   the threshold, so there is no warning. The socket gets 17380 mV, which is 620 mV short.
 - Required 21000 mV: the threshold is 19950 mV. The 18700 mV reading is below it, so the warning
-  comes. This is the one row (`FUJITSU/MBM27128`) whose shortfall (3620 mV) is larger than the
-  monitor error of about +7.6 %.
+  comes. These are the five drop-resistor rows at 21000 mV (`FUJITSU/MBM27128`, `NEC/UPD27128`,
+  `NEC/UPD27256`, `HITACHI/HN482764`, `MITSUBISHI/M5L2764K`) whose shortfall (3620 mV) is larger
+  than the monitor error of about +7.6 %.
 
-A trigger on the ADC reading would miss nine of the ten drop-resistor rows in §10.5. The routing
+A trigger on the ADC reading would miss nine of the fourteen drop-resistor rows in §10.5. The routing
 therefore uses what the path can deliver at any pot setting. The ADC acceptance check does not
 change. It calls `eprom_hv_route_mask`, so it checks the rail that the routing selected. A better
 ADC calibration improves only the check. The routing does not depend on it.
@@ -580,20 +588,25 @@ The filter is every row with `electrical.vpp_mv` at 18000 mV or more. The map is
 `programming.algorithm` to path, with the table in `eprom_params.cpp`. The result agrees with
 `tests/test_vpp_rail_classification.py`:
 
-- **30 rows**: **21 at 18000 mV, 3 at 21000 mV, 6 at 25000 mV**. All are `support_status: supported`.
-- Ten rows are on the drop-resistor path: algorithm `0x07`, pinout `DIP28_2764` or
-  `DIP28_27128`, `vpp-pin: [1]`.
+- **34 rows**: **21 at 18000 mV, 7 at 21000 mV, 6 at 25000 mV**. All are `support_status: supported`.
+- Fourteen rows are on the drop-resistor path: algorithm `0x07`, pinout `DIP28_2764`,
+  `DIP28_27128` or `DIP28_27256`, `vpp-pin: [1]`.
 - Twenty rows are on the direct-VPE path: algorithm `0x0B`, pinout
   `DIP24_2716`/`DIP24_2732`/`DIP24_2532`, `vpp-pin: [21]`.
-- The measured drop-resistor ceiling of 17380 mV reaches **none** of the thirty. The nine rows at
-  18000 mV are 620 mV short. The tenth (`FUJITSU/MBM27128`, 21000 mV) is 3620 mV short.
-- With the routing change, all thirty use the direct-VPE route. The measured direct value of
-  22140 mV at socket pin 1 covers all ten former drop-resistor rows. The smallest margin is 1140 mV
-  (`FUJITSU/MBM27128` at 21000 mV).
+- The measured drop-resistor ceiling of 17380 mV reaches **none** of the thirty-four. The nine
+  rows at 18000 mV are 620 mV short. The five at 21000 mV (`FUJITSU/MBM27128`, `NEC/UPD27128`,
+  `NEC/UPD27256`, `HITACHI/HN482764`, `MITSUBISHI/M5L2764K`) are 3620 mV short.
+- With the routing change, all thirty-four use the direct-VPE route. The measured direct value of
+  22140 mV at socket pin 1 covers all fourteen former drop-resistor rows. The smallest margin is
+  1140 mV, for the five drop-resistor rows at 21000 mV.
 
 | Path | Required VPP | Manufacturer | Part Number | Algorithm | Pinout | Reason |
 |---|---|---|---|---|---|---|
 | drop-resistor | 21000 mV | FUJITSU | MBM27128 | 0x07 | DIP28_27128 | Changed 2026-09-19 from its datasheet (Figure 3), 18000 → 21000, after issue #71. |
+| drop-resistor | 21000 mV | NEC | UPD27128 | 0x07 | DIP28_27128 | Changed from its datasheet (NEC data book p. 9-6), 12000 → 21000. Below the 18000 mV floor before the change. |
+| drop-resistor | 21000 mV | NEC | UPD27256 | 0x07 | DIP28_27256 | Changed from its datasheet (NEC data book p. 9-10), 12000 → 21000. Below the 18000 mV floor before the change. |
+| drop-resistor | 21000 mV | HITACHI | HN482764,HN482764-3,HN482764-4,HN482764G,HN482764G-3,HN482764G-4 | 0x07 | DIP28_2764 | Supplement row (`tools/extra_chips.json`), `UNVERIFIED`. Not in `infoic.xml`. 21 V is on the vendored first page of its datasheet. |
+| drop-resistor | 21000 mV | MITSUBISHI | M5L2764K,M5L2764K-2 | 0x07 | DIP28_2764 | Supplement row (`tools/extra_chips.json`), `UNVERIFIED`. Not in `infoic.xml`. VPP 21 V, VCC 6 V and the 1 ms fast-algorithm pulse are in the vendored datasheet. |
 | drop-resistor | 18000 mV | FUJITSU | MBM27C128P | 0x07 | DIP28_27128 | Upstream decode. VPP low byte `0xF0` saturates at the largest table entry (18000 mV), the model maximum. Not a per-part value. |
 | drop-resistor | 18000 mV | FUJITSU | MBM27C64 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
 | drop-resistor | 18000 mV | HITACHI | HN27C64G | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
@@ -662,7 +675,7 @@ for one Rev 2.0 shield, with the pot at maximum and the socket empty, in the ben
   The warning names the measured rail and the required voltage, and the operation continues. Its
   trigger is a 5 % window on a reading that is about 7.6 % high. A real shortfall smaller than that
   combined margin can pass with no warning.
-- **Nobody wrote to any of the thirty parts.** This section makes no claim that any of them
+- **Nobody wrote to any of the thirty-four parts.** This section makes no claim that any of them
   now programs. It records what a rail delivers and what the firmware decides. It does not record a
   write result.
 
