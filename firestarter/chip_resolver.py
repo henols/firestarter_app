@@ -7,12 +7,30 @@ Permission is hereby granted under MIT license.
 Single chokepoint between CLI dispatch and the EPROM database lookup/conversion.
 """
 
+import logging
 from typing import Any
 
-from firestarter.database import EpromDatabase
+from firestarter.database import EpromDatabase, qualified_chip_name
 from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
 
 _NON_ZERO_WIRE_FIELDS = ("memory-size", "pin-count", "vpp_mv")
+
+logger = logging.getLogger("ChipResolver")
+
+
+def warn_if_ambiguous(name: str, db: EpromDatabase) -> None:
+    """Warn when `name` also selects rows that program differently from the
+    one the database uses, and say how to name each of them."""
+    alternatives = db.ambiguous_alternatives(name)
+    if not alternatives:
+        return
+    raw_config, manufacturer = db.get_eprom_config(name)
+    chosen = qualified_chip_name(name, raw_config, manufacturer)
+    others = ", ".join(f"'{a}'" for a in alternatives)
+    logger.warning(
+        f"'{name}' names more than one chip that programs differently. "
+        f"Using '{chosen}'. To use another, name it: {others}."
+    )
 
 
 def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
@@ -49,6 +67,7 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     # have a support_status, so raise ChipNotFoundError immediately.
     if raw_config is None:
         raise ChipNotFoundError(name)
+    warn_if_ambiguous(name, db)
 
     # Support-status guard: refuse every program-capable operation
     # for non-supported chips BEFORE convert_to_programmer builds any wire dict.

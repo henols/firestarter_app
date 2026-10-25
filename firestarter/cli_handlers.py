@@ -39,7 +39,7 @@ from firestarter.channel import (
     dev_command_gate_message,
     is_dev_tools_enabled,
 )
-from firestarter.chip_resolver import resolve_chip
+from firestarter.chip_resolver import resolve_chip, warn_if_ambiguous
 from firestarter.chip_test import (
     OP_ID,
     SDP_HOLD_NOT_RUN,
@@ -504,6 +504,7 @@ def info(app: AppContext, eprom: str, config: bool, adapter: bool) -> None:
         logger.error(f"EPROM '{eprom}' not found in database.")
         sys.exit(1)
 
+    warn_if_ambiguous(eprom, app.db)
     eprom_data_for_programmer = app.db.convert_to_programmer(eprom_details)
     raw_config_data, manufacturer = app.db.get_eprom_config(eprom)
 
@@ -3058,6 +3059,8 @@ def _canonical_part_number(part_number: str | None, raw_token: str) -> str | Non
     def _strip_paren(s: str) -> str:
         return re.sub(r"\([^)]*\)", "", s).strip().lower()
 
+    # A manufacturer qualifier (PART@MANUFACTURER) is not part of the name.
+    raw_token = raw_token.partition("@")[0].strip()
     query = raw_token.lower()
     if query == part_number.lower():
         return part_number
