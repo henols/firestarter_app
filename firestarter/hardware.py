@@ -19,6 +19,8 @@ from firestarter.constants import (
     COMMAND_HW_VERSION,
     COMMAND_READ_VPE,
     COMMAND_READ_VPP,
+    CONFIG_BANDGAP_MAX_MV,
+    CONFIG_BANDGAP_MIN_MV,
 )
 from firestarter.exceptions import (
     HardwareOperationError,
@@ -115,7 +117,7 @@ class HardwareManager:
                 logger.error(f"Failed to {operation_name.lower()}. No valid response.")
                 return False, None
         except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
-            logger.error(f"Failed to {operation_name.lower()}: {e}")
+            logger.error(f"{operation_name} failed: {e}")
             return False, None
         finally:
             if comm:
@@ -322,7 +324,17 @@ class HardwareManager:
         return success
 
     def set_bandgap_mv(self, bandgap_mv: int, flags: int = 0) -> bool:
-        """Write the bandgap directly, for --reset back to the nominal."""
+        """Write the bandgap directly, for --reset back to the nominal.
+
+        A value outside the firmware's accepted band is refused here, before
+        the port opens: the firmware refuses it too.
+        """
+        if not CONFIG_BANDGAP_MIN_MV <= bandgap_mv <= CONFIG_BANDGAP_MAX_MV:
+            logger.error(
+                f"Calibration reset refused: the bandgap {bandgap_mv} mV is "
+                f"outside {CONFIG_BANDGAP_MIN_MV}-{CONFIG_BANDGAP_MAX_MV} mV."
+            )
+            return False
         command: dict[str, int] = {"state": COMMAND_CONFIG, "bg": bandgap_mv}
         if flags:
             command["flags"] = flags

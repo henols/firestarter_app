@@ -60,6 +60,10 @@ from firestarter.chip_test import (
 )
 from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import (
+    CONFIG_R1_MAX,
+    CONFIG_R1_MIN,
+    CONFIG_R2_MAX,
+    CONFIG_R2_MIN,
     FIRESTARTER_RELEASES_URL,
     FLAG_CHIP_ENABLE,
     FLAG_OUTPUT_ENABLE,
@@ -1661,17 +1665,17 @@ def _echo_calibration_effect(bandgap_mv: int) -> None:
     "-r1",
     "--r16",
     "r16",
-    type=int,
+    type=click.IntRange(CONFIG_R1_MIN, CONFIG_R1_MAX),
     default=None,
-    help="Set R16 resistance, resistor connected to VPE",
+    help="Set R16 resistance in ohms, resistor connected to VPE.",
 )
 @click.option(
     "-r2",
     "--r14r15",
     "r14r15",
-    type=int,
+    type=click.IntRange(CONFIG_R2_MIN, CONFIG_R2_MAX),
     default=None,
-    help="Set R14/R15 resistance, resistors connected to GND",
+    help="Set R14/R15 resistance in ohms, resistors connected to GND.",
 )
 @click.pass_obj
 @map_typed_errors
@@ -1685,6 +1689,8 @@ def config(
     # --rev is an IntRange: '--rev 2.2' used to go through float() and int()
     # and silently select code 2 (Rev 2.0). Click now refuses it before any
     # serial byte is sent, and refuses a code the firmware does not define.
+    # -r1 and -r2 are IntRanges for the same reason: the firmware refuses a
+    # value outside its band, so the host refuses it before the port opens.
     ok = app.hardware_manager.set_hardware_config(
         rev, r16, r14r15, flags=_build_op_flags()
     )
