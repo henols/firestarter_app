@@ -29,9 +29,7 @@ from firestarter.exceptions import (
 from firestarter.firmware import FirmwareManager
 from firestarter.fw_release_gate import (
     _REFUSAL_FORMAT,
-    _TOO_OLD_FORMAT,
     _UNREADABLE_FORMAT,
-    BINARY_FRAME_MIN_FEATURE,
     feature_version,
     is_refused,
     require_installable_release,
@@ -87,10 +85,6 @@ def test_is_refused_rule(app_version, release_version, refused) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_floor_is_the_first_binary_frame_feature_version() -> None:
-    assert BINARY_FRAME_MIN_FEATURE == (3, 3)
-
-
 @pytest.mark.parametrize(
     ("release_version", "refused"),
     [
@@ -110,17 +104,15 @@ def test_allow_newer_does_not_waive_the_floor() -> None:
         require_installable_release("3.4.0", "3.1.1", allow_newer=True)
 
 
-def test_too_old_message_is_its_own_format_constant() -> None:
+def test_too_old_refusal_names_the_release_the_floor_and_the_remedy() -> None:
     with pytest.raises(FirmwareReleaseRefusedError) as exc:
         require_installable_release("3.4.0", "3.1.1")
-    assert str(exc.value) == _TOO_OLD_FORMAT.format(
-        app="3.4.0", release="3.1.1", floor="3.3", release_feature="3.1"
-    )
-
-
-def test_too_old_message_names_the_remedy_and_no_escape() -> None:
-    assert "fw --firmware-version" in _TOO_OLD_FORMAT
-    assert "--allow-newer-firmware" not in _TOO_OLD_FORMAT
+    text = str(exc.value)
+    assert "3.1.1" in text
+    assert "3.3" in text
+    assert "fw --firmware-version" in text
+    # The floor has no escape: offering one would install JSON-era firmware.
+    assert "--allow-newer-firmware" not in text
 
 
 # ---------------------------------------------------------------------------
