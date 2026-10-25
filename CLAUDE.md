@@ -176,6 +176,15 @@ Key fields per chip entry:
 `W27C512,W27E512`. An exact-string match on one part number therefore misses rows. Split the field
 before you compare it.
 
+A name can also select more than one row: the same part number under several manufacturers, or a
+mode annotation such as `(RW)`/`(TEST)` that a stripped name matches. `find_chip_configs` returns
+every row a name selects; a name as typed beats a stripped match. `PART@MANUFACTURER` selects one
+manufacturer's rows: an exact manufacturer name, or a unique prefix of one (`27C128@MICROCHIP`).
+`resolve_chip`, and so every hardware command, refuses (`AmbiguousChipNameError`) a name that also
+selects rows that program differently, and lists a qualified name for each. `info` shows the first
+row and names the others. `list`, `search` and completion mark or offer the qualified names
+(`EpromDatabase.names_needing_qualifier`).
+
 The pipeline skips a chip that has an unknown `protocol_id`, and shows a warning. `KNOWN_PROTOCOLS`
 in `build_db.py` holds `0x05`, `0x06`, `0x07`, `0x08`, `0x0B`, `0x0D`, `0x0E`, `0x10`, `0x27`,
 `0x28`, `0x29` and `0x34`. The pipeline writes the `0x34` chip as protocol-not-implemented.

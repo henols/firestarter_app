@@ -95,7 +95,17 @@ def all_rows(db: EpromDatabase) -> list[tuple[str, dict]]:
     return rows
 
 
-PART_NUMBERS = tuple(sorted({chip["part_number"] for _mfr, chip in all_rows(REAL_DB)}))
+# A part number that also names chips that program differently is refused as
+# ambiguous, so each of those rows enters by the qualified name that selects it.
+_QUALIFIED = REAL_DB.names_needing_qualifier()
+PART_NUMBERS = tuple(
+    sorted(
+        {
+            _QUALIFIED.get((mfr, chip["part_number"]), chip["part_number"])
+            for mfr, chip in all_rows(REAL_DB)
+        }
+    )
+)
 
 _PLAN_CORPUS_CACHE = None
 

@@ -38,7 +38,11 @@ from firestarter.channel import (
     dev_command_gate_message,
     is_dev_tools_enabled,
 )
-from firestarter.chip_resolver import resolve_chip
+from firestarter.chip_resolver import (
+    describe_ambiguity,
+    refuse_if_ambiguous,
+    resolve_chip,
+)
 from firestarter.chip_test import (
     OP_ID,
     SDP_HOLD_NOT_RUN,
@@ -160,10 +164,17 @@ def _complete_eprom(
     semantics at main.py:39-45.
     """  # noqa: E501
     db = EpromDatabase()
-    return [
-        click.shell_completion.CompletionItem(e["name"])
+    qualified = db.names_needing_qualifier()
+    # A row whose name also names chips that program differently is offered
+    # by the qualified name that selects it.
+    names = (
+        qualified.get((e["manufacturer"], e["name"]), e["name"])
         for e in db.get_eproms()
-        if e["name"].lower().startswith(incomplete.lower())
+    )
+    return [
+        click.shell_completion.CompletionItem(name)
+        for name in names
+        if name.lower().startswith(incomplete.lower())
     ]
 
 
@@ -486,7 +497,11 @@ def _list_cmd(app: AppContext) -> None:
     """List all EPROMs in the database."""
     eprom_data_list = app.db.get_eproms()
     if eprom_data_list:
-        print_eprom_list_table(eprom_data_list, app.eprom_presenter.spec_builder)
+        print_eprom_list_table(
+            eprom_data_list,
+            app.eprom_presenter.spec_builder,
+            app.db.names_needing_qualifier(),
+        )
         sys.exit(0)
     sys.exit(1)
 
@@ -504,6 +519,9 @@ def info(app: AppContext, eprom: str, config: bool, adapter: bool) -> None:
         logger.error(f"EPROM '{eprom}' not found in database.")
         sys.exit(1)
 
+    ambiguity = describe_ambiguity(eprom, app.db)
+    if ambiguity:
+        logger.warning(ambiguity)
     eprom_data_for_programmer = app.db.convert_to_programmer(eprom_details)
     raw_config_data, manufacturer = app.db.get_eprom_config(eprom)
 
@@ -534,7 +552,11 @@ def search(app: AppContext, text: str) -> None:
     """Search for EPROMs in the database."""
     search_results = app.db.search_eprom(text)
     if search_results:
-        print_eprom_list_table(search_results, app.eprom_presenter.spec_builder)
+        print_eprom_list_table(
+            search_results,
+            app.eprom_presenter.spec_builder,
+            app.db.names_needing_qualifier(),
+        )
         sys.exit(0)
     sys.exit(1)
 
@@ -1505,7 +1527,9 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
                 for ic in found_eproms_for_detected_id
             ]
             print_eprom_list_table(
-                mapped_found_eproms, app.eprom_presenter.spec_builder
+                mapped_found_eproms,
+                app.eprom_presenter.spec_builder,
+                app.db.names_needing_qualifier(),
             )
         else:
             logger.warning(
@@ -3058,6 +3082,8 @@ def _canonical_part_number(part_number: str | None, raw_token: str) -> str | Non
     def _strip_paren(s: str) -> str:
         return re.sub(r"\([^)]*\)", "", s).strip().lower()
 
+    # A manufacturer qualifier (PART@MANUFACTURER) is not part of the name.
+    raw_token = raw_token.partition("@")[0].strip()
     query = raw_token.lower()
     if query == part_number.lower():
         return part_number
@@ -3166,6 +3192,10 @@ def dev_test(app: "AppContext", chip: str, fast: bool, submit: bool) -> None:
     # still runs the full community-validation sweep below.
     if not app.db.get_eprom(chip):
         raise ChipNotFoundError(f"{chip}: not found in database")
+    # A name that selects chips that program differently is refused here,
+    # not step by step: every step would be SKIPPED and the report would
+    # name no chip.
+    refuse_if_ambiguous(chip, app.db)
 
     # The chip must be known to be in the DB (see above) before its
     # electrical type can be read, so the UV-scope resolution happens here,

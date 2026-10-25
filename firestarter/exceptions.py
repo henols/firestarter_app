@@ -195,3 +195,9 @@ class ChipNotFoundError(Exception):
     """
 
     pass
+
+
+class AmbiguousChipNameError(ChipNotFoundError):
+    """Raised when a chip name selects database rows that program differently
+    (VPP, algorithm, chip ID or pulse width), so no one chip is named. The
+    message lists a qualified name for each of them."""
