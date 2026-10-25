@@ -7,29 +7,50 @@ Permission is hereby granted under MIT license.
 Single chokepoint between CLI dispatch and the EPROM database lookup/conversion.
 """
 
-import logging
 from typing import Any
 
-from firestarter.database import EpromDatabase, qualified_chip_name
-from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
+from firestarter.database import EpromDatabase
+from firestarter.exceptions import (
+    AmbiguousChipNameError,
+    ChipNotFoundError,
+    ChipNotImplementedError,
+)
 
 _NON_ZERO_WIRE_FIELDS = ("memory-size", "pin-count", "vpp_mv")
 
-logger = logging.getLogger("ChipResolver")
 
-
-def warn_if_ambiguous(name: str, db: EpromDatabase) -> None:
-    """Warn when `name` also selects rows that program differently from the
-    one the database uses, and say how to name each of them."""
+def _qualified_choices(name: str, db: EpromDatabase) -> list[str]:
+    """The row `name` selects first, then each other row it selects that
+    programs differently, all as qualified names. Empty when one row, or rows
+    that program the same, are selected."""
     alternatives = db.ambiguous_alternatives(name)
     if not alternatives:
-        return
+        return []
     raw_config, manufacturer = db.get_eprom_config(name)
-    chosen = qualified_chip_name(name, raw_config, manufacturer)
-    others = ", ".join(f"'{a}'" for a in alternatives)
-    logger.warning(
-        f"'{name}' names more than one chip that programs differently. "
-        f"Using '{chosen}'. To use another, name it: {others}."
+    return [db.qualified_chip_name(name, raw_config, manufacturer), *alternatives]
+
+
+def refuse_if_ambiguous(name: str, db: EpromDatabase) -> None:
+    """Refuse a name that selects chips that program differently: guessing
+    one would drive the wrong VPP, algorithm or timing."""
+    choices = _qualified_choices(name, db)
+    if choices:
+        listed = ", ".join(f"'{c}'" for c in choices)
+        raise AmbiguousChipNameError(
+            f"'{name}' names chips that program differently. Name one: {listed}."
+        )
+
+
+def describe_ambiguity(name: str, db: EpromDatabase) -> str | None:
+    """For display commands, which use the first row: the other rows `name`
+    selects, or None."""
+    choices = _qualified_choices(name, db)
+    if not choices:
+        return None
+    others = ", ".join(f"'{c}'" for c in choices[1:])
+    return (
+        f"'{name}' also names chips that program differently: {others}. "
+        f"This shows '{choices[0]}'."
     )
 
 
@@ -43,6 +64,9 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     missing record (``get_eprom_config`` returns ``(None, None)``) and an empty
     conversion (``convert_to_programmer`` returns ``{}``) are treated as the
     not-found condition.
+
+    Raises ``AmbiguousChipNameError`` (a ``ChipNotFoundError``) when the name
+    selects rows that program differently; the message names each of them.
 
     Raises ``ChipNotImplementedError`` when the chip exists in the database but
     its ``support_status`` is not ``"supported"`` (covers protocol-not-implemented,
@@ -67,7 +91,7 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     # have a support_status, so raise ChipNotFoundError immediately.
     if raw_config is None:
         raise ChipNotFoundError(name)
-    warn_if_ambiguous(name, db)
+    refuse_if_ambiguous(name, db)
 
     # Support-status guard: refuse every program-capable operation
     # for non-supported chips BEFORE convert_to_programmer builds any wire dict.
