@@ -15,48 +15,49 @@
     "phase_194_update": "Phase 194 Plan 03 (PAGE-02, D-01/D-02) re-derived programming.page_size from 20 to 45 via the same independent traversal -- never hand-edited. build_db.py's _PAGE_SIZE_BY_PART curated table was deleted; the emit arm's condition now reads the row's own upstream protocol_id being 0x0D or 0x05, with no curated arm remaining. The 25-row delta is the 27 upstream-native 0x05 rows minus the 2 that already carried the curated value. Every other number in this file -- including infoic_page_size_raw, still 744 -- was re-derived in the same traversal and confirmed unchanged.",
     "dip24_2816_update": "The DIP24_2816 family change re-derived two counts via the same independent traversal -- never hand-edited. programming.page_size 45 -> 64: build_db.py now emits the upstream write granularity for the 19 DIP24_2816 rows. top-level unsupported_reason 10 -> 1: the damage guard exempts the DIP24_2816 layout, so its 9 adapter-required rows became supported and X88C64P is the only row with a reason. Every other number was re-derived in the same traversal and is unchanged.",
     "dip32_27c301_update": "top-level unsupported_reason 1 -> 6, re-derived by the same independent traversal: build_db.py gives the five 27C301 / 27C1000 rows (MBM27C1000, MBM27C2000, HN27C301G, HN27C301AG, M27C1000) the new DIP32_27C301 pin map, and marks them adapter-required with a reason, because the shield drives their pin 24 (A16) as OE. Every other number is unchanged.",
-    "27011_status_update": "top-level unsupported_reason 6 -> 9, re-derived by the same independent traversal: build_db.py marks a row protocol-not-implemented, with a reason, when its pin map has fewer address lines than its size needs. Only the three 27011 rows (AT27C011, D27011, D27C011) trip it (henols/firestarter#136). Every other number is unchanged."
+    "27011_status_update": "top-level unsupported_reason 6 -> 9, re-derived by the same independent traversal: build_db.py marks a row protocol-not-implemented, with a reason, when its pin map has fewer address lines than its size needs. Only the three 27011 rows (AT27C011, D27011, D27C011) trip it (henols/firestarter#136). Every other number is unchanged.",
+    "tmm27128ad_update": "Re-derived by the same independent traversal after tools/extra_chips.json gained the TOSHIBA/KIOXIA TMM27128AD supplement row (henols/firestarter#73): chips 748 -> 749, manufacturers unchanged at 59; every all-rows count +1; the five supplement-only top-level keys (datasheet, provenance, source, verification_note, verification_status) 4 -> 5; infoic_page_size_raw, protect_off_before and protect_on_after 746 -> 747; protocol 7 count 172 -> 173. generator_emitted_chip_entry_keys is unchanged: the new row uses only keys already in it."
   },
   "totals": {
     "manufacturers": 59,
-    "chips": 748
+    "chips": 749
   },
   "levels": {
     "top": {
-      "electrical": 748,
-      "part_number": 748,
-      "pinout": 748,
-      "programming": 748,
-      "support_status": 748,
+      "electrical": 749,
+      "part_number": 749,
+      "pinout": 749,
+      "programming": 749,
+      "support_status": 749,
       "unsupported_reason": 9,
-      "datasheet": 4,
-      "provenance": 4,
-      "source": 4,
-      "verification_note": 4,
-      "verification_status": 4,
+      "datasheet": 5,
+      "provenance": 5,
+      "source": 5,
+      "verification_note": 5,
+      "verification_status": 5,
       "nc_pins": 221
     },
     "programming": {
-      "algorithm": 748,
-      "chip_id_check": 748,
-      "chip_id_value": 748,
-      "pulse_duration_us": 748,
-      "infoic_page_size_raw": 746,
-      "protect_off_before": 746,
-      "protect_on_after": 746,
+      "algorithm": 749,
+      "chip_id_check": 749,
+      "chip_id_value": 749,
+      "pulse_duration_us": 749,
+      "infoic_page_size_raw": 747,
+      "protect_off_before": 747,
+      "protect_on_after": 747,
       "page_size": 64
     },
     "electrical": {
-      "pin_count": 748,
-      "size_bytes": 748,
-      "type": 748,
-      "vcc_mv": 748,
-      "vdd_mv": 748,
-      "vpp_mv": 748
+      "pin_count": 749,
+      "size_bytes": 749,
+      "type": 749,
+      "vcc_mv": 749,
+      "vdd_mv": 749,
+      "vpp_mv": 749
     }
   },
   "protocol_chip_counts": {
-    "7": 172,
+    "7": 173,
     "8": 127,
     "11": 32
   },

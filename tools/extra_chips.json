@@ -106,5 +106,34 @@
       },
       "pinout": "DIP28_2764"
     }
+  ],
+  "TOSHIBA/KIOXIA": [
+    {
+      "source": "non-upstream-supplement",
+      "datasheet": "datasheets/TMM27128AD.pdf",
+      "provenance": "Physically real 28-pin NMOS UV-EPROM (Toshiba TMM27128AD, 16384 x 8), absent from minipro infoic.xml, whose TOSHIBA/KIOXIA section has no 27128-class part. Datasheet attached to henols/firestarter#73 by the reporter, vendored as datasheets/TMM27128AD.pdf (Toshiba pages G-27 to G-36). Page G-27: pin 1 VPP, pin 20 CE, pin 22 OE, pin 26 A13, pin 27 PGM, pin compatible with i27128A (DIP28_27128). Page G-30 HIGH SPEED PROGRAM OPERATION: VCC 5.75/6.0/6.25 V, VPP 12.0/12.5/13.0 V, tPW 0.95/1.0/1.05 ms. Page G-33/G-34: 1 ms PGM pulses verified after each, up to 25 times, then an over-program pulse of 3 times the pulses used. Page G-35 ELECTRIC SIGNATURE MODE: manufacturer code 98, device code D3. Read VCC 5 V (page G-28).",
+      "part_number": "TMM27128AD,TMM27128AD-15,TMM27128AD-150,TMM27128AD-20,TMM27128AD-200",
+      "support_status": "supported",
+      "verification_status": "UNVERIFIED",
+      "verification_note": "Resolvable for read/info. No working sample has been tested: the chip reported in henols/firestarter#73 was dead. The datasheet program VCC is 6.0 V, but the shield holds VCC at 5 V, and the firmware does not send the over-program pulse.",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 16384,
+        "pin_count": 28,
+        "vpp_mv": 12500,
+        "vcc_mv": 5000,
+        "vdd_mv": 6000
+      },
+      "programming": {
+        "algorithm": 7,
+        "pulse_duration_us": 1000,
+        "chip_id_check": true,
+        "chip_id_value": "0x000098d3",
+        "protect_off_before": false,
+        "protect_on_after": false,
+        "infoic_page_size_raw": 0
+      },
+      "pinout": "DIP28_27128"
+    }
   ]
 }

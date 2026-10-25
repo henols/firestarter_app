@@ -166,6 +166,26 @@ class TestSafe04WireStability:
             "verification_status"
         )
 
+    def test_tmm27128ad_basic_decode(self):
+        """TMM27128AD is a 16KB 28-pin UV-EPROM on the DIP28_27128 pinout, algorithm 7,
+        with the electric signature 98/D3, VPP 12.5 V, program VCC 6 V and a 1 ms pulse
+        (datasheets/TMM27128AD.pdf pages G-27, G-30 and G-35)."""
+        db = _load(_DB_FILE)
+        c = _find(db, "TMM27128AD")
+        assert c is not None, "TMM27128AD missing"
+        assert c["programming"]["algorithm"] == 0x07, c["programming"]
+        assert c["pinout"] == "DIP28_27128", c["pinout"]
+        assert c["electrical"]["type"] == "UV-EPROM", c["electrical"]
+        assert c["electrical"]["size_bytes"] == 16384, c["electrical"]
+        assert c["electrical"]["vpp_mv"] == 12500, c["electrical"]
+        assert c["electrical"]["vdd_mv"] == 6000, c["electrical"]
+        assert c["programming"]["pulse_duration_us"] == 1000, c["programming"]
+        assert c["programming"]["chip_id_check"] is True, c["programming"]
+        assert int(c["programming"]["chip_id_value"], 16) == 0x98D3, c["programming"]
+        assert c.get("verification_status") == "UNVERIFIED", c.get(
+            "verification_status"
+        )
+
     def test_m5l2764k_basic_decode(self):
         """M5L2764K / M5L2764K-2 is an 8KB 28-pin UV-EPROM on the DIP28_2764 pinout, algorithm 7."""
         db = _load(_DB_FILE)
@@ -202,7 +222,7 @@ class TestSupplementProvenance:
         """The non-upstream source marker survives the merge into the generated DB so
         diff_db.py can fence the rows as cited supplement rows."""
         db = _load(_DB_FILE)
-        for alias in ("2516", "2532", "HN482764G", "M5L2764K-2"):
+        for alias in ("2516", "2532", "HN482764G", "M5L2764K-2", "TMM27128AD"):
             c = _find(db, alias)
             assert c is not None, f"{alias} missing"
             assert c.get("source") == _SUPPLEMENT_SOURCE, (
@@ -219,7 +239,7 @@ class TestSupplementVppSafety:
         own; the full check_dispatch.py gate is run separately in the plan's verify."""
         db = _load(_DB_FILE)
         pinouts = _load(_PINOUTS_FILE)
-        for alias in ("2516", "2532", "HN482764G", "M5L2764K-2"):
+        for alias in ("2516", "2532", "HN482764G", "M5L2764K-2", "TMM27128AD"):
             c = _find(db, alias)
             assert c is not None, f"{alias} missing"
             pin_key = c["pinout"]

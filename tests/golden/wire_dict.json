@@ -21533,6 +21533,35 @@
       "pulse-delay": 100,
       "vpp_mv": 13000
     },
+    "TOSHIBA/KIOXIA|TMM27128AD,TMM27128AD-15,TMM27128AD-150,TMM27128AD-20,TMM27128AD-200|3": {
+      "algorithm": 7,
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      },
+      "chip-id": 39123,
+      "flags": 0,
+      "memory-size": 16384,
+      "pin-count": 28,
+      "pulse-delay": 1000,
+      "vpp_mv": 12500
+    },
     "WED|WE128K8|0": {
       "algorithm": 13,
       "bus-config": {

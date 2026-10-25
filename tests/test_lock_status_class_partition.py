@@ -238,7 +238,7 @@ def test_two_consecutive_walks_are_byte_equal() -> None:
 # Leg 3: the census, pinned as literals
 
 _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
-    0x07: 172,
+    0x07: 173,
     0x08: 127,
     0x0B: 32,
     0x0E: 20,

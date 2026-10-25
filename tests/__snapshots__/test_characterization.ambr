@@ -1443,6 +1443,7 @@
   | TC54256AF,TC54256AP | TOSHIBA/KIOXIA   |   28 | 0x98C4     | UV-EPROM    | 12.0v|
   | TC57256D            | TOSHIBA/KIOXIA   |   28 | 0x9845     | UV-EPROM    | 13.0v|
   | TC57512AD           | TOSHIBA/KIOXIA   |   28 | 0x9885     | UV-EPROM    | 13.0v|
+  | TMM27128AD,TMM27128…| TOSHIBA/KIOXIA   |   28 | 0x98D3     | UV-EPROM    | 12.5v|
   | WE128K8             | WED              |   32 |            | Flash/EEPROM| -    |
   | WE256K8             | WED              |   32 |            | Flash/EEPROM| -    |
   | WE512K8             | WED              |   32 |            | Flash/EEPROM| -    |

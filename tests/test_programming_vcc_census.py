@@ -90,9 +90,9 @@ _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
-_EXPECTED_DATABASE_ROWS = 748
-_EXPECTED_VDD_HISTOGRAM = {5500: 162, 6000: 12, 6250: 7, 6500: 105}
-_EXPECTED_ALGORITHM_HISTOGRAM = {7: 163, 8: 102, 11: 21}
+_EXPECTED_DATABASE_ROWS = 749
+_EXPECTED_VDD_HISTOGRAM = {5500: 162, 6000: 13, 6250: 7, 6500: 105}
+_EXPECTED_ALGORITHM_HISTOGRAM = {7: 164, 8: 102, 11: 21}
 _EXPECTED_VENDOR_COUNT = 34
 # The 27C301 / 27C1000 rows: the shield drives their pin 24 as OE, which is
 # A16 on these parts. The 27011 rows: their pin map reaches 16 KB of 128 KB.
@@ -112,6 +112,7 @@ _EXPECTED_SUPPLEMENT_KEYS = (
     "MITSUBISHI/M5L2764K",
     "TEXAS INSTRUMENTS/2516",
     "TEXAS INSTRUMENTS/2532",
+    "TOSHIBA/KIOXIA/TMM27128AD",
 )
 
 _EXPECTED_TOTAL_ROWS = sum(_EXPECTED_VDD_HISTOGRAM.values())
@@ -491,7 +492,7 @@ _REQUIRED_TEST_NAMES = (
 )
 
 _DEFINITION_GUARD_COUNTS = {
-    "_EXPECTED_DATABASE_ROWS" + " = 748": 1,
+    "_EXPECTED_DATABASE_ROWS" + " = 749": 1,
     "_EXPECTED_VDD_HISTOGRAM" + " = {": 1,
     "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {": 1,
     "_EXPECTED_VENDOR_COUNT" + " = 34": 1,
