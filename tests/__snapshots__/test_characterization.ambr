@@ -1176,7 +1176,7 @@
   | V29LC51001          | MOSEL VITELIC    |   32 | 0x4060     | Flash/EEPROM| -    |
   | V29LC51002          | MOSEL VITELIC    |   32 | 0x4082     | Flash/EEPROM| -    |
   | UPD27128            | NEC              |   28 |            | UV-EPROM    | 21.0v|
-  | UPD27256            | NEC              |   28 |            | UV-EPROM    | 12.0v|
+  | UPD27256            | NEC              |   28 |            | UV-EPROM    | 21.0v|
   | UPD27512            | NEC              |   28 |            | UV-EPROM    | 12.0v|
   | UPD2764,UPD2764C,UP…| NEC              |   28 |            | UV-EPROM    | 18.0v|
   | UPD27C1001A         | NEC              |   32 |            | UV-EPROM    | 12.0v|
