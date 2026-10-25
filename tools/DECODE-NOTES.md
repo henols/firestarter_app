@@ -207,7 +207,15 @@ FM1608: type=4  protocol_id=0x07  variant=0x4126  flags=0x00000000
 
 `type == 4` (`MP_SRAM`, `[VERIFIED: minipro minipro.h#L70 @ a8efaedc]`) is the signal for the
 FRAM/NVRAM class. The variant is **not** that signal. For type=4 chips, the classifier writes
-`algorithm = 0x28` (decimal 40, `SRAM_STD`) and pinout `DIP28_JEDEC_SRAM_8K`.
+`algorithm = 0x28` (decimal 40, `SRAM_STD`) and pinout `DIP28_6264`.
+
+**The 28-pin SRAM pin map comes from the address width.** `sram28_key()` gives `DIP28_6264` to a
+part of 13 address bits or less and `DIP28_28C256` to a larger one. Pin 26 is A13 on a 62256 and
+CS2 (active high) or NC on a 6264, and pin 1 is A14 or NC. infoic has no other field that tells
+them apart: FM1608 and FM1808 share variant `0x4126` and `pin_map` 0, and map 0 carries no
+connectivity. `DIP28_6264` holds pin 26 high (`static-high-pins`). Before, the pin was off the bus
+and sat low, which deselects a 6264, W2464 or M48T08. The 32-pin pin-31 arm uses the same width
+rule: PGM up to 18 address bits, A18 above.
 
 The row reads `electrical.type: "SRAM"`, not `"FRAM"`:
 

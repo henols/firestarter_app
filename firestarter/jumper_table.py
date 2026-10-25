@@ -372,7 +372,7 @@ JUMPER_TABLE: Mapping[str, JumperEntry] = {
         rev20_jp4=Jp4Rev20.OPEN,
         rev22_jp4=Jp4Rev22.NO_JUMPER,
     ),
-    "DIP28_JEDEC_SRAM_8K": JumperEntry(
+    "DIP28_6264": JumperEntry(
         vpp_lands=VppLanding.NONE,
         pin1_signal="NC",
         jp1=Jp1.A13,

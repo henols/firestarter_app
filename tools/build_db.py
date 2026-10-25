@@ -226,6 +226,22 @@ def unbonded_function_pins(pinout_key, bonded):
     )
 
 
+def address_width(mem_size):
+    """Address lines a chip of mem_size bytes needs, from its infoic size."""
+    return (mem_size - 1).bit_length()
+
+
+def sram28_key(mem_size):
+    """Pin map of a 28-pin JEDEC SRAM/FRAM, chosen by its address width.
+
+    Pin 26 is A13 on a 15-bit (62256) part and CS2 or NC on a 13-bit (6264)
+    part, and pin 1 is A14 or NC. infoic gives no other field that tells them
+    apart: FM1608 and FM1808 share variant 0x4126 and pin_map 0, and map 0
+    carries no connectivity.
+    """
+    return "DIP28_6264" if address_width(mem_size) <= 13 else "DIP28_28C256"
+
+
 # The keys infoic pin maps 21 and 22 (variant_lo 0x13) resolve to.
 _2764_FAMILY = frozenset({"DIP28_2764", "DIP28_27128", "DIP28_27011"})
 
@@ -303,11 +319,7 @@ def resolve_pinout_key(
         elif pm_idx == 0:
             # SRAM/NVRAM (type=4 or SRAM proto) or 5V flash (proto=0x05)
             if type_int == 4 or proto_id in {0x27, 0x28, 0x29}:
-                # JEDEC SRAM; mem_size discriminates 8K vs 16K+
-                if mem_size <= 8192:
-                    key = "DIP28_JEDEC_SRAM_8K"
-                else:
-                    key = "DIP28_28C256"  # over-allocates; firmware uses mem_size
+                key = sram28_key(mem_size)
             elif proto_id == 0x05:
                 key = "DIP28_28C256"  # AT29C256 5V flash; same layout class
             else:
@@ -332,7 +344,8 @@ def resolve_pinout_key(
                     key = "DIP32_27C801"
                 elif proto_id == 0x08 and variant_lo == 0x02:
                     key = "DIP32_STD"
-                elif proto_id == 0x08 and (mem_size - 1).bit_length() <= 18:
+                elif proto_id == 0x08 and address_width(mem_size) <= 18:
+                    # Pin 31 is PGM up to 18 address bits and A18 above.
                     key = "DIP32_27C020"
                 else:
                     key = "DIP32_STD"
@@ -384,14 +397,11 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
         if proto_id in {0x07, 0x08, 0x0B}:
             algorithm = 0x28
             # Rule 3 pinout re-route for 28-pin SRAM/FRAM that arrived with an
-            # EPROM-family proto (FM1608 8K -> JEDEC SRAM; FM16W08/1808 16K+ ->
+            # EPROM-family proto (FM1608 -> DIP28_6264; FM16W08/1808 ->
             # DIP28_28C256). 24-pin SRAM (FM1208) already resolves to DIP24_6116
             # via resolve_pinout_key (pm_idx=0) — leave it.
             if pinout_key is not None and pinout_key.startswith("DIP28"):
-                if mem_size <= 8192:
-                    pinout_key = "DIP28_JEDEC_SRAM_8K"
-                else:
-                    pinout_key = "DIP28_28C256"
+                pinout_key = sram28_key(mem_size)
         else:
             algorithm = proto_id
         return "SRAM", algorithm, pinout_key
@@ -885,7 +895,7 @@ def main():
                     "pinout": pinout_key,
                 }
                 _address_pins = _PINOUTS[pinout_key]["pins"].get("address-bus-pins", [])
-                _width = (mem_size - 1).bit_length()
+                _width = address_width(mem_size)
                 if pm_idx in infoic_maps:
                     _bonded = bonded_chip_pins(infoic_maps[pm_idx], pin_count)
                     # A line inside the chip's address width must be bonded

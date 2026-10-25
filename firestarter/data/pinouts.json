@@ -54,15 +54,16 @@
             "ce-pin": [20], "oe-pin": [22]
         }
     },
-    "DIP28_JEDEC_SRAM_8K": {
-        "name": "JEDEC 28-pin SRAM/FRAM 8K (6264/FM1608 family)",
-        "comment": "Standard JEDEC parallel SRAM/FRAM 28-pin layout. Same address bus as DIP28_2764 (A0-A12 at pins 10,9,...,2 — 13 address bits for 8K). Differs from DIP28_2764 at: pin 1 = NC (vs VPP), pin 27 = !WE (vs !PGM). Used by 6264-class SRAM and Ramtron FM1608 FRAM. Tentative — bench-validation required for chip-specific layouts.",
+    "DIP28_6264": {
+        "name": "JEDEC 28-pin SRAM/FRAM (6264 family)",
+        "comment": "13-bit JEDEC parallel SRAM/FRAM: A0-A12 on the 2764 address pins, WE on pin 27, pin 1 NC. Pin 26 is CS2 (active high) on 6264-class SRAM such as HM6264, W2464 and M48T08 (E2), and NC on FM1608 and DS1225, so it is held high. The generator chooses this map by the infoic address width (13 bits or less); a 15-bit part uses DIP28_28C256, where pin 26 is A13.",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14],
-            "rw-pin": [27], "nc-pin": [1, 26],
+            "rw-pin": [27], "nc-pin": [1],
             "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2],
             "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
-            "ce-pin": [20], "oe-pin": [22]
+            "ce-pin": [20], "oe-pin": [22],
+            "static-high-pins": [26]
         }
     },
     "DIP28_27256": {

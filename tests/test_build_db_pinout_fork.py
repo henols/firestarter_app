@@ -160,3 +160,25 @@ class TestInfoicConnectivity:
         bonded = build_db.bonded_chip_pins(_MAP_9, 32)
         assert 1 not in bonded
         assert build_db.unbonded_function_pins("DIP32_STD", bonded) == []
+
+
+class TestSram28KeyComesFromAddressWidth:
+    """A 28-pin SRAM's pin 26 is A13 at 15 address bits and CS2/NC at 13.
+    infoic gives no other field that separates them, so the infoic address
+    width chooses the pin map."""
+
+    @pytest.mark.parametrize(
+        ("mem_size", "key"),
+        [(2048, "DIP28_6264"), (8192, "DIP28_6264"), (32768, "DIP28_28C256")],
+    )
+    def test_sram28_key_by_width(self, mem_size, key):
+        assert build_db.sram28_key(mem_size) == key
+
+    def test_type4_sram_resolves_by_width(self):
+        def resolve(mem_size):
+            return build_db.resolve_pinout_key(
+                28, 0x4126, 0, pm_idx=0, proto_id=0x07, type_int=4, mem_size=mem_size
+            )
+
+        assert resolve(8192) == "DIP28_6264"
+        assert resolve(32768) == "DIP28_28C256"

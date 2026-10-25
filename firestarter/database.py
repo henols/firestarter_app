@@ -170,6 +170,11 @@ _MOVED_PIN_MAPS = {
         "Your pin-map override for DIP32_28C512_EEPROM is not used. "
         "28C512/28C010/28C020/28C040 chips now use DIP32_28C040.",
     ),
+    "DIP28_JEDEC_SRAM_8K": (
+        ("DIP28_6264",),
+        "Your pin-map override for DIP28_JEDEC_SRAM_8K is not used. 8K SRAM and "
+        "FRAM chips now use DIP28_6264.",
+    ),
 }
 
 

@@ -169,7 +169,7 @@ Key fields per chip entry:
 - `vpp_mv` — the VPP voltage in millivolts, decoded from the `voltages` field.
 - `pinout` — the DIP pinout key. The shipped database uses 18 keys: `DIP24_2532`, `DIP24_2716`,
   `DIP24_2732`, `DIP24_2816`, `DIP24_6116`, `DIP28_27011`, `DIP28_27128`, `DIP28_27256`,
-  `DIP28_27512`, `DIP28_2764`, `DIP28_28C64`, `DIP28_28C256`, `DIP28_JEDEC_SRAM_8K`,
+  `DIP28_27512`, `DIP28_2764`, `DIP28_28C64`, `DIP28_28C256`, `DIP28_6264`,
   `DIP32_27C020`, `DIP32_27C801`, `DIP32_28C040`, `DIP32_SST39SF040` and `DIP32_STD`.
 - `nc_pins` — the address pins of `pinout` that the chip's infoic `<maps>` entry leaves unbonded.
   The generator omits the field when there are none, or when the map carries no connectivity

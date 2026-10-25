@@ -4674,7 +4674,7 @@
         "vpp_mv": 12000
       },
       "part_number": "DS1225(RW)",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -4696,7 +4696,7 @@
         "vpp_mv": 12000
       },
       "part_number": "DS1225(TEST)",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -11553,7 +11553,7 @@
         "vpp_mv": 12000
       },
       "part_number": "FM1608",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -11575,7 +11575,7 @@
         "vpp_mv": 12000
       },
       "part_number": "FM16W08",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -12607,7 +12607,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -12673,7 +12673,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M48T59,M48T59Y,M48Z59,M48Z59Y",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -12695,7 +12695,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M48T59V,M48Z59V",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -14839,7 +14839,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -14905,7 +14905,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M48T59,M48T59Y",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -14927,7 +14927,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M48T59V",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -15433,7 +15433,7 @@
         "vpp_mv": 12000
       },
       "part_number": "6164,6264",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -15934,7 +15934,7 @@
         "vpp_mv": 12000
       },
       "part_number": "BQ4010YMA(RW)",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -15956,7 +15956,7 @@
         "vpp_mv": 12000
       },
       "part_number": "BQ4010YMA(TEST)",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
@@ -16976,7 +16976,7 @@
         "vpp_mv": 12000
       },
       "part_number": "W2464,W2465",
-      "pinout": "DIP28_JEDEC_SRAM_8K",
+      "pinout": "DIP28_6264",
       "programming": {
         "algorithm": 40,
         "chip_id_check": false,
