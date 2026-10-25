@@ -16,7 +16,16 @@ The rule is the FEATURE version, (major, minor). The patch number is ignored,
 and so is the pre-release suffix: 3.1.0b2 and 3.1.0b5 are one feature version.
 A release is refused when its feature version is ABOVE this CLI's.
 
-The reverse pairing -- a CLI newer than the firmware -- is NOT gated here.
+A release is also refused when its feature version is below
+BINARY_FRAME_MIN_FEATURE. Firmware before 3.3 parses JSON commands, and this
+CLI sends only binary command frames, so it cannot drive that firmware. No
+flag waives this refusal: to run older firmware, install a CLI of the same
+feature version, and that CLI installs it. Feature version 3.2 is skipped
+because 3.2.0b1 on PyPI is a JSON-era CLI; a binary 3.2 firmware would pass
+its ceiling.
+
+Apart from that floor, the reverse pairing -- a CLI newer than the
+firmware -- is NOT gated here.
 `_maybe_auto_route_to_pre` in cli_handlers.py steers channel selection away from
 it. The two checks cover opposite directions and neither replaces the other.
 
@@ -46,6 +55,9 @@ from packaging.version import InvalidVersion, Version
 
 from firestarter.exceptions import FirmwareReleaseRefusedError
 
+# The first feature version whose firmware decodes the binary command frame.
+BINARY_FRAME_MIN_FEATURE = (3, 3)
+
 _REFUSAL_FORMAT = (
     "Firmware {release} needs a newer CLI. This CLI is {app}. "
     "Refusing to install firmware {release}.\n"
@@ -73,6 +85,16 @@ _UNREADABLE_FORMAT = (
     "Then run 'firestarter fw --firmware-version X.Y.Z'.\n"
     "To install firmware {release} with no comparison, add "
     "--allow-newer-firmware. This pairing is not tested."
+)
+
+_TOO_OLD_FORMAT = (
+    "Firmware {release} is older than the binary command frame. This CLI is "
+    "{app}, and it cannot operate firmware below {floor}. "
+    "Refusing to install firmware {release}.\n"
+    "Run 'firestarter fw --list', then 'firestarter fw --firmware-version X.Y.Z' "
+    "with a release at {floor} or later.\n"
+    "To use firmware {release}, install a CLI of the same feature version: "
+    "'pip install \"firestarter=={release_feature}.*\"'. That CLI installs it."
 )
 
 _UNREADABLE_TEXT = "an unreadable version"
@@ -106,7 +128,7 @@ def is_refused(app_version: str | None, release_version: str | None) -> bool:
     release = feature_version(release_version)
     if app is None or release is None:
         return True
-    return release > app
+    return release > app or release < BINARY_FRAME_MIN_FEATURE
 
 
 def require_installable_release(
@@ -117,13 +139,23 @@ def require_installable_release(
 ) -> None:
     """Raise FirmwareReleaseRefusedError when this CLI must not flash this release.
 
-    Returns None on pass. `allow_newer` waives the refusal; it defaults to False
-    so a library caller that does not ask for the waiver does not get it.
+    Returns None on pass. `allow_newer` waives the too-new and unreadable
+    refusals; it defaults to False so a library caller that does not ask for
+    the waiver does not get it. Nothing waives the too-old refusal.
     """
-    if allow_newer or not is_refused(app_version, release_version):
-        return
     app = feature_version(app_version)
     release = feature_version(release_version)
+    if release is not None and release < BINARY_FRAME_MIN_FEATURE:
+        raise FirmwareReleaseRefusedError(
+            _TOO_OLD_FORMAT.format(
+                app=app_version or _UNREADABLE_TEXT,
+                release=release_version,
+                floor=f"{BINARY_FRAME_MIN_FEATURE[0]}.{BINARY_FRAME_MIN_FEATURE[1]}",
+                release_feature=f"{release[0]}.{release[1]}",
+            )
+        )
+    if allow_newer or not is_refused(app_version, release_version):
+        return
     template = _REFUSAL_FORMAT if (app and release) else _UNREADABLE_FORMAT
     raise FirmwareReleaseRefusedError(
         template.format(

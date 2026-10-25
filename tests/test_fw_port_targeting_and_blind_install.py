@@ -215,13 +215,14 @@ class TestNamedPortRestrictsTheSearch:
 
 def _manager_that_cannot_identify(monkeypatch):
     """A FirmwareManager whose identification step yields nothing."""
+    monkeypatch.setattr("firestarter.__version__", "3.3.0")
     fm = FirmwareManager(config_manager=MagicMock())
     monkeypatch.setattr(fm, "check_current_firmware", lambda **_kw: (None, None, None))
     monkeypatch.setattr(
         fm,
         "fetch_release_info",
         lambda channel="stable", version=None, board="uno": (
-            "3.0.0b19",
+            "3.3.0b19",
             f"https://example.invalid/{board}.hex",
         ),
     )
@@ -301,18 +302,19 @@ class TestBlindInstallRequiresExplicitBoard:
         same port by construction.
         """
         installed = {}
+        monkeypatch.setattr("firestarter.__version__", "3.3.0")
         fm = FirmwareManager(config_manager=MagicMock())
         # Probe answered on ttyUSB0 (a fall-through) while the override names ttyACM1.
         monkeypatch.setattr(
             fm,
             "check_current_firmware",
-            lambda **_kw: ("/dev/ttyUSB0", "3.0.0b11", "uno328pb"),
+            lambda **_kw: ("/dev/ttyUSB0", "3.3.0b11", "uno328pb"),
         )
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
             lambda channel="stable", version=None, board="uno": (
-                "3.0.0b19",
+                "3.3.0b19",
                 f"https://example.invalid/{board}.hex",
             ),
         )

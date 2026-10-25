@@ -223,12 +223,13 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
             "firestarter.serial_comm.SerialCommunicator.find_and_connect",
             mock_connect,
         )
+        monkeypatch.setattr("firestarter.__version__", "3.3.0")
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
             lambda channel="stable", version=None, board="uno": (
-                "3.0.0b19",
+                "3.3.0b19",
                 f"https://example.invalid/{board}.hex",
             ),
         )
@@ -260,9 +261,10 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
             "firestarter.serial_comm.SerialCommunicator._list_potential_ports",
             staticmethod(lambda p, **_kw: ["/dev/null"]),
         )
+        monkeypatch.setattr("firestarter.__version__", "3.3.0")
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(
-            fm, "fetch_release_info", lambda **kw: ("3.0.0b19", "https://x.invalid/u")
+            fm, "fetch_release_info", lambda **kw: ("3.3.0b19", "https://x.invalid/u")
         )
         monkeypatch.setattr(fm, "_download_firmware_file", lambda url: None)
 
