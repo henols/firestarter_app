@@ -23,9 +23,10 @@ Coverage:
   3. test_electrical_field_inventory_matches -- same, for the nested
      `electrical` object.
   4. test_27c_protocol_chip_counts_match -- programming.algorithm counts
-     for the three 27C protocols (7, 8, 11) equal 170/127/32.
-  5. test_inventory_is_non_vacuous -- 59 manufacturers, 746 chips (both
-     sourced from the golden's own `totals`, never hardcoded a second
+     for the three 27C protocols (7, 8, 11) equal the golden's
+     `protocol_chip_counts`.
+  5. test_inventory_is_non_vacuous -- the manufacturer and chip totals
+     (both sourced from the golden's own `totals`, never hardcoded a second
      time), chip count > 0, every recorded per-key count >= 1, and the
      loaded database is a non-empty mapping.
   6. test_generator_emits_no_key_outside_the_frozen_inventory -- an ast

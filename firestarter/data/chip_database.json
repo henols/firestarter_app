@@ -9935,6 +9935,33 @@
         "pulse_duration_us": 0
       },
       "support_status": "supported"
+    },
+    {
+      "datasheet": "datasheets/M5L2764K.pdf",
+      "electrical": {
+        "pin_count": 28,
+        "size_bytes": 8192,
+        "type": "UV-EPROM",
+        "vcc_mv": 5000,
+        "vdd_mv": 6000,
+        "vpp_mv": 21000
+      },
+      "part_number": "M5L2764K,M5L2764K-2",
+      "pinout": "DIP28_2764",
+      "programming": {
+        "algorithm": 7,
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000",
+        "infoic_page_size_raw": 0,
+        "protect_off_before": false,
+        "protect_on_after": false,
+        "pulse_duration_us": 1000
+      },
+      "provenance": "Physically real 28-pin NMOS UV-EPROM (Mitsubishi M5L2764K / M5L2764K-2, 8192 x 8), absent from minipro infoic.xml. Datasheet (Mitsubishi 1985 IC Memories data book, PDF pages 351-357, vendored as datasheets/M5L2764K.pdf): interchangeable with Intel 2764, pin 1 VPP, pin 26 NC, pin 27 PGM (DIP28_2764). Read Vcc 5V; fast programming algorithm Vcc=6V, Vpp=21V, 1 ms initial PGM pulses; conventional algorithm 50 ms at Vpp=21V.",
+      "source": "non-upstream-supplement",
+      "support_status": "supported",
+      "verification_note": "Resolvable for read/info. Values taken from the vendored Mitsubishi datasheet; same wire profile as the Intel-compatible 21V 2764 family. Physical write validation subject to hardware availability.",
+      "verification_status": "UNVERIFIED"
     }
   ],
   "MOSEL VITELIC": [

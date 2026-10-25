@@ -21,7 +21,7 @@ from firestarter.ic_layout import (
 )
 from firestarter.vpp_display import shows_programming_vpp
 
-ROW_COUNT = 747
+ROW_COUNT = 748
 WP_PIN_PROTOCOLS = (0x05, 0x06, 0x0D)
 
 
@@ -58,7 +58,7 @@ def test_wp_pin_rows_show_no_vpp(rows: list[tuple[dict, dict, dict]]) -> None:
 
 def test_exact_count_of_rows_that_show_vpp(rows: list[tuple[dict, dict, dict]]) -> None:
     shown = [m for _, m, s in rows if "vpp_str" in s]
-    assert len(shown) == 369
+    assert len(shown) == 370
     assert {m["protocol-id"] for m in shown} == {0x07, 0x08, 0x0B, 0x10}
 
 
@@ -112,7 +112,7 @@ def test_flash4_rows_say_erase_is_not_supported(
 
 def test_uv_rows_say_uv_erase_only(rows: list[tuple[dict, dict, dict]]) -> None:
     uv = [s for ic, _, s in rows if ic["electrical"]["type"] == "UV-EPROM"]
-    assert len(uv) == 32 + 164 + 106
+    assert len(uv) == 32 + 165 + 106
     assert all(s["can_erase_str"] == CAN_ERASE_UV_ONLY for s in uv)
 
 

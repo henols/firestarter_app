@@ -281,7 +281,7 @@ def test_is_uv_eprom_exact_301_over_real_db():
     # Enumerate the real database rather than hardcoding a spot check, so a
     # future DB change that moves the count is caught (acceptance criterion).
     eproms = _REAL_DB.get_eproms()
-    assert sum(1 for e in eproms if is_uv_eprom(e)) == 302
+    assert sum(1 for e in eproms if is_uv_eprom(e)) == 303
 
 
 def test_is_uv_eprom_simple_true_false_missing():
