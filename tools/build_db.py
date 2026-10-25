@@ -378,6 +378,7 @@ def interpret_timing(raw_hex, protocol_id):
 
 
 _OVERRIDABLE_DECODED_FIELDS = (
+    "pinout",
     "electrical.size_bytes",
     "electrical.pin_count",
     "electrical.vpp_mv",
@@ -706,6 +707,7 @@ def main():
                 _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
 
                 _decoded_view = {
+                    "pinout": pinout_key,
                     "electrical.size_bytes": mem_size,
                     "electrical.pin_count": pin_count,
                     "electrical.vpp_mv": _d_vpp_mv,
@@ -720,6 +722,7 @@ def main():
                     _decoded_view,
                     consumed_keys=_consumed_override_keys,
                 )
+                pinout_key = _decoded_view["pinout"]
                 mem_size = _decoded_view["electrical.size_bytes"]
                 pin_count = _decoded_view["electrical.pin_count"]
                 _d_vpp_mv = _decoded_view["electrical.vpp_mv"]

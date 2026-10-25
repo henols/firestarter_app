@@ -14999,7 +14999,7 @@
         "vpp_mv": 18000
       },
       "part_number": "TMS2764",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_TMS2764",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,

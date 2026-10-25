@@ -131,6 +131,20 @@ class TestDipToRurpPinTranslation:
     the EpromDatabase(skip_local_override=True) construction seam.
     """
 
+    def test_tms2764_pgm_is_high_for_read_and_pin_26_is_not_address(self):
+        """TMS2764 uses A0-A12 and needs PGM pin 27 high during reads."""
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom("TMS2764")
+        assert chip is not None
+        assert chip["pin-map"] == "DIP28_TMS2764"
+        assert chip["bus-config"] == {
+            "bus": list(range(13)),
+            "rw-pin": pin_conversions[28][27],
+            "vpp-pin": pin_conversions[28][1],
+        }
+        assert db.get_pin_map(28, "DIP28_TMS2764")["nc-pin"] == [26]
+        assert db.get_eprom("2764")["pin-map"] == "DIP28_2764"
+
     def test_dip28_w27c512_bus_has_16_lines(self):
         """W27C512 has 16 address lines (A0-A15) — bus list must have 16 entries."""
         db = EpromDatabase(skip_local_override=True)
