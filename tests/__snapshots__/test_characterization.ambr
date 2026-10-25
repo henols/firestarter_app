@@ -1021,6 +1021,7 @@
   | HN27C64FP           | HITACHI          |   28 | 0x0115     | UV-EPROM    | 18.0v|
   | HN28F101P,HN28F101FP| HITACHI          |   32 | 0x0719     | Flash/EEPROM| 12.0v|
   | HN58C256AP          | HITACHI          |   28 |            | EEPROM      | -    |
+  | HN482764,HN482764-3…| HITACHI          |   28 |            | UV-EPROM    | 21.0v|
   | HT27C010            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
   | HT27C020            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|
   | HT27C040            | HOLTEK           |   32 |            | UV-EPROM    | 12.0v|

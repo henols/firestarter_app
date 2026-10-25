@@ -86,15 +86,15 @@ _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
-_EXPECTED_DATABASE_ROWS = 746
-_EXPECTED_TOTAL_ROWS = 284
-_EXPECTED_VDD_HISTOGRAM = {5500: 164, 6000: 8, 6250: 7, 6500: 105}
-_EXPECTED_ALGORITHM_HISTOGRAM = {7: 161, 8: 102, 11: 21}
-_EXPECTED_TYPE_HISTOGRAM = {"UV-EPROM": 284}
-_EXPECTED_STATUS_HISTOGRAM = {"supported": 284}
+_EXPECTED_DATABASE_ROWS = 747
+_EXPECTED_TOTAL_ROWS = 285
+_EXPECTED_VDD_HISTOGRAM = {5500: 164, 6000: 9, 6250: 7, 6500: 105}
+_EXPECTED_ALGORITHM_HISTOGRAM = {7: 162, 8: 102, 11: 21}
+_EXPECTED_TYPE_HISTOGRAM = {"UV-EPROM": 285}
+_EXPECTED_STATUS_HISTOGRAM = {"supported": 285}
 _EXPECTED_VENDOR_COUNT = 34
 _EXPECTED_DATASHEET_CITED_ROWS = 3
-_EXPECTED_PURE_DECODE_ROWS = 281
+_EXPECTED_PURE_DECODE_ROWS = 282
 _VOLT03_VCC_MV = 5500
 _EXPECTED_VOLT03_ROWS = 28
 _EXPECTED_DATASHEET_CITED_KEYS = (
@@ -353,12 +353,12 @@ def test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd() -> None:
     assert programming_vcc_over_rail_mv(None) is None
 
 
-def test_injecting_a_synthetic_row_makes_the_total_go_to_285() -> None:
+def test_injecting_a_synthetic_row_makes_the_total_go_to_286() -> None:
     """Non-vacuity, defect class closed: a census helper that silently
     matched anything -- an empty row list, a swallowed exception, a filter
     that never selected -- would pass every other test in this module.
     Injecting a synthetic elevated row into an in-memory deep copy of the
-    loaded database must shift the measured total from 284 to 285. The
+    loaded database must shift the measured total from 285 to 286. The
     original database on disk is never written to.
     """
     db = _load_db()
@@ -382,7 +382,7 @@ def test_injecting_a_synthetic_row_makes_the_total_go_to_285() -> None:
     mutated_rows, _, _, _, _ = _census(mutated)
 
     assert len(baseline_rows) == _EXPECTED_TOTAL_ROWS
-    assert len(mutated_rows) == 285, (
+    assert len(mutated_rows) == 286, (
         f"injecting one synthetic elevated row into an in-memory deep copy "
         f"must shift the total from {_EXPECTED_TOTAL_ROWS} to 285, measured "
         f"{len(mutated_rows)}"
@@ -446,22 +446,22 @@ _REQUIRED_TEST_NAMES = (
     "test_only_three_elevated_rows_carry_a_datasheet_cited_vdd_override",
     "test_predicate_is_strictly_above_the_rail_not_at_or_above",
     "test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd",
-    "test_injecting_a_synthetic_row_makes_the_total_go_to_285",
+    "test_injecting_a_synthetic_row_makes_the_total_go_to_286",
     "test_rewriting_a_vdd_value_moves_the_histogram",
     "test_rewriting_a_support_status_breaks_the_all_supported_claim",
     "test_module_source_shape_guards_against_weakening",
 )
 
 _DEFINITION_GUARD_COUNTS = {
-    "_EXPECTED_DATABASE_ROWS" + " = 746": 1,
-    "_EXPECTED_TOTAL_ROWS" + " = 284": 1,
-    "_EXPECTED_VDD_HISTOGRAM" + " = {5500: 164, 6000: 8, 6250: 7, 6500: 105}": 1,
-    "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {7: 161, 8: 102, 11: 21}": 1,
-    "_EXPECTED_TYPE_HISTOGRAM" + ' = {"UV-EPROM": 284}': 1,
+    "_EXPECTED_DATABASE_ROWS" + " = 747": 1,
+    "_EXPECTED_TOTAL_ROWS" + " = 285": 1,
+    "_EXPECTED_VDD_HISTOGRAM" + " = {5500: 164, 6000: 9, 6250: 7, 6500: 105}": 1,
+    "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {7: 162, 8: 102, 11: 21}": 1,
+    "_EXPECTED_TYPE_HISTOGRAM" + ' = {"UV-EPROM": 285}': 1,
     "_EXPECTED_VENDOR_COUNT" + " = 34": 1,
     "_EXPECTED_DATASHEET_CITED_ROWS" + " = 3": 1,
-    "_EXPECTED_PURE_DECODE_ROWS" + " = 281": 1,
-    "=" + "= 285": 1,
+    "_EXPECTED_PURE_DECODE_ROWS" + " = 282": 1,
+    "=" + "= 286": 1,
 }
 
 _WEAKENING_IDIOMS = (

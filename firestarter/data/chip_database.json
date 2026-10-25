@@ -6676,6 +6676,33 @@
         "pulse_duration_us": 0
       },
       "support_status": "supported"
+    },
+    {
+      "datasheet": "datasheets/HN482764.pdf",
+      "electrical": {
+        "pin_count": 28,
+        "size_bytes": 8192,
+        "type": "UV-EPROM",
+        "vcc_mv": 5000,
+        "vdd_mv": 6000,
+        "vpp_mv": 21000
+      },
+      "part_number": "HN482764,HN482764-3,HN482764-4,HN482764G,HN482764G-3,HN482764G-4",
+      "pinout": "DIP28_2764",
+      "programming": {
+        "algorithm": 7,
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000",
+        "infoic_page_size_raw": 0,
+        "protect_off_before": false,
+        "protect_on_after": false,
+        "pulse_duration_us": 1000
+      },
+      "provenance": "Physically real 28-pin NMOS UV-EPROM (Hitachi HN482764 / HN482764G family), absent from minipro infoic.xml (which only carries CMOS HN27C64G/FP). Pinout compatible with Intel 2764 (DIP28_2764: pin 26 NC, pin 27 PGM). Single 5V supply, 21V VPP.",
+      "source": "non-upstream-supplement",
+      "support_status": "supported",
+      "verification_note": "Resolvable for read/info. VPP lands on pin 1 per JEDEC 2764 pinout. Physical write validation subject to hardware availability.",
+      "verification_status": "UNVERIFIED"
     }
   ],
   "HOLTEK": [
