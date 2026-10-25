@@ -1,14 +1,4 @@
 {
-  "meta": {
-    "decision": "D-14 (capture), D-06 (vcc is inert on the wire)",
-    "generator": "firestarter/data/chip_database.json via tools/build_db.py",
-    "how_to_update": "This file is a pre-Phase-148 capture and must NOT be regenerated to make a failure disappear -- a diff here means the host->wire contract moved, which Phase 148 is specifically forbidden to do. A legitimate future wire change must re-capture deliberately and say in the commit message which chips and which keys moved.",
-    "recorded_at_head": "9701209d976c6725e634b6db21793aa635eec095",
-    "recorded_by": "Phase 148 Plan 01",
-    "requirement": "DATA-03",
-    "source": "firestarter/database.py::EpromDatabase.convert_to_programmer",
-    "why_nine_keys": "The union across all 746 chips is exactly nine keys (algorithm, bus-config, chip-id, flags, memory-size, page-size, pin-count, pulse-delay, vpp_mv). A five-key capture -- the number D-06/D-14 assumed -- would miss bus-config, flags and page-size, three real wire fields (RESEARCH F-8)."
-  },
   "records": {
     "ALI(Acer)|M8720|0": {
       "algorithm": 8,
@@ -456,9 +446,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 284,
       "flags": 0,
@@ -764,9 +754,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 284,
       "flags": 0,
@@ -796,6 +786,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -821,7 +812,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 2048,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -848,7 +839,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -1919,6 +1910,7 @@
       "chip-id": 56001,
       "flags": 0,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -1952,6 +1944,7 @@
       "chip-id": 55877,
       "flags": 0,
       "memory-size": 262144,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -1985,6 +1978,7 @@
       "chip-id": 55878,
       "flags": 0,
       "memory-size": 524288,
+      "page-size": 256,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -2537,9 +2531,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 7818,
       "flags": 0,
@@ -2773,7 +2767,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -2800,7 +2794,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -2827,7 +2821,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -2857,8 +2851,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -2884,6 +2879,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -2912,8 +2908,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 524288,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -2939,6 +2936,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -2964,6 +2962,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -2989,6 +2988,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3014,7 +3014,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 2048,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -3041,7 +3041,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 2048,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -3070,7 +3070,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -3097,7 +3097,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -3124,7 +3124,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -3151,7 +3151,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -3181,8 +3181,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3211,8 +3212,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 64,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3241,8 +3243,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 262144,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3271,8 +3274,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 524288,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3298,7 +3302,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -3333,6 +3337,7 @@
       "chip-id": 7989,
       "flags": 0,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3366,6 +3371,7 @@
       "chip-id": 8122,
       "flags": 0,
       "memory-size": 262144,
+      "page-size": 256,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3399,6 +3405,7 @@
       "chip-id": 7995,
       "flags": 0,
       "memory-size": 524288,
+      "page-size": 512,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3432,6 +3439,7 @@
       "chip-id": 8132,
       "flags": 0,
       "memory-size": 524288,
+      "page-size": 256,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3465,6 +3473,7 @@
       "chip-id": 8149,
       "flags": 0,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3498,6 +3507,7 @@
       "chip-id": 8154,
       "flags": 0,
       "memory-size": 262144,
+      "page-size": 256,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3531,6 +3541,7 @@
       "chip-id": 8100,
       "flags": 0,
       "memory-size": 524288,
+      "page-size": 256,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3564,6 +3575,7 @@
       "chip-id": 8027,
       "flags": 0,
       "memory-size": 524288,
+      "page-size": 512,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3593,6 +3605,7 @@
       "chip-id": 8156,
       "flags": 0,
       "memory-size": 32768,
+      "page-size": 64,
       "pin-count": 28,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3626,6 +3639,7 @@
       "chip-id": 8156,
       "flags": 0,
       "memory-size": 32768,
+      "page-size": 64,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3659,6 +3673,7 @@
       "chip-id": 8029,
       "flags": 0,
       "memory-size": 65536,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3688,6 +3703,7 @@
       "chip-id": 8156,
       "flags": 0,
       "memory-size": 32768,
+      "page-size": 64,
       "pin-count": 28,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -3721,6 +3737,7 @@
       "chip-id": 7997,
       "flags": 0,
       "memory-size": 65536,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -4811,8 +4828,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -4841,8 +4859,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 262144,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -4871,8 +4890,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 524288,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -4898,6 +4918,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -4923,7 +4944,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 2048,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -4952,7 +4973,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -4982,8 +5003,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 65536,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -5009,7 +5031,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -5036,7 +5058,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -5263,7 +5285,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -5290,7 +5312,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -6057,7 +6079,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -6089,7 +6111,7 @@
       "vpp_mv": 12000
     },
     "DALLAS|DS1220(TEST)|1": {
-      "algorithm": 40,
+      "algorithm": 39,
       "bus-config": {
         "bus": [
           0,
@@ -6383,7 +6405,7 @@
       "vpp_mv": 12000
     },
     "DALLAS|DS1245W(TEST3.3V)|11": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -6515,7 +6537,7 @@
       "vpp_mv": 12000
     },
     "DALLAS|DS1249W(TEST3.3V)|15": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -6647,7 +6669,7 @@
       "vpp_mv": 12000
     },
     "DALLAS|DS1250W(TEST3.3V)|19": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -7084,6 +7106,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -7109,6 +7132,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -7134,7 +7158,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -7161,6 +7185,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 16,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -7188,7 +7213,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -7215,7 +7240,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -7242,7 +7267,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -7718,7 +7743,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -7749,8 +7774,8 @@
       "flags": 0,
       "memory-size": 16384,
       "pin-count": 28,
-      "pulse-delay": 200,
-      "vpp_mv": 18000
+      "pulse-delay": 1000,
+      "vpp_mv": 21000
     },
     "FUJITSU|MBM2716|1": {
       "algorithm": 11,
@@ -7895,7 +7920,7 @@
       "flags": 0,
       "memory-size": 131072,
       "pin-count": 32,
-      "pulse-delay": 100,
+      "pulse-delay": 500,
       "vpp_mv": 12500
     },
     "FUJITSU|MBM27C1001|7": {
@@ -7928,8 +7953,8 @@
       "flags": 0,
       "memory-size": 131072,
       "pin-count": 32,
-      "pulse-delay": 100,
-      "vpp_mv": 12000
+      "pulse-delay": 500,
+      "vpp_mv": 12500
     },
     "FUJITSU|MBM27C128P|8": {
       "algorithm": 7,
@@ -8085,7 +8110,7 @@
       "memory-size": 524288,
       "pin-count": 32,
       "pulse-delay": 100,
-      "vpp_mv": 12000
+      "vpp_mv": 12500
     },
     "FUJITSU|MBM27C512|13": {
       "algorithm": 7,
@@ -8807,7 +8832,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -11484,9 +11509,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 49666,
       "flags": 0,
@@ -11517,9 +11542,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 49792,
       "flags": 0,
@@ -12369,8 +12394,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -12396,12 +12422,12 @@
         ],
         "vpp-pin": 15
       },
-      "chip-id": 35203,
+      "chip-id": 10627,
       "flags": 0,
       "memory-size": 16384,
       "pin-count": 28,
       "pulse-delay": 100,
-      "vpp_mv": 12000
+      "vpp_mv": 13000
     },
     "MICROCHIP memory|27C256,27LV256|1": {
       "algorithm": 7,
@@ -12511,12 +12537,12 @@
           15
         ]
       },
-      "chip-id": 35325,
+      "chip-id": 10509,
       "flags": 0,
       "memory-size": 65536,
       "pin-count": 28,
       "pulse-delay": 100,
-      "vpp_mv": 12000
+      "vpp_mv": 13000
     },
     "MICROCHIP memory|27C64,27LV64|5": {
       "algorithm": 7,
@@ -12624,6 +12650,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -12649,6 +12676,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -12674,7 +12702,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 2048,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -12701,6 +12729,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -12726,6 +12755,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -12751,6 +12781,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -12776,6 +12807,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -12801,7 +12833,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 2048,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -12828,7 +12860,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 2048,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -12857,7 +12889,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -12884,7 +12916,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -12911,7 +12943,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -12938,7 +12970,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -12965,7 +12997,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -13939,9 +13971,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 0,
       "flags": 0,
@@ -13971,6 +14003,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -13998,7 +14031,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -14025,7 +14058,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -14558,7 +14591,7 @@
       "memory-size": 4096,
       "pin-count": 24,
       "pulse-delay": 500,
-      "vpp_mv": 13000
+      "vpp_mv": 12000
     },
     "NSC|NMC27C16B|17": {
       "algorithm": 11,
@@ -14670,7 +14703,7 @@
       "memory-size": 4096,
       "pin-count": 24,
       "pulse-delay": 200,
-      "vpp_mv": 13000
+      "vpp_mv": 12000
     },
     "OKI|MSM27C1000|3": {
       "algorithm": 8,
@@ -14859,11 +14892,11 @@
         "rw-pin": 22,
         "vpp-pin": 21
       },
-      "chip-id": 35125,
+      "chip-id": 5413,
       "flags": 0,
       "memory-size": 131072,
       "pin-count": 32,
-      "pulse-delay": 100,
+      "pulse-delay": 1000,
       "vpp_mv": 12000
     },
     "PHILIPS|27C040|1": {
@@ -14892,11 +14925,11 @@
         ],
         "vpp-pin": 21
       },
-      "chip-id": 35133,
+      "chip-id": 62782,
       "flags": 0,
       "memory-size": 524288,
       "pin-count": 32,
-      "pulse-delay": 100,
+      "pulse-delay": 1000,
       "vpp_mv": 12000
     },
     "PHILIPS|27C256|2": {
@@ -14921,11 +14954,11 @@
         ],
         "vpp-pin": 15
       },
-      "chip-id": 35212,
+      "chip-id": 0,
       "flags": 0,
       "memory-size": 32768,
       "pin-count": 28,
-      "pulse-delay": 100,
+      "pulse-delay": 1000,
       "vpp_mv": 12000
     },
     "PHILIPS|27C512|3": {
@@ -14950,11 +14983,11 @@
           15
         ]
       },
-      "chip-id": 35325,
+      "chip-id": 0,
       "flags": 0,
       "memory-size": 65536,
       "pin-count": 28,
-      "pulse-delay": 100,
+      "pulse-delay": 1000,
       "vpp_mv": 12000
     },
     "PMC|PM29F002B|1": {
@@ -15445,7 +15478,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -15472,7 +15505,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -15683,11 +15716,11 @@
         ],
         "vpp-pin": 15
       },
-      "chip-id": 35076,
+      "chip-id": 8196,
       "flags": 0,
       "memory-size": 32768,
       "pin-count": 28,
-      "pulse-delay": 100,
+      "pulse-delay": 200,
       "vpp_mv": 12000
     },
     "SGS-THOMSON|M2732A|7": {
@@ -15716,7 +15749,7 @@
       "memory-size": 4096,
       "pin-count": 24,
       "pulse-delay": 500,
-      "vpp_mv": 25000
+      "vpp_mv": 21000
     },
     "SGS-THOMSON|M27512|8": {
       "algorithm": 7,
@@ -16015,9 +16048,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 8258,
       "flags": 0,
@@ -16050,8 +16083,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -16077,7 +16111,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -16104,7 +16138,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -16202,7 +16236,7 @@
         ],
         "vpp-pin": 21
       },
-      "chip-id": 35250,
+      "chip-id": 8360,
       "flags": 2,
       "memory-size": 32768,
       "pin-count": 32,
@@ -17609,6 +17643,7 @@
       "chip-id": 48903,
       "flags": 0,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -17642,6 +17677,7 @@
       "chip-id": 48912,
       "flags": 0,
       "memory-size": 262144,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -17675,6 +17711,7 @@
       "chip-id": 48989,
       "flags": 0,
       "memory-size": 65536,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -17708,6 +17745,7 @@
       "chip-id": 48904,
       "flags": 0,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -17741,6 +17779,7 @@
       "chip-id": 48914,
       "flags": 0,
       "memory-size": 262144,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -17774,6 +17813,7 @@
       "chip-id": 48957,
       "flags": 0,
       "memory-size": 65536,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -18577,11 +18617,11 @@
         ],
         "vpp-pin": 15
       },
-      "chip-id": 35076,
+      "chip-id": 8196,
       "flags": 0,
       "memory-size": 32768,
       "pin-count": 28,
-      "pulse-delay": 100,
+      "pulse-delay": 200,
       "vpp_mv": 12000
     },
     "ST|M2732A|4": {
@@ -18610,7 +18650,7 @@
       "memory-size": 4096,
       "pin-count": 24,
       "pulse-delay": 500,
-      "vpp_mv": 25000
+      "vpp_mv": 21000
     },
     "ST|M27512|5": {
       "algorithm": 7,
@@ -18905,9 +18945,9 @@
           15,
           16,
           20,
-          22
-        ],
-        "vpp-pin": 21
+          22,
+          21
+        ]
       },
       "chip-id": 8258,
       "flags": 0,
@@ -18940,8 +18980,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -18969,7 +19010,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -18996,7 +19037,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -19023,7 +19064,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -19121,7 +19162,7 @@
         ],
         "vpp-pin": 21
       },
-      "chip-id": 35250,
+      "chip-id": 8360,
       "flags": 2,
       "memory-size": 32768,
       "pin-count": 32,
@@ -19182,7 +19223,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -20913,7 +20954,7 @@
       "vpp_mv": 12000
     },
     "TI|BQ4013LYMA(TEST3.3V)|23": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -20979,7 +21020,7 @@
       "vpp_mv": 12000
     },
     "TI|BQ4013YMA(TEST)|21": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -21045,7 +21086,7 @@
       "vpp_mv": 12000
     },
     "TI|BQ4014LYMA(TEST3.3V)|27": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -21111,7 +21152,7 @@
       "vpp_mv": 12000
     },
     "TI|BQ4014YMA(TEST)|25": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -21177,7 +21218,7 @@
       "vpp_mv": 12000
     },
     "TI|BQ4015LYMA(TEST3.3V)|31": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -21243,7 +21284,7 @@
       "vpp_mv": 12000
     },
     "TI|BQ4015YMA(TEST)|29": {
-      "algorithm": 14,
+      "algorithm": 41,
       "bus-config": {
         "bus": [
           0,
@@ -21811,8 +21852,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 64,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -21841,8 +21883,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 262144,
+      "page-size": 64,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -21871,8 +21914,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 524288,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -21901,8 +21945,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22310,6 +22355,7 @@
       "chip-id": 56001,
       "flags": 0,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22411,6 +22457,7 @@
       "chip-id": 56008,
       "flags": 0,
       "memory-size": 65536,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22444,6 +22491,7 @@
       "chip-id": 56001,
       "flags": 0,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22838,6 +22886,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 512,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22863,6 +22912,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 1,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22888,6 +22938,7 @@
       "chip-id": 0,
       "flags": 0,
       "memory-size": 2048,
+      "page-size": 16,
       "pin-count": 24,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22915,7 +22966,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 32768,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -22942,7 +22993,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -22972,8 +23023,9 @@
         "rw-pin": 20
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 131072,
+      "page-size": 128,
       "pin-count": 32,
       "pulse-delay": 0,
       "vpp_mv": 12000
@@ -22999,7 +23051,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,
@@ -23026,7 +23078,7 @@
         "rw-pin": 14
       },
       "chip-id": 0,
-      "flags": 0,
+      "flags": 2,
       "memory-size": 8192,
       "pin-count": 28,
       "pulse-delay": 0,

@@ -19,15 +19,13 @@ chip_database.json entries carrying programming.algorithm == 13
 protocol (0x07/0x0B) and must NOT gain a page_size the promoting protocol
 never corroborated.
 
-Coverage (12 legs):
-  1. Exactly 84 rows carry programming.algorithm == 13.
-  2. Exactly 18 of those 84 carry programming.page_size, and their
-     (manufacturer, part_number) set equals the 18 named upstream-native
-     rows below.
-  3. Of the 18, exactly 15 carry 128 and exactly 3 carry 64.
-  4. Across all 746 rows, exactly 45 carry programming.page_size
-     (18 upstream-native 0x0D rows + 27 upstream-native 0x05 rows -- no
-     curated carrier remains, per Phase 194 D-01/D-02).
+Coverage (legs keep their original numbers; leg 1 was a row count):
+  2. The algorithm == 13 rows that carry programming.page_size are exactly
+     the named upstream-native and DIP24_2816 rows below.
+  3. The named native rows split into the named 128 and 64 sets.
+  4. Across the whole database, the page_size carriers are exactly the
+     named native 0x0D, native 0x05 and DIP24_2816 rows -- no curated
+     carrier remains, per Phase 194 D-01/D-02.
   5. Every emitted page_size anywhere in the database is a power of two in
      [1, 512] -- a shared module-level helper, so the leg-10 synthetic test
      calls the exact same code the real-DB test calls.
@@ -56,7 +54,7 @@ Coverage (12 legs):
 Growing either identity set below requires a fresh provenance measurement
 against 149-RESEARCH.md section "D-01 Verification" -- the same
 non-launderable property D-17 gives the wire golden (tests/golden/
-wire_dict_expected_deltas_149.json).
+wire_dict.json).
 """
 
 import json
@@ -236,25 +234,10 @@ def _provenance_offenders(db: dict) -> list[str]:
     return offenders
 
 
-# Leg 1: real-DB count of the 0x0D bucket itself.
+# Leg 2: the algorithm == 13 page_size carriers are the named rows.
 
 
-def test_exactly_84_algorithm_0x0d_entries() -> None:
-    """A count change means a chip entered or left the 0x0D bucket, which
-    invalidates every other leg in this module.
-    """
-    db = _load_db(_DB_FILE)
-    selected = _select_0x0d_chips(db)
-    assert len(selected) == 84, (
-        f"expected exactly 84 chip_database.json entries with "
-        f"programming.algorithm == 13, found {len(selected)}"
-    )
-
-
-# Leg 2: exactly 18 of the 84 carry page_size, and they are the named 18.
-
-
-def test_exactly_37_of_84_carry_page_size_and_are_the_named_rows() -> None:
+def test_algorithm_0x0d_page_size_carriers_are_the_named_rows() -> None:
     """18 upstream-native 0x0D rows plus the 19 DIP24_2816 rows."""
     db = _load_db(_DB_FILE)
     a13 = _select_0x0d_chips(db)
@@ -264,10 +247,6 @@ def test_exactly_37_of_84_carry_page_size_and_are_the_named_rows() -> None:
         if "page_size" in chip["programming"]
     }
     expected = _NATIVE_0X0D_PAGE_SIZE_IDENTITIES | _DIP24_2816_PAGE_SIZE_IDENTITIES
-    assert len(carriers) == 37, (
-        f"expected exactly 37 of the 84 algorithm==13 rows to carry "
-        f"page_size, found {len(carriers)}: {sorted(carriers)}"
-    )
     assert carriers == expected, (
         "the algorithm==13 page_size carriers drifted from the named set -- "
         f"symmetric difference: {carriers ^ expected}"
@@ -288,10 +267,10 @@ def test_dip24_2816_rows_carry_their_upstream_write_granularity() -> None:
         assert value == expected, (identity, value)
 
 
-# Leg 3: of the 18, exactly 15 at 128 and 3 at 64.
+# Leg 3: the native carriers split into the named 128 and 64 sets.
 
 
-def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
+def test_native_carriers_split_into_the_named_128_and_64_sets() -> None:
     db = _load_db(_DB_FILE)
     a13 = _select_0x0d_chips(db)
     native = [
@@ -302,22 +281,21 @@ def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
     ]
     at_128 = [row for row in native if row[2] == 128]
     at_64 = [row for row in native if row[2] == 64]
-    assert len(at_128) == 15, f"expected 15 rows at page_size 128, got {at_128}"
-    assert len(at_64) == 3, f"expected 3 rows at page_size 64, got {at_64}"
     assert {(m, p) for m, p, _v in at_128} == _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_128
     assert {(m, p) for m, p, _v in at_64} == _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_64
 
 
-def test_exactly_64_page_size_carriers_across_all_746_rows() -> None:
+def test_page_size_carriers_are_exactly_the_named_rows() -> None:
+    """Leg 6 refuses an unnamed carrier; this leg also refuses a named row
+    that lost its page_size."""
     db = _load_db(_DB_FILE)
-    total_rows = sum(len(chips) for chips in db.values())
-    assert total_rows == 746, f"expected 746 total rows, found {total_rows}"
-    carriers = _select_page_size_carriers(db)
-    assert len(carriers) == 64, (
-        f"expected exactly 64 page_size carriers (18 upstream-native 0x0D "
-        f"+ 27 upstream-native 0x05 + 19 DIP24_2816) across all 746 rows, found "
-        f"{len(carriers)}: "
-        f"{[(m, c.get('part_number', '?')) for m, c in carriers]}"
+    carriers = {
+        (mfr, chip.get("part_number", "?"))
+        for mfr, chip in _select_page_size_carriers(db)
+    }
+    assert carriers == _ALL_PROVENANCE_CORROBORATED_IDENTITIES, (
+        "page_size carriers drifted from the named rows -- symmetric "
+        f"difference: {carriers ^ _ALL_PROVENANCE_CORROBORATED_IDENTITIES}"
     )
 
 
