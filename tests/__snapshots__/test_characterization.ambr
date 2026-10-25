@@ -104,8 +104,8 @@
     Exits 0 when blank, 1 when at least one byte is not blank, 2 on a transport,
     hardware, setup, or region failure. The three are distinct: a transport
     failure is not reported as a not-blank verdict, and a region refusal -- a
-    region running past the chip's end -- is reported before the serial port
-    ever opens.
+    region running past the chip's end, a negative address, or a size of 0 -- is
+    reported before the serial port ever opens.
   
     Without --size, the checked region is the whole chip; with it, --size wins.
   
@@ -125,14 +125,17 @@
     Handles CONFIGURATION values.
   
   Options:
-    --rev INTEGER RANGE    Override the shield revision. Give the revision code,
-                           not the silkscreen number: 0 = Rev 0, 1 = Rev 1, 2 =
-                           Rev 2.0, 3 = Rev 2.1, 4 = Rev 2.2, 5 = Rev 2.3. -1
-                           removes the override. Use it only when the detected
-                           revision is wrong.  [-1<=x<=5]
-    -r1, --r16 INTEGER     Set R16 resistance, resistor connected to VPE
-    -r2, --r14r15 INTEGER  Set R14/R15 resistance, resistors connected to GND
-    --help                 Show this message and exit.
+    --rev INTEGER RANGE          Override the shield revision. Give the revision
+                                 code, not the silkscreen number: 0 = Rev 0, 1 =
+                                 Rev 1, 2 = Rev 2.0, 3 = Rev 2.1, 4 = Rev 2.2, 5
+                                 = Rev 2.3. -1 removes the override. Use it only
+                                 when the detected revision is wrong.
+                                 [-1<=x<=5]
+    -r1, --r16 INTEGER RANGE     Set R16 resistance in ohms, resistor connected
+                                 to VPE.  [202500<=x<=337500]
+    -r2, --r14r15 INTEGER RANGE  Set R14/R15 resistance in ohms, resistors
+                                 connected to GND.  [33000<=x<=55000]
+    --help                       Show this message and exit.
   
   '''
 # ---
@@ -365,8 +368,8 @@
     Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, setup, or
     region failure. The three are distinct: a transport failure is not reported
     as a mismatch, and a region refusal -- an explicit --size longer than the
-    input file, or a region running past the chip's end -- is reported before
-    the serial port ever opens.
+    input file, a region running past the chip's end, a negative address, or an
+    empty region -- is reported before the serial port ever opens.
   
     Without --size, the compared region is the input file's own length; with it,
     --size wins.
