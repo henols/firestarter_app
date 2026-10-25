@@ -88,19 +88,20 @@ _OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
 _EXPECTED_DATABASE_ROWS = 746
 _EXPECTED_TOTAL_ROWS = 284
-_EXPECTED_VDD_HISTOGRAM = {5500: 164, 6000: 8, 6250: 7, 6500: 105}
+_EXPECTED_VDD_HISTOGRAM = {5500: 163, 6000: 9, 6250: 7, 6500: 105}
 _EXPECTED_ALGORITHM_HISTOGRAM = {7: 161, 8: 102, 11: 21}
 _EXPECTED_TYPE_HISTOGRAM = {"UV-EPROM": 284}
 _EXPECTED_STATUS_HISTOGRAM = {"supported": 284}
 _EXPECTED_VENDOR_COUNT = 34
-_EXPECTED_DATASHEET_CITED_ROWS = 3
-_EXPECTED_PURE_DECODE_ROWS = 281
+_EXPECTED_DATASHEET_CITED_ROWS = 4
+_EXPECTED_PURE_DECODE_ROWS = 280
 _VOLT03_VCC_MV = 5500
 _EXPECTED_VOLT03_ROWS = 28
 _EXPECTED_DATASHEET_CITED_KEYS = (
     "FUJITSU/MBM27128",
     "FUJITSU/MBM27C1001",
     "FUJITSU/MBM27C4001",
+    "NEC/UPD27128",
 )
 
 
@@ -241,15 +242,15 @@ def test_volt03_five_five_volt_set_is_disjoint_from_the_elevated_set() -> None:
     )
 
 
-def test_only_three_elevated_rows_carry_a_datasheet_cited_vdd_override() -> None:
+def test_only_four_elevated_rows_carry_a_datasheet_cited_vdd_override() -> None:
     """Pins the measurement behind the 2026-09-19 amendment of D-04's verb:
-    of the 284 elevated rows, exactly 3 match a `datasheet_overrides.json`
+    of the 284 elevated rows, exactly 4 match a `datasheet_overrides.json`
     key whose `fields` map touches `electrical.vdd_mv` with a non-UNSOURCED
-    datasheet, and the other 281 carry a pure `VCC_VOLTAGES` rail-table
+    datasheet, and the other 280 carry a pure `VCC_VOLTAGES` rail-table
     slot. A `part_number` field can hold several comma-joined aliases (e.g.
     `MBM27C1000P,MBM27C1000`), so each alias is matched separately -- an
     exact-string match on the raw field misses every multi-alias row and
-    produces a wrong-but-plausible count. A fourth datasheet-cited row
+    produces a wrong-but-plausible count. A fifth datasheet-cited row
     appearing here is the signal to revisit the wording, not to update the
     number.
     """
@@ -443,7 +444,7 @@ _REQUIRED_TEST_NAMES = (
     "test_every_elevated_row_is_a_supported_uv_eprom",
     "test_algorithm_split_and_vendor_count_are_exact",
     "test_volt03_five_five_volt_set_is_disjoint_from_the_elevated_set",
-    "test_only_three_elevated_rows_carry_a_datasheet_cited_vdd_override",
+    "test_only_four_elevated_rows_carry_a_datasheet_cited_vdd_override",
     "test_predicate_is_strictly_above_the_rail_not_at_or_above",
     "test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd",
     "test_injecting_a_synthetic_row_makes_the_total_go_to_285",
@@ -455,12 +456,12 @@ _REQUIRED_TEST_NAMES = (
 _DEFINITION_GUARD_COUNTS = {
     "_EXPECTED_DATABASE_ROWS" + " = 746": 1,
     "_EXPECTED_TOTAL_ROWS" + " = 284": 1,
-    "_EXPECTED_VDD_HISTOGRAM" + " = {5500: 164, 6000: 8, 6250: 7, 6500: 105}": 1,
+    "_EXPECTED_VDD_HISTOGRAM" + " = {5500: 163, 6000: 9, 6250: 7, 6500: 105}": 1,
     "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {7: 161, 8: 102, 11: 21}": 1,
     "_EXPECTED_TYPE_HISTOGRAM" + ' = {"UV-EPROM": 284}': 1,
     "_EXPECTED_VENDOR_COUNT" + " = 34": 1,
-    "_EXPECTED_DATASHEET_CITED_ROWS" + " = 3": 1,
-    "_EXPECTED_PURE_DECODE_ROWS" + " = 281": 1,
+    "_EXPECTED_DATASHEET_CITED_ROWS" + " = 4": 1,
+    "_EXPECTED_PURE_DECODE_ROWS" + " = 280": 1,
     "=" + "= 285": 1,
 }
 
