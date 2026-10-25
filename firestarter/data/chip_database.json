@@ -277,6 +277,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AM27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -431,6 +434,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AM27LV010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -519,6 +525,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AM27H010,AM27HB010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -586,6 +595,10 @@
         "vdd_mv": 3300,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        23,
+        2
+      ],
       "part_number": "AM28C17A",
       "pinout": "DIP28_28C64",
       "programming": {
@@ -630,6 +643,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        3,
+        2,
+        30
+      ],
       "part_number": "AM28F256",
       "pinout": "DIP32_STD",
       "programming": {
@@ -652,6 +670,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30
+      ],
       "part_number": "AM28F512",
       "pinout": "DIP32_STD",
       "programming": {
@@ -674,6 +696,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AM28F010",
       "pinout": "DIP32_STD",
       "programming": {
@@ -696,6 +721,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AM28F010A",
       "pinout": "DIP32_STD",
       "programming": {
@@ -806,6 +834,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AM29F002NB,AM29F002NBB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -828,6 +859,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AM29F002NBT,AM29F002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -850,6 +884,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AM29F010,AM29F010B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1006,6 +1044,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "A29001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1028,6 +1069,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "A29001U",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1050,6 +1094,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "A290011T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1072,6 +1120,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "A290011U",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1138,6 +1190,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "A290021T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1160,6 +1215,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "A290021U",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1182,6 +1240,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "A29512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1204,6 +1267,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "A29512A",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1226,6 +1294,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "A29010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1294,6 +1366,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "27CX010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -1340,6 +1415,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AE29F1008",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1363,6 +1442,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AE29F2008",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -1433,6 +1515,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "SMJ27C010A",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -1589,6 +1674,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AT27C010,AT27C010L",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -1853,6 +1941,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AT27BV010,AT27LV010,AT27LV010A",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -2029,8 +2120,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT28C010,AT28C010E",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -2099,7 +2194,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AT28C040,AT28C040E",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -2167,6 +2262,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        23,
+        2
+      ],
       "part_number": "AT28C17",
       "pinout": "DIP28_28C64",
       "programming": {
@@ -2189,6 +2288,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        23,
+        2
+      ],
       "part_number": "AT28C17E,AT28C17F",
       "pinout": "DIP28_28C64",
       "programming": {
@@ -2299,8 +2402,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT28LV010",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -2322,8 +2429,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT28MC010",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -2345,8 +2456,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT28MC020",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -2369,7 +2483,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AT28MC040",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -2413,6 +2527,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT29BV010A,AT29LV010A",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2436,6 +2554,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT29BV020,AT29LV020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2528,6 +2649,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "AT29C257",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2551,6 +2677,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "AT29C512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2574,6 +2705,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT29C010A",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2597,6 +2732,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT29C020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2689,6 +2827,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "AT29LV512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2712,6 +2855,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AT49BV001,AT49BV001A,AT49LV001",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2734,6 +2880,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT49BV001AN,AT49BV001N,AT49LV001N",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2756,6 +2906,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT49BV001ANT,AT49BV001NT,AT49LV001NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2778,6 +2932,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AT49BV001AT,AT49BV001T,AT49LV001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2822,6 +2979,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT49BV002AN,AT49BV002N,AT49LV002N",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2844,6 +3004,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT49BV002ANT,AT49BV002NT,AT49LV002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2888,6 +3051,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2910,6 +3077,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT49BV020,AT49LV020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2976,6 +3146,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "AT49BV512,AT49LV512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -2998,6 +3173,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AT49F001,AT49F001A",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3020,6 +3198,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT49F001AN,AT49F001N",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3042,6 +3224,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT49F001ANT,AT49F001NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3064,6 +3250,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "AT49F001AT,AT49F001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3108,6 +3297,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT49F002AN,AT49F002N",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3130,6 +3322,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT49F002ANT,AT49F002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3174,6 +3369,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AT49F010,AT49HF010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3196,6 +3395,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AT49F020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3262,6 +3464,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "AT49F512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3286,6 +3493,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "CAT27010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -3463,6 +3673,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        23,
+        2
+      ],
       "part_number": "CAT28C17A",
       "pinout": "DIP28_28C64",
       "programming": {
@@ -3551,8 +3765,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "CAT28C512",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -3574,8 +3792,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "CAT28C010",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -3597,8 +3819,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "CAT28C020",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -3621,7 +3846,7 @@
         "vpp_mv": 12000
       },
       "part_number": "CAT28C040",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -3687,6 +3912,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "CAT28F001P-B",
       "pinout": "DIP32_STD",
       "programming": {
@@ -3709,6 +3937,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "CAT28F001P-T",
       "pinout": "DIP32_STD",
       "programming": {
@@ -3731,6 +3962,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        3,
+        2,
+        30
+      ],
       "part_number": "CAT28F256",
       "pinout": "DIP32_STD",
       "programming": {
@@ -3753,6 +3989,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30
+      ],
       "part_number": "CAT28F512",
       "pinout": "DIP32_STD",
       "programming": {
@@ -3775,6 +4015,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "CAT28F010",
       "pinout": "DIP32_STD",
       "programming": {
@@ -3843,6 +4086,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "EN29F002ANT,EN29F002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3865,6 +4111,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "EN29F002ANB,EN29F002NB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3909,6 +4158,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "EN29F512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3931,6 +4185,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "EN29F010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -3999,6 +4257,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "PM29F002T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -4021,6 +4282,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "PM29F002B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -4087,6 +4351,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "PM39F010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -4109,6 +4377,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "PM39F020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -4155,6 +4426,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "CY27C010,CY27H010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -4797,6 +5071,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "DPV27C101",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -4865,6 +5142,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "F49B002UA",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -4889,6 +5169,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "EN27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -4977,6 +5260,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "EN29F512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -4999,6 +5287,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "EN29F010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -5226,6 +5518,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "FM27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -5314,6 +5609,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -5712,6 +6010,9 @@
         "vdd_mv": 6000,
         "vpp_mv": 12500
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "MBM27C1001",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -5888,6 +6189,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "MBM28F010",
       "pinout": "DIP32_STD",
       "programming": {
@@ -6134,6 +6438,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -6332,6 +6639,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "HN28F101P,HN28F101FP",
       "pinout": "DIP32_STD",
       "programming": {
@@ -6378,6 +6688,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "HT27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -6466,6 +6779,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "HT27LC010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -6736,6 +7052,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "ICE27C010,ICE27LC010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -6804,6 +7123,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "27CX010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -6850,6 +7172,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "27CX010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -6896,6 +7221,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "IM29F001B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -6918,6 +7247,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "IM29F001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -6940,6 +7273,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "IM29F002B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -6962,6 +7298,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "IM29F002T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -7272,6 +7611,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "27C010,27C010A",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -7426,6 +7768,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        3,
+        2,
+        30
+      ],
       "part_number": "M28F256",
       "pinout": "DIP32_STD",
       "programming": {
@@ -7448,6 +7795,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "P28F001BX-T",
       "pinout": "DIP32_STD",
       "programming": {
@@ -7470,6 +7820,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "P28F001BX-B",
       "pinout": "DIP32_STD",
       "programming": {
@@ -7492,6 +7845,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        3,
+        2,
+        30
+      ],
       "part_number": "P28F256A",
       "pinout": "DIP32_STD",
       "programming": {
@@ -7514,6 +7872,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30
+      ],
       "part_number": "P28F512",
       "pinout": "DIP32_STD",
       "programming": {
@@ -7536,6 +7898,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "P28F010",
       "pinout": "DIP32_STD",
       "programming": {
@@ -7582,6 +7947,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "IS27C010,IS27HC010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -7670,6 +8038,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "IS27LV010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -7758,6 +8129,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "IS28F010",
       "pinout": "DIP32_STD",
       "programming": {
@@ -7804,6 +8178,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "LG28C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -7872,6 +8249,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "LST28001",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -7894,6 +8275,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "LST28002",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -7940,6 +8324,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "MX26C1000",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -8072,6 +8459,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "MX27C1000",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -8094,6 +8484,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "MX27C1000A",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -8292,6 +8685,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "MX27L1000",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -8402,6 +8798,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "MX28F1000P",
       "pinout": "DIP32_STD",
       "programming": {
@@ -8468,6 +8867,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "MX29F001B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8490,6 +8893,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "MX29F001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8534,6 +8941,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "MX29F002NB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8556,6 +8966,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "MX29F002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8666,6 +9079,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "MX29F022NB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8688,6 +9104,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "MX29F022NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8776,6 +9195,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "MX29LV002NCB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8798,6 +9220,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "MX29LV002NCT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -8844,8 +9269,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "28C010,28C010T,28C011,28C011T",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -9091,6 +9520,10 @@
         "vdd_mv": 3300,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        23,
+        2
+      ],
       "part_number": "2817",
       "pinout": "DIP28_28C64",
       "programming": {
@@ -9205,6 +9638,10 @@
         "vdd_mv": 3300,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        23,
+        2
+      ],
       "part_number": "28C17A",
       "pinout": "DIP28_28C64",
       "programming": {
@@ -9227,6 +9664,10 @@
         "vdd_mv": 3300,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        23,
+        2
+      ],
       "part_number": "28C17AF",
       "pinout": "DIP28_28C64",
       "programming": {
@@ -9383,6 +9824,9 @@
         "vdd_mv": 6000,
         "vpp_mv": 12500
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "M5M27C101K",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -9449,6 +9893,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "M5M28F101,M5M28F101A",
       "pinout": "DIP32_STD",
       "programming": {
@@ -9473,6 +9920,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "V29C31001B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9495,6 +9946,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "V29C31001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9517,6 +9972,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "V29C31002B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9539,6 +9997,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "V29C31002T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9605,6 +10066,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "V29C51001B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9627,6 +10092,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "V29C51001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9649,6 +10118,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "V29C51002B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9671,6 +10143,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "V29C51002T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9737,6 +10212,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "V29LC51000",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9759,6 +10239,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "V29LC51001",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9781,6 +10265,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "V29LC51002",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -9893,6 +10380,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "UPD27C1001A",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -10116,6 +10606,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "NX29F010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -10140,6 +10634,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "NM27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -10294,6 +10791,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "NM27LC010,NM27P010,NMC27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -10338,6 +10838,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "NM27LV010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -10694,6 +11197,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -10784,6 +11290,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "PM29F002T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -10806,6 +11315,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "PM29F002B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -10872,6 +11384,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "PM39F010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -10894,6 +11410,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "PM39F020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -10940,6 +11459,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "PT28C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -11210,6 +11732,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "M23C1001",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -11408,6 +11933,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "M27C1001,M27V101",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -11562,8 +12090,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "M28010",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -11629,6 +12161,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "M28F101",
       "pinout": "DIP32_STD",
       "programming": {
@@ -11673,6 +12208,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        3,
+        2,
+        30
+      ],
       "part_number": "M28F256",
       "pinout": "DIP32_STD",
       "programming": {
@@ -11695,6 +12235,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30
+      ],
       "part_number": "M28F512,M28F512B,M28F010",
       "pinout": "DIP32_STD",
       "programming": {
@@ -11761,6 +12305,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "M29F002BNT,M29F002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -11783,6 +12330,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "M29F002BNB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -11805,6 +12355,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "M29F010B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -11849,6 +12403,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "M29F512B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12291,6 +12850,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AM29F002NB,AM29F002NBB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12313,6 +12875,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "AM29F002NBT,AM29F002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12335,6 +12900,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "AM29F010,AM29F010B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12447,6 +13016,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "SST27SF010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -12535,6 +13107,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "SST27VF010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -12667,6 +13242,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "SST29EE010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12690,6 +13269,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "SST29EE020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12713,6 +13295,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "SST29EE512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12736,6 +13323,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "SST29LE010,SST29VE010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12759,6 +13350,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "SST29LE020,SST29VE020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12782,6 +13376,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "SST29LE512,SST29VE512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12805,6 +13404,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "SST29SF010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12827,6 +13430,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "SST29SF020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12871,6 +13477,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "SST29SF512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12893,6 +13504,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "SST29VF010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12915,6 +13530,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "SST29VF020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12959,6 +13577,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "SST29VF512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -12981,6 +13604,9 @@
         "vdd_mv": 3300,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "SST37VF010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -13047,6 +13673,10 @@
         "vdd_mv": 3300,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30
+      ],
       "part_number": "SST37VF512",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -13069,6 +13699,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "SST39LH010,SST39VF010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13091,6 +13725,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "SST39LH020,SST39VF020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13135,6 +13772,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "SST39LH512,SST39VF512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13157,6 +13799,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "SST39SF010,SST39SF010A",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13179,6 +13825,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "SST39SF020,SST39SF020A",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13223,6 +13872,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "SST39SF512,SST39SF512A",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13423,6 +14077,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "M27C1001,M27V101,M27W101",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -13599,8 +14256,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "M28010",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -13688,6 +14349,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "M28F101",
       "pinout": "DIP32_STD",
       "programming": {
@@ -13732,6 +14396,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        3,
+        2,
+        30
+      ],
       "part_number": "M28F256",
       "pinout": "DIP32_STD",
       "programming": {
@@ -13754,6 +14423,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30
+      ],
       "part_number": "M28F512,M28F512B,M28F010",
       "pinout": "DIP32_STD",
       "programming": {
@@ -13842,6 +14515,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "M29F002BNT,M29F002NT",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13864,6 +14540,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "M29F002BNB",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13886,6 +14565,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "M29F010B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -13930,6 +14613,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "M29F512B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14394,6 +15082,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "F29C51001B,S29C51001B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14416,6 +15108,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "F29C51001T,S29C51001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14438,6 +15134,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "F29C51002B,S29C51002B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14460,6 +15159,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "F29C51002T,S29C51002T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14526,6 +15228,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "F29LC51000",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14548,6 +15255,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "F29LC51001",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14570,6 +15281,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "F29LC51002",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14592,6 +15306,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "S29C31001B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14614,6 +15332,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "S29C31001T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14636,6 +15358,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "S29C31002B",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -14658,6 +15383,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "S29C31002T",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -15020,6 +15748,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "TMS27C010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -15042,6 +15773,9 @@
         "vdd_mv": 6500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "TMS27C010A,TMS27PC010A",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -15130,6 +15864,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "TMS28F010,TMS28F010A,TMS28F010B",
       "pinout": "DIP32_STD",
       "programming": {
@@ -15662,8 +16399,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "WE128K8",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -15685,8 +16426,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "WE256K8",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -15709,7 +16453,7 @@
         "vpp_mv": 12000
       },
       "part_number": "WE512K8",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -15731,8 +16475,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "WME128K8",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,
@@ -15756,6 +16504,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -15888,6 +16639,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -15911,6 +16666,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "W29C020,W29C020C,W29C022",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -15957,6 +16715,11 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        2,
+        30,
+        1
+      ],
       "part_number": "W29C512,W29EE512",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -15980,6 +16743,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "W29EE011",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -16003,6 +16770,10 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "W39F010",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -16069,6 +16840,9 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        1
+      ],
       "part_number": "W49F020",
       "pinout": "DIP32_SST39SF040",
       "programming": {
@@ -16225,6 +16999,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "WS27C010F",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -16247,6 +17024,9 @@
         "vdd_mv": 5500,
         "vpp_mv": 13000
       },
+      "nc_pins": [
+        30
+      ],
       "part_number": "WS27C010L",
       "pinout": "DIP32_27C020",
       "programming": {
@@ -16516,8 +17296,12 @@
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
+      "nc_pins": [
+        30,
+        1
+      ],
       "part_number": "X28C010",
-      "pinout": "DIP32_28C512_EEPROM",
+      "pinout": "DIP32_28C040",
       "programming": {
         "algorithm": 13,
         "chip_id_check": false,

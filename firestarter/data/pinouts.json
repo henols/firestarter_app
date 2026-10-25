@@ -106,12 +106,12 @@
     },
     "DIP32_27C020": {
         "name": "JEDEC 32-pin UV-EPROM ≤256K (27C010/27C020 family — PGM on pin 31)",
-        "comment": "Scoped pinout for 0x08 protocol chips with mem_size ≤ 262144 (≤256K — A18 bit 18 = mask 0x40000 unused). Per AM27C020.pdf: pin 1 = VPP (12.75V programming voltage), pin 31 = PGM (active-LOW program enable, NOT A18). On 256K and smaller parts, address bit 18 is never set, so pin 31 is always the PGM control, never an address line. Scope: ONLY assigned by resolve_pinout_key to proto_id=0x08 && mem_size<=262144 (D-02/D-04 alias guard). The 512K AM27C040 and 1M AM27C080 legitimately use pin 31 = A18 and MUST stay on DIP32_STD. CR-01 CORRECTED FIX (2026-07-01, operator schematic study): pin 31 is the distinct RW line — CTRL_READ_WRITE (physical bit 0x40) — DISTINCT from P1/VPP (CTRL_VPP_P1_ENABLE, physical bit 0x08) on BOTH legacy Rev 0/1 AND Rev 2 layouts (revision-invariant; the earlier CR-01 fork worry about a Rev-2 P1/PGM alias was a misdiagnosis — that alias is CTRL_ADDRESS_LINE_18_REV2/CTRL_VPP_P1_ENABLE_REV2 sharing 0x08, which this fix never touches). rw-pin:[31] mirrors the working DIP32_SST39SF040 flash entry (also rw-pin:[31]) and uses the SAME existing rw_line mechanism: the host resolves pin 31 -> pin_conversions[32][31] = 22 -> config.rw_line = 22, and the firmware's mem_util_remap_address_bus / mem_util_calculate_top_address_register fold bus line 22 into the CONTROL register's CTRL_READ_WRITE (0x40) bit, held at the program-active VIL level for the full write (WRITE_FLAG=0) pulse. Static-high-pins is RULED OUT as the PGM vehicle (Q1, 2026-06-30) — static_high_mask ORs HIGH into the bus line with no inversion in the RURP latch path, but PGM program-active is VIL (LOW). rw-pin:[31] is the correct mechanism: it is the missing assignment that makes pin 31 a DELIBERATELY-driven /PGM (=/WE) write strobe instead of merely unassigned/floating. Whether this flips bits on the seated AM27C020 remains the Phase-99 empirical gate; this pinout delivers the corrected host bus-config, not a silicon proof.",
+        "comment": "Scoped pinout for 0x08 protocol chips with mem_size ≤ 262144 (≤256K — A18 bit 18 = mask 0x40000 unused). Per AM27C020.pdf: pin 1 = VPP (12.75V programming voltage), pin 31 = PGM (active-LOW program enable, NOT A18). On 256K and smaller parts, address bit 18 is never set, so pin 31 is always the PGM control, never an address line. Scope: ONLY assigned by resolve_pinout_key to proto_id=0x08 && mem_size<=262144 (D-02/D-04 alias guard). The 512K AM27C040 and 1M AM27C080 legitimately use pin 31 = A18 and MUST stay on DIP32_STD. CR-01 CORRECTED FIX (2026-07-01, operator schematic study): pin 31 is the distinct RW line — CTRL_READ_WRITE (physical bit 0x40) — DISTINCT from P1/VPP (CTRL_VPP_P1_ENABLE, physical bit 0x08) on BOTH legacy Rev 0/1 AND Rev 2 layouts (revision-invariant; the earlier CR-01 fork worry about a Rev-2 P1/PGM alias was a misdiagnosis — that alias is CTRL_ADDRESS_LINE_18_REV2/CTRL_VPP_P1_ENABLE_REV2 sharing 0x08, which this fix never touches). pgm-pin:[31] goes on the wire as rw-pin, because get_bus_config sends the pgm-pin of a map that has no rw-pin as its rw line. That is the SAME rw_line mechanism as the DIP32_SST39SF040 WE on pin 31: the host resolves pin 31 -> pin_conversions[32][31] = 22 -> config.rw_line = 22, and the firmware's mem_util_remap_address_bus / mem_util_calculate_top_address_register fold bus line 22 into the CONTROL register's CTRL_READ_WRITE (0x40) bit, held at the program-active VIL level for the full write (WRITE_FLAG=0) pulse. Static-high-pins is RULED OUT as the PGM vehicle (Q1, 2026-06-30) — static_high_mask ORs HIGH into the bus line with no inversion in the RURP latch path, but PGM program-active is VIL (LOW). The rw line is the correct mechanism: it is the missing assignment that makes pin 31 a DELIBERATELY-driven /PGM (=/WE) write strobe instead of merely unassigned/floating. Whether this flips bits on the seated AM27C020 remains the Phase-99 empirical gate; this pinout delivers the corrected host bus-config, not a silicon proof.",
         "pins": {
             "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
             "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30],
             "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
-            "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
+            "ce-pin": [22], "oe-pin": [24], "pgm-pin": [31]
         }
     },
     "DIP32_27C801": {
@@ -177,14 +177,14 @@
             "ce-pin": [20], "oe-pin": [22], "rw-pin": [27]
         }
     },
-    "DIP32_28C512_EEPROM": {
-        "name": "JEDEC 32-pin 5V parallel EEPROM 64K (28C512 family)",
-        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C512 has 16 address pins (A0-A15) with A15=pin 3, data bus on pins 13,14,15,17-21, CE=22, OE=24, WE=30, no VPP. 5V single-supply. Used by 32-pin 5V parallel EEPROMs (64K class). Covers (pin_count=32, pm_idx=9, protocol_id=0x0D) group: CAT28C512, CAT28C010 (note CAT28C010 is 64K despite name due to 16-bit organization), etc. Also reasonable default for 32-pin SRAM/NVRAM (M48Tx) with similar physical layout, though those use byte-write semantics rather than EEPROM page-write.",
+    "DIP32_28C040": {
+        "name": "JEDEC 32-pin 5V parallel EEPROM (28C512/28C010/28C020/28C040 family)",
+        "comment": "infoic.xml <maps> 9, 11 and 13, which every 32-pin protocol 0x0D row uses, bond pin 31 and never pin 30 on the 28C512/28C010 maps, so WE is pin 31. A16 is pin 2, A17 pin 30 and A18 pin 1, as on DIP32_SST39SF040. Each row's nc_pins (from <maps>) removes the address pins its chip does not bond. one-rom chip-types.json gives its 28C512 write = 30, but its own SST39SF040 on the same layout gives 31, so it is not used here.",
         "pins": {
             "vcc-pin": [32], "gnd-pin": [16],
-            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 1],
             "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
-            "ce-pin": [22], "oe-pin": [24], "rw-pin": [30]
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
         }
     }
 }

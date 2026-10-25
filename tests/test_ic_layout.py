@@ -79,6 +79,30 @@ def test_pgm_pin_is_labelled_pgm_and_not_we(
     assert (names[25], names[26]) == (pin_26, pin_27)
 
 
+@pytest.mark.parametrize(
+    ("chip_name", "pin", "label"),
+    [
+        ("AM27C010", 30, "NC"),  # infoic map 10 leaves pin 30 unbonded
+        ("AM27C020", 30, "A17"),
+        ("AT28C010", 30, "NC"),
+        ("AT28C010", 31, "R/W(WE)"),
+        ("AT28C040", 1, "A18"),
+    ],
+)
+def test_unbonded_address_pins_are_labelled_nc(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+    chip_name: str,
+    pin: int,
+    label: str,
+) -> None:
+    eprom = db.get_eprom(chip_name)
+    assert eprom is not None
+    names = spec_builder._generate_pin_names_for_display(eprom)
+    assert names is not None
+    assert names[pin - 1] == label
+
+
 def test_a_scalar_pgm_pin_override_is_labelled_without_a_crash() -> None:
     db = EpromDatabase(skip_local_override=True)
     spec_builder = EpromSpecBuilder(db)

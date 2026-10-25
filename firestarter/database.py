@@ -151,6 +151,28 @@ def _strip_mode(name: str) -> str:
     return re.sub(r"\([^)]*\)", "", name).strip().lower()
 
 
+def chip_address_width(memory_size: int):
+    """Address lines a chip of `memory_size` bytes needs, or None when unknown."""
+    return (memory_size - 1).bit_length() if memory_size > 1 else None
+
+
+# Pin-map keys that a split or a rename moved chips off:
+# {old key: (new keys, warning for a local override of the old key)}.
+_MOVED_PIN_MAPS = {
+    "DIP28_2764": (
+        ("DIP28_27128", "DIP28_27011"),
+        "Your pin-map override for DIP28_2764 now applies only to 2764/27C64 "
+        "chips. 27128/27C128 chips use DIP28_27128 and 27011 chips use "
+        "DIP28_27011.",
+    ),
+    "DIP32_28C512_EEPROM": (
+        ("DIP32_28C040",),
+        "Your pin-map override for DIP32_28C512_EEPROM is not used. "
+        "28C512/28C010/28C020/28C040 chips now use DIP32_28C040.",
+    ),
+}
+
+
 class EpromDatabase:
     """
     Manages the EPROM and pin map database for the Firestarter application.
@@ -235,14 +257,9 @@ class EpromDatabase:
                     pin_maps_base[key][sub_key] = (
                         sub_value  # Replace existing or add new
                     )
-        if "DIP28_2764" in manual_pin_map and not (
-            {"DIP28_27128", "DIP28_27011"} & manual_pin_map.keys()
-        ):
-            logger.warning(
-                "Your pin-map override for DIP28_2764 now applies only to 2764/27C64 "
-                "chips. 27128/27C128 chips use DIP28_27128 and 27011 chips use "
-                "DIP28_27011."
-            )
+        for old_key, (new_keys, message) in _MOVED_PIN_MAPS.items():
+            if old_key in manual_pin_map and not set(new_keys) & manual_pin_map.keys():
+                logger.warning(message)
         return pin_maps_base
 
     def get_pin_map(self, pins: int, pin_map_id: str):
@@ -253,9 +270,13 @@ class EpromDatabase:
             return self.pin_maps[pin_map_id].get("pins")
         return None
 
-    def get_bus_config(self, pins: int, variant: str):
+    def get_bus_config(self, pins: int, variant: str, address_width=None):
         """
         Generates the RURP-specific bus configuration from a generic pin map.
+
+        `address_width` is the chip's own address width, from its infoic size.
+        The bus keeps only that many lines (A0 first), so a smaller chip on a
+        wider pin map never drives the pins above its top address line.
         """
         # The variant is now the pinout key, e.g., "DIP28_27512"
         pin_map_data = self.get_pin_map(pins, variant)
@@ -265,7 +286,7 @@ class EpromDatabase:
         map_config = {}
         bus = []
         if "address-bus-pins" in pin_map_data and pins in pin_conversions:
-            for pin in pin_map_data["address-bus-pins"]:
+            for pin in pin_map_data["address-bus-pins"][:address_width]:
                 if pin in pin_conversions[pins]:
                     bus.append(pin_conversions[pins][pin])
                 else:
@@ -315,7 +336,7 @@ class EpromDatabase:
 
         return map_config
 
-    def get_adapter_table(self, pin_count: int, pinout_key: str) -> list:
+    def get_adapter_table(self, pin_count: int, pinout_key: str, nc_pins=()) -> list:
         """
         Returns [(pin_number, signal_name), ...] for every physical DIP pin 1..pin_count.
         Derived directly from pinouts.json. Returns [] if the pinout key is unknown.
@@ -344,7 +365,7 @@ class EpromDatabase:
         )  # may append "/VPP" to OE if shared
 
         for i, p in enumerate(pin_map_data.get("address-bus-pins", [])):
-            if p not in pin_signals:
+            if p not in pin_signals and p not in nc_pins:
                 pin_signals[p] = f"A{i}"
 
         for i, p in enumerate(pin_map_data.get("data-bus-pins", [])):
@@ -410,6 +431,7 @@ class EpromDatabase:
             "flags": 0,
             "protocol-id": protocol_id,
             "pin-map": pinout_key,
+            "nc-pins": ic.get("nc_pins", []),
             "electrical-type": electrical.get("type", ""),
         }
 
@@ -432,7 +454,9 @@ class EpromDatabase:
             data["page_size"] = int(page_size_val)
 
         if pin_count and pinout_key:
-            bus_config = self.get_bus_config(pin_count, pinout_key)
+            bus_config = self.get_bus_config(
+                pin_count, pinout_key, chip_address_width(data["memory-size"])
+            )
             if bus_config:
                 data["bus-config"] = bus_config
         return data
@@ -784,7 +808,9 @@ def main():  # Test function
             pin_map_details = db.get_pin_map(pin_count, variant)
             print(json.dumps(pin_map_details, indent=2))
             print("\n--- Bus Config ---")
-            bus_config_details = db.get_bus_config(pin_count, variant)
+            bus_config_details = db.get_bus_config(
+                pin_count, variant, chip_address_width(config.get("memory-size", 0))
+            )
             print(json.dumps(bus_config_details, indent=2))
 
 

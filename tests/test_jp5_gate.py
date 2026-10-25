@@ -296,7 +296,7 @@ def test_cli_erase_with_force_on_affected_part_still_refuses_off_tty():
     eprom_operator.erase_eprom.assert_not_called()
 
 
-A18_REMAINDER_PINOUTS = {"DIP32_SST39SF040"}
+A18_REMAINDER_PINOUTS = {"DIP32_SST39SF040", "DIP32_28C040"}
 
 
 def _derived_sets(db: EpromDatabase) -> tuple[set[str], set[str]]:
@@ -312,10 +312,10 @@ def _derived_sets(db: EpromDatabase) -> tuple[set[str], set[str]]:
     return structural, gated
 
 
-def test_structural_set_over_the_real_shipped_data_is_exactly_two_keys():
+def test_structural_set_over_the_real_shipped_data_is_exactly_three_keys():
     db = EpromDatabase(skip_local_override=True)
     structural, _gated = _derived_sets(db)
-    assert structural == {"DIP32_SST39SF040", "DIP32_27C801"}
+    assert structural == {"DIP32_SST39SF040", "DIP32_28C040", "DIP32_27C801"}
 
 
 def test_gated_set_over_the_real_shipped_data_is_exactly_dip32_27c801():
