@@ -197,6 +197,10 @@ class SerialCommunicator:
         # the defensive posture of the firmware_max_chunk plausibility clamp
         # above. Per-connection instance state, not shared across connections.
         self.seen_message_ids: set[int] = set()
+        # The ERROR text of the last setup ack that was not OK, so the port
+        # walk can say what the firmware answered instead of only "no
+        # programmer found".
+        self.setup_refusal: str | None = None
 
         try:
             logger.debug(
@@ -899,6 +903,7 @@ class SerialCommunicator:
 
         if not is_ok:
             logger.debug(f"Port {self.port_name} responded but not with OK: {msg}")
+            self.setup_refusal = msg
             return False
 
         # Version gate. The POLICY is untouched — only its
@@ -977,10 +982,14 @@ class SerialCommunicator:
         config_manager: ConfigManager,
         fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
         allow_outdated_firmware: bool = False,
+        refusals: list[str] | None = None,
     ) -> Optional["SerialCommunicator"]:
         """
         Attempts to connect to and validate a programmer on a single port.
         This is a helper for find_and_connect.
+
+        When the setup ack is an ERROR, its text is appended to ``refusals``
+        (if given), so the caller can report what the firmware answered.
 
         ``allow_outdated_firmware`` waives the two firmware-*version* refusals
         below — the missing-identity refusal and the version floor — and
@@ -1011,6 +1020,9 @@ class SerialCommunicator:
                 config_manager,
                 allow_outdated_firmware=allow_outdated_firmware,
             ):
+                refusal = getattr(communicator, "setup_refusal", None)
+                if refusals is not None and refusal:
+                    refusals.append(refusal)
                 communicator.disconnect()
                 return None
 
@@ -1111,6 +1123,7 @@ class SerialCommunicator:
             logger.info("Connecting...", extra={"status": "start"})
             status_update_active = True
 
+        refusals: list[str] = []
         for port_name in potential_ports:
             try:
                 with transport_counters.probe_scope():
@@ -1121,6 +1134,7 @@ class SerialCommunicator:
                         config_manager,
                         fault_inject_outgoing=fault_inject_outgoing,
                         allow_outdated_firmware=allow_outdated_firmware,
+                        refusals=refusals,
                     )
                 if communicator:
                     if status_update_active:
@@ -1146,20 +1160,30 @@ class SerialCommunicator:
         # If the loop completes without finding a programmer, it's a failure.
         if status_update_active:
             logger.info("Connecting... Failed  ", extra={"status": "end"})
+        answered = f" It answered '{refusals[-1]}'." if refusals else ""
         if preferred_port and port_named_this_run:
             # Port was named, so the search was restricted to it. Say which port
-            # failed and name the most likely cause: firmware old enough that it
-            # cannot parse the current command framing answers the handshake with
-            # "Bad JSON" rather than an ack, so it can never be identified — but
-            # it CAN still be reflashed, because avrdude talks to the bootloader
-            # and not to the firmware.
+            # failed and name the two causes. Current firmware refuses some
+            # command parameters at setup with an ERROR instead of an ack.
+            # Firmware old enough that it cannot parse the current command
+            # framing answers "Bad JSON" too, so it can never be identified —
+            # but it CAN still be reflashed, because avrdude talks to the
+            # bootloader and not to the firmware.
             raise ProgrammerNotFoundError(
-                f"No compatible programmer answered on {preferred_port}. If a "
-                "board is attached there, its firmware may predate the current "
-                "command framing, which makes it answer 'Bad JSON' instead of an "
-                "ack — every 2.x release, and 3.0.0 pre-releases before b8. Such "
-                "a board can still be reflashed directly: "
+                f"No compatible programmer answered on {preferred_port}."
+                f"{answered} If a board is attached there, the firmware may "
+                "have refused the command parameters. Or its firmware may "
+                "predate the current command framing, which makes it answer "
+                "'Bad JSON' instead of an ack — every 2.x release, and 3.0.0 "
+                "pre-releases before b8. Such a board can still be reflashed "
+                "directly: "
                 f"firestarter --port {preferred_port} fw --board <board> --install"
+            )
+        if refusals:
+            raise ProgrammerNotFoundError(
+                "No compatible programmer found on any port. A board answered "
+                f"'{refusals[-1]}'. The firmware may have refused the command "
+                "parameters, or it may be older than this CLI."
             )
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
 
