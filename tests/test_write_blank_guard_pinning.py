@@ -144,6 +144,11 @@ def test_predicate_matches_real_database_guarded_rows_exactly():
                 continue
             name = db.qualified_chip_name(part_number, chip, manufacturer)
             all_part_numbers.add(name)
+            # resolve_chip refuses a row whose pin map cannot reach its size.
+            mapped = db.map_chip_record(chip, manufacturer)
+            bus = mapped.get("bus-config", {}).get("bus", [])
+            if bus and mapped["memory-size"] > 1 << len(bus):
+                continue
             if chip.get("programming", {}).get("algorithm") in GUARDED_PROTOCOL_IDS:
                 expected.add(name)
 
