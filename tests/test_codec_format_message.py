@@ -90,3 +90,65 @@ def test_format_message_unmatched_id_returns_none() -> None:
     """An ID not in the sentinel-aware list returns None (caller falls back to generic)."""
     out = format_message(0x99, [], CATALOG[MSG_OK_REV])
     assert out is None
+
+
+def _cfg_body(params: bytes) -> bytes:
+    from firestarter.frame_parser import _crc8_ccitt
+
+    head = bytes([MSG_OK_CFG]) + params
+    return head + bytes([_crc8_ccitt(head)])
+
+
+def test_decode_msg_ok_cfg_current_11_byte_form() -> None:
+    """The current ack carries r1, r2, override and the bandgap."""
+    import struct
+
+    from firestarter.codec import decode_id_frame
+
+    body = _cfg_body(struct.pack(">IIBH", 270000, 44000, 0xFF, 1100))
+    msg = decode_id_frame(len(body), body)
+    assert msg is not None
+    assert msg.text == "R1: 270000, R2: 44000, Bandgap: 1100 mV"
+
+
+def test_decode_msg_ok_cfg_legacy_9_byte_form() -> None:
+    """Firmware before 3.1.0b4 (including 3.1.0 stable) sends no bandgap.
+
+    The decoder must accept the 9-byte ack and render it without the
+    Bandgap clause, so the config command still gets a readable ack.
+    """
+    import struct
+
+    from firestarter.codec import decode_id_frame
+
+    body = _cfg_body(struct.pack(">IIB", 270000, 44000, 0xFF))
+    msg = decode_id_frame(len(body), body)
+    assert msg is not None
+    assert msg.severity == "OK"
+    assert msg.text == "R1: 270000, R2: 44000"
+
+    body = _cfg_body(struct.pack(">IIB", 270000, 44000, REVISION_2_2))
+    msg = decode_id_frame(len(body), body)
+    assert msg is not None
+    assert "Override HW" in msg.text
+    assert "Bandgap" not in msg.text
+
+
+def test_decode_msg_ok_cfg_other_lengths_still_rejected() -> None:
+    """Only the 9- and 11-byte forms decode; any other length is refused."""
+    import struct
+
+    from firestarter.codec import decode_id_frame
+
+    for params in (
+        struct.pack(">II", 270000, 44000),
+        struct.pack(">IIBB", 270000, 44000, 0xFF, 1),
+        struct.pack(">IIBHB", 270000, 44000, 0xFF, 1100, 0),
+    ):
+        body = _cfg_body(params)
+        assert decode_id_frame(len(body), body) is None
+
+
+def test_format_msg_ok_cfg_legacy_three_params_has_no_bandgap() -> None:
+    out = format_message(MSG_OK_CFG, [1000, 2000, 0xFF], CATALOG[MSG_OK_CFG])
+    assert out == "R1: 1000, R2: 2000"
