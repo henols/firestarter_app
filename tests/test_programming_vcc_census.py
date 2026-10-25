@@ -4,32 +4,31 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Phase 200 (VCC-01) -- the 284-row elevated-programming-VCC census, as a test.
+Phase 200 (VCC-01) -- the elevated-programming-VCC census, as a test.
 
 Coverage:
   1. ROW TOTAL AND VDD HISTOGRAM -- the live generated database holds exactly
-     746 rows, of which the shipped predicate `programming_vcc_over_rail_mv`
-     selects exactly 284, with a `vdd_mv` histogram of exactly `{5500: 164,
-     6000: 8, 6250: 7, 6500: 105}`.
-  2. ALL SUPPORTED, ALL UV-EPROM -- every one of the 284 rows carries
+     `_EXPECTED_DATABASE_ROWS` rows, of which the shipped predicate
+     `programming_vcc_over_rail_mv` selects exactly `_EXPECTED_TOTAL_ROWS`,
+     with a `vdd_mv` histogram of exactly `_EXPECTED_VDD_HISTOGRAM`.
+  2. ALL SUPPORTED, ALL UV-EPROM -- every row in the census carries
      `support_status == "supported"` and `electrical.type == "UV-EPROM"`,
      with zero exceptions. Nothing in this phase moves a `support_status` or
      a `type`; this is the assertion that would catch it if something did.
-  3. ALGORITHM SPLIT AND VENDOR COUNT -- the 284 rows split across algorithms
-     exactly `{7: 161, 8: 102, 11: 21}` and span exactly 34 distinct
-     manufacturers.
-  4. VOLT-03 DISJOINTNESS -- Phase 198's deliberately-untouched 28-row
+  3. ALGORITHM SPLIT AND VENDOR COUNT -- the census rows split across
+     algorithms exactly `_EXPECTED_ALGORITHM_HISTOGRAM` and span exactly
+     `_EXPECTED_VENDOR_COUNT` distinct manufacturers.
+  4. VOLT-03 DISJOINTNESS -- Phase 198's deliberately-untouched
      `electrical.vcc_mv == 5500` set (D-11) is fully disjoint from the
-     284-row census. The overlap is exactly 0, which is the assertion that
+     census. The overlap is exactly 0, which is the assertion that
      would catch a future decode change quietly pulling that group into the
      warned set.
-  5. DATASHEET-CITED PROVENANCE -- exactly 3 of the 284 rows match a
+  5. DATASHEET-CITED PROVENANCE -- the census rows that match a
      `tools/datasheet_overrides.json` key whose `fields` map touches
-     `electrical.vdd_mv` with a non-`UNSOURCED` datasheet
-     (`FUJITSU/MBM27128`, `FUJITSU/MBM27C1001`, `FUJITSU/MBM27C4001`); the
-     remaining 281 carry a pure `VCC_VOLTAGES` rail-table slot. This is the
-     measurement behind the 2026-09-19 amendment of D-04's verb from
-     "programs at" to "decodes to".
+     `electrical.vdd_mv` with a non-`UNSOURCED` datasheet are exactly
+     `_EXPECTED_DATASHEET_CITED_KEYS`. Every other census row carries a pure
+     `VCC_VOLTAGES` rail-table slot. This is the measurement behind the
+     2026-09-19 amendment of D-04's verb from "programs at" to "decodes to".
   6. BOUNDARY -- the predicate is strictly above the shield's fixed rail, not
      at or above it: a synthetic record at exactly the rail is excluded and
      one at the rail plus one millivolt is included.
@@ -38,8 +37,8 @@ Coverage:
      or a non-numeric string, for a record with no `electrical` key at all,
      and for `None` itself.
   8. NON-VACUITY, INJECTED ROW -- a synthetic elevated row injected into an
-     in-memory deep copy of the loaded database shifts the measured total
-     from 284 to 285, proving the total assertion can actually fail.
+     in-memory deep copy of the loaded database adds one to the measured
+     total, proving the total assertion can actually fail.
   9. NON-VACUITY, REWRITTEN VDD -- rewriting one 6500 mV row's `vdd_mv` down
      to the rail, in an in-memory deep copy, shifts both the total and the
      `vdd_mv` histogram away from their expected values.
@@ -47,7 +46,7 @@ Coverage:
       `support_status`, in an in-memory deep copy, breaks the all-supported
       claim.
   11. SOURCE-SHAPE GUARD -- reads this module's own source and asserts every
-      one of the eleven tests above exists by name, that the load-bearing
+      one of the tests above exists by name, that the load-bearing
       count literals have not been quietly relaxed, and that none of a named
       list of weakening idioms has crept in.
 
@@ -59,11 +58,14 @@ the same discipline test_vpp_rail_classification.py's non-vacuity legs use.
 Every count in this module is a property of the CURRENT generated database,
 and a regeneration invalidates all of them -- which is the intended
 behaviour, not a fragility: a silent decode change that swept new rows into
-the warned set is exactly what these equalities exist to surface.
+the warned set is exactly what these equalities exist to surface. The
+literal constants below are the only place a count is written. The derived
+constants and every non-vacuity expectation are computed from them, so a
+database change edits the literals and nothing else.
 
 D-06's fail-open branch is unreachable from the shipped database, because
 `build_db.py` decodes `vdd_mv` through a `.get(..., 5000)` default and every
-one of the 746 rows therefore carries a non-zero integer. It is nonetheless
+one of the shipped rows therefore carries a non-zero integer. It is nonetheless
 live in production, through the `~/.firestarter/database.json` override seam
 that `EpromDatabase` merges over the packaged database, so a reviewer must
 not delete it as dead code.
@@ -87,14 +89,9 @@ _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
 _EXPECTED_DATABASE_ROWS = 746
-_EXPECTED_TOTAL_ROWS = 284
 _EXPECTED_VDD_HISTOGRAM = {5500: 163, 6000: 9, 6250: 7, 6500: 105}
 _EXPECTED_ALGORITHM_HISTOGRAM = {7: 161, 8: 102, 11: 21}
-_EXPECTED_TYPE_HISTOGRAM = {"UV-EPROM": 284}
-_EXPECTED_STATUS_HISTOGRAM = {"supported": 284}
 _EXPECTED_VENDOR_COUNT = 34
-_EXPECTED_DATASHEET_CITED_ROWS = 4
-_EXPECTED_PURE_DECODE_ROWS = 280
 _VOLT03_VCC_MV = 5500
 _EXPECTED_VOLT03_ROWS = 28
 _EXPECTED_DATASHEET_CITED_KEYS = (
@@ -103,6 +100,11 @@ _EXPECTED_DATASHEET_CITED_KEYS = (
     "FUJITSU/MBM27C4001",
     "NEC/UPD27128",
 )
+
+_EXPECTED_TOTAL_ROWS = sum(_EXPECTED_VDD_HISTOGRAM.values())
+_EXPECTED_TYPE_HISTOGRAM = {"UV-EPROM": _EXPECTED_TOTAL_ROWS}
+_EXPECTED_STATUS_HISTOGRAM = {"supported": _EXPECTED_TOTAL_ROWS}
+_EXPECTED_PURE_DECODE_ROWS = _EXPECTED_TOTAL_ROWS - len(_EXPECTED_DATASHEET_CITED_KEYS)
 
 
 def _load_db() -> dict:
@@ -127,7 +129,7 @@ def _census(db: dict):
     property moved rather than which reimplementation disagreed with which.
 
     Imports the predicate from `firestarter.eprom_info` rather than
-    re-deriving `vdd_mv > 5000` locally -- that is what makes the 284-row
+    re-deriving `vdd_mv > 5000` locally -- that is what makes the census
     count an assertion about the shipped product rather than about a copy
     of it.
     """
@@ -178,7 +180,7 @@ def test_row_total_and_vdd_histogram_match_the_live_database() -> None:
 
 
 def test_every_elevated_row_is_a_supported_uv_eprom() -> None:
-    """D-01: all 284 rows are `support_status: supported` and all 284 are
+    """D-01: every census row is `support_status: supported` and
     `electrical.type: UV-EPROM`, with zero exceptions. Nothing in this
     phase moves a `support_status` or a `type`; this is the assertion that
     would catch it if something did.
@@ -194,7 +196,7 @@ def test_every_elevated_row_is_a_supported_uv_eprom() -> None:
 
 
 def test_algorithm_split_and_vendor_count_are_exact() -> None:
-    """The 284 rows split across algorithms exactly
+    """The census rows split across algorithms exactly
     `_EXPECTED_ALGORITHM_HISTOGRAM` and span exactly `_EXPECTED_VENDOR_COUNT`
     distinct manufacturers.
     """
@@ -213,7 +215,7 @@ def test_algorithm_split_and_vendor_count_are_exact() -> None:
 
 
 def test_volt03_five_five_volt_set_is_disjoint_from_the_elevated_set() -> None:
-    """Protects Phase 198's D-11 group: the 28 rows carrying
+    """Protects Phase 198's D-11 group: the rows carrying
     `electrical.vcc_mv == 5500`, which D-03 deliberately leaves untouched by
     this phase's predicate. A future decode change could quietly pull that
     group into the warned set; this test is what would catch it. Compared
@@ -242,17 +244,22 @@ def test_volt03_five_five_volt_set_is_disjoint_from_the_elevated_set() -> None:
     )
 
 
-def test_only_four_elevated_rows_carry_a_datasheet_cited_vdd_override() -> None:
+def test_datasheet_cited_vdd_overrides_are_exactly_the_expected_keys() -> None:
     """Pins the measurement behind the 2026-09-19 amendment of D-04's verb:
-    of the 284 elevated rows, exactly 4 match a `datasheet_overrides.json`
-    key whose `fields` map touches `electrical.vdd_mv` with a non-UNSOURCED
-    datasheet, and the other 280 carry a pure `VCC_VOLTAGES` rail-table
-    slot. A `part_number` field can hold several comma-joined aliases (e.g.
-    `MBM27C1000P,MBM27C1000`), so each alias is matched separately -- an
-    exact-string match on the raw field misses every multi-alias row and
-    produces a wrong-but-plausible count. A fifth datasheet-cited row
-    appearing here is the signal to revisit the wording, not to update the
-    number.
+    the elevated rows that match a `datasheet_overrides.json` key whose
+    `fields` map touches `electrical.vdd_mv` with a non-UNSOURCED datasheet
+    are exactly `_EXPECTED_DATASHEET_CITED_KEYS`, and every other elevated
+    row carries a pure `VCC_VOLTAGES` rail-table slot. A `part_number` field
+    can hold several comma-joined aliases (e.g. `MBM27C1000P,MBM27C1000`),
+    so each alias is matched separately -- an exact-string match on the raw
+    field misses every multi-alias row and produces a wrong-but-plausible
+    count.
+
+    D-04's verb "decodes to" is correct because the datasheet-cited rows
+    are a small minority of the census. Adding a key to
+    `_EXPECTED_DATASHEET_CITED_KEYS` is the moment to check that this is
+    still true. If they stop being a small minority, revisit the warning
+    sentence in `eprom_info.py`, not only this tuple.
     """
     db = _load_db()
     overrides = _load_overrides()
@@ -273,10 +280,6 @@ def test_only_four_elevated_rows_carry_a_datasheet_cited_vdd_override() -> None:
             if key in cited_keys:
                 matched.add(key)
 
-    assert len(matched) == _EXPECTED_DATASHEET_CITED_ROWS, (
-        f"expected exactly {_EXPECTED_DATASHEET_CITED_ROWS} elevated rows "
-        f"to carry a datasheet-cited vdd_mv override, matched {matched}"
-    )
     assert matched == set(_EXPECTED_DATASHEET_CITED_KEYS), (
         f"expected the matched key set to equal "
         f"{set(_EXPECTED_DATASHEET_CITED_KEYS)}, measured {matched}"
@@ -338,7 +341,7 @@ def test_predicate_is_strictly_above_the_rail_not_at_or_above() -> None:
 
 
 def test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd() -> None:
-    """D-06: the live 746-row shipped database has zero rows in any of
+    """D-06: the live shipped database has zero rows in any of
     these states, because `build_db.py` decodes `vdd_mv` through a
     `.get(..., 5000)` default. The branch is nonetheless live in production
     because `EpromDatabase` merges `~/.firestarter/database.json` over the
@@ -354,20 +357,20 @@ def test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd() -> None:
     assert programming_vcc_over_rail_mv(None) is None
 
 
-def test_injecting_a_synthetic_row_makes_the_total_go_to_285() -> None:
+def test_injecting_a_synthetic_row_adds_one_to_the_total() -> None:
     """Non-vacuity, defect class closed: a census helper that silently
     matched anything -- an empty row list, a swallowed exception, a filter
     that never selected -- would pass every other test in this module.
     Injecting a synthetic elevated row into an in-memory deep copy of the
-    loaded database must shift the measured total from 284 to 285. The
-    original database on disk is never written to.
+    loaded database must add one to the measured total. The original
+    database on disk is never written to.
     """
     db = _load_db()
     mutated = copy.deepcopy(db)
     manufacturer = next(iter(sorted(mutated)))
     mutated[manufacturer].append(
         {
-            "part_number": "SYNTHETIC-TWO-EIGHTY-FIFTH-ROW",
+            "part_number": "SYNTHETIC-INJECTED-ROW",
             "support_status": "supported",
             "electrical": {
                 "vdd_mv": _SHIELD_FIXED_VCC_MV + 1,
@@ -383,10 +386,10 @@ def test_injecting_a_synthetic_row_makes_the_total_go_to_285() -> None:
     mutated_rows, _, _, _, _ = _census(mutated)
 
     assert len(baseline_rows) == _EXPECTED_TOTAL_ROWS
-    assert len(mutated_rows) == 285, (
+    assert len(mutated_rows) == _EXPECTED_TOTAL_ROWS + 1, (
         f"injecting one synthetic elevated row into an in-memory deep copy "
-        f"must shift the total from {_EXPECTED_TOTAL_ROWS} to 285, measured "
-        f"{len(mutated_rows)}"
+        f"must shift the total from {_EXPECTED_TOTAL_ROWS} to "
+        f"{_EXPECTED_TOTAL_ROWS + 1}, measured {len(mutated_rows)}"
     )
 
 
@@ -444,10 +447,10 @@ _REQUIRED_TEST_NAMES = (
     "test_every_elevated_row_is_a_supported_uv_eprom",
     "test_algorithm_split_and_vendor_count_are_exact",
     "test_volt03_five_five_volt_set_is_disjoint_from_the_elevated_set",
-    "test_only_four_elevated_rows_carry_a_datasheet_cited_vdd_override",
+    "test_datasheet_cited_vdd_overrides_are_exactly_the_expected_keys",
     "test_predicate_is_strictly_above_the_rail_not_at_or_above",
     "test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd",
-    "test_injecting_a_synthetic_row_makes_the_total_go_to_285",
+    "test_injecting_a_synthetic_row_adds_one_to_the_total",
     "test_rewriting_a_vdd_value_moves_the_histogram",
     "test_rewriting_a_support_status_breaks_the_all_supported_claim",
     "test_module_source_shape_guards_against_weakening",
@@ -455,22 +458,18 @@ _REQUIRED_TEST_NAMES = (
 
 _DEFINITION_GUARD_COUNTS = {
     "_EXPECTED_DATABASE_ROWS" + " = 746": 1,
-    "_EXPECTED_TOTAL_ROWS" + " = 284": 1,
-    "_EXPECTED_VDD_HISTOGRAM" + " = {5500: 163, 6000: 9, 6250: 7, 6500: 105}": 1,
-    "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {7: 161, 8: 102, 11: 21}": 1,
-    "_EXPECTED_TYPE_HISTOGRAM" + ' = {"UV-EPROM": 284}': 1,
+    "_EXPECTED_VDD_HISTOGRAM" + " = {": 1,
+    "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {": 1,
     "_EXPECTED_VENDOR_COUNT" + " = 34": 1,
-    "_EXPECTED_DATASHEET_CITED_ROWS" + " = 4": 1,
-    "_EXPECTED_PURE_DECODE_ROWS" + " = 280": 1,
-    "=" + "= 285": 1,
+    "_EXPECTED_TOTAL_ROWS" + " = sum(_EXPECTED_VDD_HISTOGRAM.values())": 1,
+    "=" + "= _EXPECTED_TOTAL_ROWS + 1": 1,
 }
 
 _WEAKENING_IDIOMS = (
     "x" + "fail",
     "pytest.mark." + "skip",
     "issub" + "set",
-    ">" + "= 284",
-    ">" + "= 164",
+    ">" + "=",
     "_SHIELD_FIXED_VCC_MV" + " = 5000",
     "firestarter" + "_fw",
 )
@@ -483,6 +482,9 @@ def test_module_source_shape_guards_against_weakening() -> None:
     this test noticing. Reads this module's own source rather than
     re-deriving the census, because the claim is about the FILE, not the
     database.
+
+    No at-or-above comparison appears anywhere in this module, so any one
+    is an exact count relaxed to a floor.
 
     Every entry in `_DEFINITION_GUARD_COUNTS` and `_WEAKENING_IDIOMS` above
     is assembled from two or more string fragments joined with `+`, rather
