@@ -95,8 +95,8 @@ _EXPECTED_VDD_HISTOGRAM = {5500: 162, 6000: 12, 6250: 7, 6500: 105}
 _EXPECTED_ALGORITHM_HISTOGRAM = {7: 163, 8: 102, 11: 21}
 _EXPECTED_VENDOR_COUNT = 34
 # The 27C301 / 27C1000 rows: the shield drives their pin 24 as OE, which is
-# A16 on these parts.
-_EXPECTED_NOT_SUPPORTED = {"adapter-required": 5}
+# A16 on these parts. The 27011 rows: their pin map reaches 16 KB of 128 KB.
+_EXPECTED_NOT_SUPPORTED = {"adapter-required": 5, "protocol-not-implemented": 3}
 _VOLT03_VCC_MV = 5500
 _EXPECTED_VOLT03_ROWS = 28
 _EXPECTED_DATASHEET_CITED_KEYS = (

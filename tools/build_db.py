@@ -880,6 +880,19 @@ def main():
                         f"must move those pins."
                     )
 
+                # A pin map with fewer address lines than the chip's size needs
+                # reaches only part of the chip (the 27011 pages the rest in).
+                # resolve_chip refuses the row; the status says so too.
+                _map_lines = len(_PINOUTS[pinout_key]["pins"].get("address-bus-pins", []))
+                if _support_status == "supported" and address_width(mem_size) > _map_lines:
+                    _support_status = "protocol-not-implemented"
+                    _unsupported_reason = (
+                        f"protocol not implemented: pin map {pinout_key} gives "
+                        f"{_map_lines} address lines, which reach {1 << _map_lines} "
+                        f"of the chip's {mem_size} bytes. The programmer implements "
+                        f"no way to reach the rest."
+                    )
+
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
                     # alias may carry an @PACKAGE suffix (e.g.,

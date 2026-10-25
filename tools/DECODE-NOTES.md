@@ -46,7 +46,7 @@ These are the `variant_lo` values that `resolve_pinout_key` switches on:
 | 23 (24-pin) | else (`0x00`) | `DIP24_2716` | 2KB UV-EPROM |
 | 22 (28-pin) | `0x10` | `DIP28_27512` | **VPP on pin 22** (OE/VPP shared) |
 | 22 (28-pin) | `0x11` | `DIP28_27256` | **VPP on pin 1** |
-| 22 (28-pin) | else, `pin_map` `0x90000c16` | `DIP28_27011` | 27011 page-addressed EPROM. Only the 27011 rows carry this `pin_map` in the cluster. Paging is not implemented (henols/firestarter#136). |
+| 22 (28-pin) | else, `pin_map` `0x90000c16` | `DIP28_27011` | 27011 page-addressed EPROM. Only the 27011 rows carry this `pin_map` in the cluster. Paging is not implemented (henols/firestarter#136), so the generator marks these rows `protocol-not-implemented`: the map has fewer address lines than the size needs. |
 | 22 (28-pin) | else | `DIP28_27128` | 27128 / 27C128 layout. `<maps>` index 22 bonds pin 26 as A13. |
 | 21 (28-pin) | any | `DIP28_2764` | 2764 / 27C64 layout. `<maps>` index 21 leaves pin 26 unbonded. |
 | 12 (32-pin) | `0x03` | `DIP32_27C801` | 1 MB 27C080 / M27C801 class. **A19 on pin 1**, VPP on pin 24 shared with /OE. |

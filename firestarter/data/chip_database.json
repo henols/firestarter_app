@@ -1710,7 +1710,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: pin map DIP28_27011 gives 14 address lines, which reach 16384 of the chip's 131072 bytes. The programmer implements no way to reach the rest."
     },
     {
       "electrical": {
@@ -7411,7 +7412,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: pin map DIP28_27011 gives 14 address lines, which reach 16384 of the chip's 131072 bytes. The programmer implements no way to reach the rest."
     },
     {
       "electrical": {
@@ -7433,7 +7435,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: pin map DIP28_27011 gives 14 address lines, which reach 16384 of the chip's 131072 bytes. The programmer implements no way to reach the rest."
     },
     {
       "electrical": {

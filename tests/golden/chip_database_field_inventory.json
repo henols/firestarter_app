@@ -14,7 +14,8 @@
     "phase_149_update": "Phase 149 Plan 03 (PGSZ-01) re-derived programming.page_size from 2 to 20 via the same independent traversal this file's own how_to_update instructs -- never hand-edited. build_db.py's provenance-keyed emit arm now also emits page_size for the 18 upstream-native protocol_id == 0x0D rows (15 at 128, 3 at 64), on top of the 2 pre-existing datasheet-curated _PAGE_SIZE_BY_PART rows this field's original count-of-2 recorded. Every other number in this file is unchanged; confirmed by an independent re-derivation of every level, not just this one key.",
     "phase_194_update": "Phase 194 Plan 03 (PAGE-02, D-01/D-02) re-derived programming.page_size from 20 to 45 via the same independent traversal -- never hand-edited. build_db.py's _PAGE_SIZE_BY_PART curated table was deleted; the emit arm's condition now reads the row's own upstream protocol_id being 0x0D or 0x05, with no curated arm remaining. The 25-row delta is the 27 upstream-native 0x05 rows minus the 2 that already carried the curated value. Every other number in this file -- including infoic_page_size_raw, still 744 -- was re-derived in the same traversal and confirmed unchanged.",
     "dip24_2816_update": "The DIP24_2816 family change re-derived two counts via the same independent traversal -- never hand-edited. programming.page_size 45 -> 64: build_db.py now emits the upstream write granularity for the 19 DIP24_2816 rows. top-level unsupported_reason 10 -> 1: the damage guard exempts the DIP24_2816 layout, so its 9 adapter-required rows became supported and X88C64P is the only row with a reason. Every other number was re-derived in the same traversal and is unchanged.",
-    "dip32_27c301_update": "top-level unsupported_reason 1 -> 6, re-derived by the same independent traversal: build_db.py gives the five 27C301 / 27C1000 rows (MBM27C1000, MBM27C2000, HN27C301G, HN27C301AG, M27C1000) the new DIP32_27C301 pin map, and marks them adapter-required with a reason, because the shield drives their pin 24 (A16) as OE. Every other number is unchanged."
+    "dip32_27c301_update": "top-level unsupported_reason 1 -> 6, re-derived by the same independent traversal: build_db.py gives the five 27C301 / 27C1000 rows (MBM27C1000, MBM27C2000, HN27C301G, HN27C301AG, M27C1000) the new DIP32_27C301 pin map, and marks them adapter-required with a reason, because the shield drives their pin 24 (A16) as OE. Every other number is unchanged.",
+    "27011_status_update": "top-level unsupported_reason 6 -> 9, re-derived by the same independent traversal: build_db.py marks a row protocol-not-implemented, with a reason, when its pin map has fewer address lines than its size needs. Only the three 27011 rows (AT27C011, D27011, D27C011) trip it (henols/firestarter#136). Every other number is unchanged."
   },
   "totals": {
     "manufacturers": 59,
@@ -27,7 +28,7 @@
       "pinout": 748,
       "programming": 748,
       "support_status": 748,
-      "unsupported_reason": 6,
+      "unsupported_reason": 9,
       "datasheet": 4,
       "provenance": 4,
       "source": 4,

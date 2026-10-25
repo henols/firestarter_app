@@ -167,10 +167,27 @@ def test_resolve_chip_refuses_missing_algorithm_before_convert_to_programmer(
             mock_convert.assert_not_called()
 
 
-def test_resolve_chip_refuses_a_pin_map_narrower_than_the_chip(db):
+def test_the_27011_rows_are_not_supported(db):
     """The 27011 is page-addressed: 128 KB through 14 address lines. Reading it
-    would repeat the first 16 KB eight times (henols/firestarter#136)."""
-    with pytest.raises(ChipNotImplementedError, match="14 address lines"):
+    would repeat the first 16 KB eight times (henols/firestarter#136). The
+    generator gives the rows a status that says so, and resolve_chip refuses
+    them on it."""
+    for name in ("AT27C011", "D27011", "D27C011"):
+        raw, _ = db.get_eprom_config(name)
+        assert raw["support_status"] == "protocol-not-implemented"
+        with pytest.raises(ChipNotImplementedError, match="14 address lines"):
+            resolve_chip(name, db)
+
+
+def test_resolve_chip_refuses_a_pin_map_narrower_than_the_chip(db):
+    """A local override can mark a narrow row supported. The bus-width guard
+    still refuses it."""
+    raw, _ = db.get_eprom_config("D27011")
+    raw["support_status"] = "supported"
+    del raw["unsupported_reason"]
+    with pytest.raises(
+        ChipNotImplementedError, match="its pin map has 14 address lines"
+    ):
         resolve_chip("D27011", db)
 
 
