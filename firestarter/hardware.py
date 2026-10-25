@@ -21,6 +21,10 @@ from firestarter.constants import (
     COMMAND_READ_VPP,
     CONFIG_BANDGAP_MAX_MV,
     CONFIG_BANDGAP_MIN_MV,
+    CONFIG_R1_MAX,
+    CONFIG_R1_MIN,
+    CONFIG_R2_MAX,
+    CONFIG_R2_MIN,
 )
 from firestarter.exceptions import (
     HardwareOperationError,
@@ -31,6 +35,24 @@ from firestarter.exceptions import (
 from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Hardware")
+
+# Revision codes the firmware accepts in a config command; -1 is the CLI's
+# spelling of 0xFF, "no override".
+_CONFIG_REVISIONS = frozenset({-1, 0, 1, 2, 3, 4, 5, 0xFF})
+
+
+def _config_value_refusal(
+    rev: int | None, r1_val: int | None, r2_val: int | None
+) -> str | None:
+    """The reason a config value is out of the firmware's band, or None."""
+    if rev is not None and rev not in _CONFIG_REVISIONS:
+        return f"the revision code {rev} is not 0-5 or -1."
+    if r1_val is not None and not CONFIG_R1_MIN <= r1_val <= CONFIG_R1_MAX:
+        return f"R1 {r1_val} is outside {CONFIG_R1_MIN}-{CONFIG_R1_MAX} ohm."
+    if r2_val is not None and not CONFIG_R2_MIN <= r2_val <= CONFIG_R2_MAX:
+        return f"R2 {r2_val} is outside {CONFIG_R2_MIN}-{CONFIG_R2_MAX} ohm."
+    return None
+
 
 # Tolerant match for the FIRST "%u.%uV" pair in a 0xE4/0xE5 DATA message
 # (e.g. "VPP: 20.9V, Internal VCC: 5.0V") -- guards against catalog format
@@ -213,7 +235,15 @@ class HardwareManager:
         """
         Sets hardware configuration parameters on the programmer.
         Returns True if successful, False otherwise.
+
+        A value the firmware refuses is refused here, before the port opens.
+        The firmware reads a leading '-' as 0 and truncates rev to 8 bits
+        before its own check, so the raw value is checked here.
         """
+        refusal = _config_value_refusal(rev, r1_val, r2_val)
+        if refusal:
+            logger.error(f"Hardware configuration refused: {refusal}")
+            return False
         command = {"state": COMMAND_CONFIG}
         if flags:
             command["flags"] = flags

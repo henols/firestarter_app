@@ -128,3 +128,61 @@ def test_a_firmware_config_refusal_exits_non_zero_with_its_text(
     assert "'Failed parsing config'" in caplog.text
     assert "refused the command parameters" in caplog.text
     assert "Timeout" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "kwargs, reason",
+    [
+        ({"rev": 256}, "revision code 256"),
+        ({"rev": 254}, "revision code 254"),
+        ({"rev": -2}, "revision code -2"),
+        ({"r1_val": -270000}, "R1 -270000"),
+        ({"r2_val": 66000}, "R2 66000"),
+    ],
+)
+def test_set_hardware_config_refuses_raw_out_of_band_values(
+    monkeypatch, caplog, kwargs: dict, reason: str
+) -> None:
+    """The firmware reads '-' as 0 and truncates rev to 8 bits before its own
+    check, so the raw value is refused on the host."""
+    connect_spy = Mock()
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+    )
+    with caplog.at_level(logging.ERROR):
+        assert HardwareManager(ConfigManager()).set_hardware_config(**kwargs) is False
+    connect_spy.assert_not_called()
+    assert "Hardware configuration refused" in caplog.text
+    assert reason in caplog.text
+
+
+@pytest.mark.parametrize("rev", [-1, 0, 5, 0xFF])
+def test_set_hardware_config_sends_accepted_revisions(monkeypatch, rev: int) -> None:
+    sent = []
+
+    def _fake_simple(self, command, name):
+        sent.append(command)
+        return True, "ok"
+
+    monkeypatch.setattr(HardwareManager, "_execute_simple_command", _fake_simple)
+    assert HardwareManager(ConfigManager()).set_hardware_config(rev=rev) is True
+    assert sent[0]["rev"] == (0xFF if rev == -1 else rev)
+
+
+@pytest.mark.parametrize("vcc", ["0", "-5.0"])
+def test_cal_refuses_a_non_positive_vcc(vcc: str) -> None:
+    hardware = Mock(spec=HardwareManager)
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", vcc], obj=app)
+    assert result.exit_code == 2, result.output
+    hardware.calibrate_bandgap.assert_not_called()
+
+
+def test_cal_refusal_names_the_board_without_calibration() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = None
+    hardware.calibrate_bandgap.return_value = False
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "py32f071" in result.output

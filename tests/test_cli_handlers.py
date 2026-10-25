@@ -1232,11 +1232,11 @@ def test_hw_returns_false(runner: CliRunner) -> None:
 
 
 def test_config_happy_path(runner: CliRunner) -> None:
-    """`firestarter config -r1 1000` exits 0 when set_hardware_config returns True."""
+    """`firestarter config -r1 270000` exits 0 when set_hardware_config returns True."""
     hw = Mock(spec=HardwareManager)
     hw.set_hardware_config.return_value = True
     app = make_app_context(hardware_manager=hw)
-    result = runner.invoke(cli, ["config", "-r1", "1000"], obj=app)
+    result = runner.invoke(cli, ["config", "-r1", "270000"], obj=app)
     assert result.exit_code == 0
 
 

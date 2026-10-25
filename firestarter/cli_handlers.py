@@ -1564,7 +1564,7 @@ _BANDGAP_NOMINAL_MV = 1100
 @cli.command(name="cal")
 @click.option(
     "--vcc",
-    type=float,
+    type=click.FloatRange(min=0, min_open=True),
     default=None,
     metavar="VOLTS",
     help="Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09",
@@ -1611,7 +1611,9 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
             click.echo(
                 "Calibration refused. The result was outside 1000-1200 mV, which "
                 "means the reading does not match this board. Check that the "
-                "multimeter is on the 5V pin and that the value is in volts."
+                "multimeter is on the 5V pin and that the value is in volts. "
+                "A py32f071 board has no bandgap calibration and always "
+                "refuses it."
             )
             sys.exit(1)
         after = app.hardware_manager.read_calibration()
