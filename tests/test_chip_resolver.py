@@ -165,3 +165,14 @@ def test_resolve_chip_refuses_missing_algorithm_before_convert_to_programmer(
             with pytest.raises(ChipNotImplementedError):
                 resolve_chip("BROKEN_OVERRIDE_CHIP", db=db)
             mock_convert.assert_not_called()
+
+
+def test_resolve_chip_refuses_a_pin_map_narrower_than_the_chip(db):
+    """The 27011 is page-addressed: 128 KB through 14 address lines. Reading it
+    would repeat the first 16 KB eight times (henols/firestarter#136)."""
+    with pytest.raises(ChipNotImplementedError, match="14 address lines"):
+        resolve_chip("D27011", db)
+
+
+def test_resolve_chip_accepts_a_bus_that_covers_the_chip(db):
+    assert len(resolve_chip("AM27C010", db)["bus-config"]["bus"]) == 17

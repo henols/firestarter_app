@@ -129,4 +129,14 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
             f"{name}: the chip entry gives 0 for {', '.join(zero_fields)}. "
             "The programmer cannot use a value of 0 there."
         )
+
+    # A pin map with fewer address lines than the chip's size needs would
+    # repeat one window of the chip across the whole operation, silently.
+    bus = data.get("bus-config", {}).get("bus")
+    if bus and data["memory-size"] > 1 << len(bus):
+        raise ChipNotImplementedError(
+            f"{name}: its pin map has {len(bus)} address lines, which reach "
+            f"{1 << len(bus)} of its {data['memory-size']} bytes. The programmer "
+            "cannot address the rest of the chip."
+        )
     return data
