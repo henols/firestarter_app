@@ -8,7 +8,7 @@ Phase 200 (VCC-01) -- the 284-row elevated-programming-VCC census, as a test.
 
 Coverage:
   1. ROW TOTAL AND VDD HISTOGRAM -- the live generated database holds exactly
-     746 rows, of which the shipped predicate `programming_vcc_over_rail_mv`
+     747 rows, of which the shipped predicate `programming_vcc_over_rail_mv`
      selects exactly 284, with a `vdd_mv` histogram of exactly `{5500: 164,
      6000: 8, 6250: 7, 6500: 105}`.
   2. ALL SUPPORTED, ALL UV-EPROM -- every one of the 284 rows carries
@@ -63,7 +63,7 @@ the warned set is exactly what these equalities exist to surface.
 
 D-06's fail-open branch is unreachable from the shipped database, because
 `build_db.py` decodes `vdd_mv` through a `.get(..., 5000)` default and every
-one of the 746 rows therefore carries a non-zero integer. It is nonetheless
+one of the 747 rows therefore carries a non-zero integer. It is nonetheless
 live in production, through the `~/.firestarter/database.json` override seam
 that `EpromDatabase` merges over the packaged database, so a reviewer must
 not delete it as dead code.
@@ -86,7 +86,7 @@ _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
-_EXPECTED_DATABASE_ROWS = 746
+_EXPECTED_DATABASE_ROWS = 747
 _EXPECTED_TOTAL_ROWS = 284
 _EXPECTED_VDD_HISTOGRAM = {5500: 164, 6000: 8, 6250: 7, 6500: 105}
 _EXPECTED_ALGORITHM_HISTOGRAM = {7: 161, 8: 102, 11: 21}
@@ -337,7 +337,7 @@ def test_predicate_is_strictly_above_the_rail_not_at_or_above() -> None:
 
 
 def test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd() -> None:
-    """D-06: the live 746-row shipped database has zero rows in any of
+    """D-06: the live 747-row shipped database has zero rows in any of
     these states, because `build_db.py` decodes `vdd_mv` through a
     `.get(..., 5000)` default. The branch is nonetheless live in production
     because `EpromDatabase` merges `~/.firestarter/database.json` over the
@@ -453,7 +453,7 @@ _REQUIRED_TEST_NAMES = (
 )
 
 _DEFINITION_GUARD_COUNTS = {
-    "_EXPECTED_DATABASE_ROWS" + " = 746": 1,
+    "_EXPECTED_DATABASE_ROWS" + " = 747": 1,
     "_EXPECTED_TOTAL_ROWS" + " = 284": 1,
     "_EXPECTED_VDD_HISTOGRAM" + " = {5500: 164, 6000: 8, 6250: 7, 6500: 105}": 1,
     "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {7: 161, 8: 102, 11: 21}": 1,

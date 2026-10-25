@@ -173,6 +173,10 @@ _DELTAS_DIP24_2816 = _HERE / "golden" / "wire_dict_expected_deltas_dip24_2816.js
 _DELTAS_DIP28_2764_8K = (
     _HERE / "golden" / "wire_dict_expected_deltas_dip28_2764_8k.json"
 )
+# PGM is driven during reads for the 26 27128 and three 27011 records.
+_DELTAS_DIP28_2764_PGM = (
+    _HERE / "golden" / "wire_dict_expected_deltas_dip28_2764_pgm.json"
+)
 
 _GOLDEN_PAGE_SIZE_RECORD_KEYS = {
     "WINBOND|W29C020,W29C020C,W29C022|7",
@@ -276,6 +280,9 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
     deltas_199 = json.loads(_DELTAS_199.read_text(encoding="utf-8"))["deltas"]
     deltas_dip24 = json.loads(_DELTAS_DIP24_2816.read_text(encoding="utf-8"))["deltas"]
     deltas_8k = json.loads(_DELTAS_DIP28_2764_8K.read_text(encoding="utf-8"))["deltas"]
+    new_layer = json.loads(_DELTAS_DIP28_2764_PGM.read_text(encoding="utf-8"))
+    deltas_pgm = new_layer["deltas"]
+    new_records = new_layer["new_records"]
 
     golden_page_size_keys = {
         key for key, wire in recorded.items() if "page-size" in wire
@@ -505,6 +512,23 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         assert "rw-pin" not in recorded[key]["bus-config"], key
         assert "rw-pin" in delta_wire["bus-config"], key
 
+    assert len(deltas_pgm) == 29, sorted(deltas_pgm)
+    assert len(new_records) == 1, sorted(new_records)
+    assert set(deltas_pgm).isdisjoint(deltas_8k)
+    for key, delta_wire in deltas_pgm.items():
+        assert key in recorded, key
+        assert set(delta_wire) == {"bus-config"}, key
+        before = recorded[key]["bus-config"]
+        after = delta_wire["bus-config"]
+        assert "rw-pin" not in before, key
+        assert after == {**before, "rw-pin": 14}, key
+    for key, wire in new_records.items():
+        assert key not in recorded, key
+        assert key.startswith("NEC|D27128D,UPD27128D|"), key
+        assert wire["memory-size"] == 16384
+        assert wire["bus-config"]["rw-pin"] == 14
+        assert wire["vpp_mv"] == 21000
+
     expected = copy.deepcopy(recorded)
     for key, delta_wire in deltas_149.items():
         expected[key].update(delta_wire)
@@ -524,10 +548,13 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         expected[key].update(delta_wire)
     for key, delta_wire in deltas_8k.items():
         expected[key].update(delta_wire)
+    for key, delta_wire in deltas_pgm.items():
+        expected[key].update(delta_wire)
+    expected.update(new_records)
 
     live = _capture_wire_dicts(_REAL_DB)
     assert expected == live, (
-        "live 746-chip wire-dict capture does not equal "
+        "live 747-chip wire-dict capture does not equal "
         "tests/golden/wire_dict_baseline.json plus exactly the 18 named "
         "Phase 149 deltas (tests/golden/wire_dict_expected_deltas_149.json) "
         "plus exactly the 84 named Phase 153 deltas "
@@ -545,7 +572,7 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         "the 19 DIP24_2816 deltas, applied last "
         "(tests/golden/wire_dict_expected_deltas_dip24_2816.json) plus "
         "exactly the 29 DIP28_2764_8K deltas "
-        "(tests/golden/wire_dict_expected_deltas_dip28_2764_8k.json); "
+        "(tests/golden/wire_dict_expected_deltas_dip28_2764_8k.json), the 29 DIP28_2764 PGM deltas and the NEC D27128D record; "
         "if this is a legitimate NEW wire-value change, it must be added "
         "to a delta list deliberately, naming which chips and which keys "
         f"moved, in the commit message. Diff: {_describe_record_diff(expected, live)}"
@@ -617,6 +644,9 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
     deltas_199 = json.loads(_DELTAS_199.read_text(encoding="utf-8"))["deltas"]
     deltas_dip24 = json.loads(_DELTAS_DIP24_2816.read_text(encoding="utf-8"))["deltas"]
     deltas_8k = json.loads(_DELTAS_DIP28_2764_8K.read_text(encoding="utf-8"))["deltas"]
+    deltas_pgm = json.loads(_DELTAS_DIP28_2764_PGM.read_text(encoding="utf-8"))[
+        "deltas"
+    ]
 
     expected = copy.deepcopy(recorded)
     for key, delta_wire in deltas_149.items():
@@ -637,6 +667,8 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
     for key, delta_wire in deltas_dip24.items():
         expected[key].update(delta_wire)
     for key, delta_wire in deltas_8k.items():
+        expected[key].update(delta_wire)
+    for key, delta_wire in deltas_pgm.items():
         expected[key].update(delta_wire)
 
     live = _capture_wire_dicts(_REAL_DB)

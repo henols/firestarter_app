@@ -32,7 +32,7 @@ from firestarter.jumper_table import (
     derive_vpp_landing,
 )
 
-ROW_COUNT = 746
+ROW_COUNT = 747
 PIN_MAP_COUNT = 17
 
 
@@ -291,7 +291,7 @@ def test_probe_pending_rows_are_marked(rendered: list[tuple[str, dict]]) -> None
     marked = [
         p for p, s in rendered if PROBE_PENDING_TEXT in s["jumpers"][REV20_KEY]["notes"]
     ]
-    assert len(marked) == 58 + 58 + 67
+    assert len(marked) == 59 + 58 + 67
     assert set(marked) == {k for k, e in JUMPER_TABLE.items() if e.probe_pending}
     for pin_map, spec in rendered:
         assert PROBE_PENDING_TEXT not in spec["jumpers"][REV01_KEY]["notes"], pin_map

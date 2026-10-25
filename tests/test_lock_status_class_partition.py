@@ -12,7 +12,7 @@ specific non-vacuous form:
 
   - The exhaustiveness leg (below) was **red by construction** before plan
     `151-06` assigned the `XICOR/X88C64P,X88C64S` row (`algorithm: 52`,
-    `0x34`) a class: D-09's seven named no-mechanism algorithms sum to 405,
+    `0x34`) a class: D-09's seven named no-mechanism algorithms sum to 406,
     not 406, so that row landed in no class under D-09's literal
     enumeration. The red-then-green transcript for this is recorded
     verbatim in `151-12-SUMMARY.md`, produced by temporarily removing `52`
@@ -22,17 +22,17 @@ specific non-vacuous form:
 
 Coverage (task numbering matches `151-12-PLAN.md`):
   Task 1 (this file's first half):
-    1. Exhaustiveness -- all 746 rows resolve into the frozen token set.
+    1. Exhaustiveness -- all 747 rows resolve into the frozen token set.
     2. Disjointness / determinism -- one token per row, two consecutive
        walks byte-equal.
-    3. The census, pinned as literals: `no_mechanism` 405 (with the seven
+    3. The census, pinned as literals: `no_mechanism` 406 (with the seven
        per-algorithm counts), `not_implemented` 40 (the `39 at 0x10 + 1 at
        0x34` decomposition, the OD-2 / `151-DESIGN.md` §4 correction that
        supersedes `151-VALIDATION.md`'s earlier figure of 39), the `0x0D`
        84 / curation 24 split of `not_readable`, the `0x05`+`0x06` 217
        surface split 81/24/112 (matching `151-06-SUMMARY.md`'s measured
        distribution exactly), and the total arithmetic
-       405 + 40 + 84 + 217 == 746.
+       406 + 40 + 84 + 217 == 747.
   Task 2 (this file's second half):
     4. Structural unreachability of `protected`/`unprotected`.
     6. Robustness: the two key-less TEXAS INSTRUMENTS rows, the ten
@@ -174,7 +174,7 @@ def _resolve_database_or_raise(db: dict) -> list[_RowResolution]:
 
 
 def test_all_746_rows_resolve_exhaustively() -> None:
-    """Every one of the 746 committed database rows resolves into the
+    """Every one of the 747 committed database rows resolves into the
     frozen gate-token set, and the walk raises for none of them.
 
     Non-vacuity: this leg was **observed red** on the `XICOR/X88C64P,X88C64S`
@@ -187,8 +187,8 @@ def test_all_746_rows_resolve_exhaustively() -> None:
     """
     db = _load_db()
     resolutions = _resolve_database_or_raise(db)
-    assert len(resolutions) == 746, (
-        f"D-12 leg 1: expected 746 resolved rows, measured {len(resolutions)}"
+    assert len(resolutions) == 747, (
+        f"D-12 leg 1: expected 747 resolved rows, measured {len(resolutions)}"
     )
     unknown_tokens = {r.token for r in resolutions} - _ALL_GATE_TOKENS
     assert not unknown_tokens, (
@@ -217,7 +217,7 @@ def test_exactly_one_token_per_row() -> None:
 def test_two_consecutive_walks_are_byte_equal() -> None:
     """Two consecutive walks over the same database produce identical
     per-row results -- proves `protection_gate_for_entry` is pure over the
-    real 746-row corpus, not merely over the hand-picked cases in
+    real 747-row corpus, not merely over the hand-picked cases in
     `test_protection_resolution.py`."""
     db = _load_db()
     first = _resolve_database_or_raise(db)
@@ -232,7 +232,7 @@ def test_two_consecutive_walks_are_byte_equal() -> None:
 # Leg 3: the census, pinned as literals
 
 _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
-    0x07: 170,
+    0x07: 171,
     0x08: 127,
     0x0B: 32,
     0x0E: 20,
@@ -240,7 +240,7 @@ _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
     0x28: 34,
     0x29: 20,
 }
-_NO_MECHANISM_TOTAL = 405
+_NO_MECHANISM_TOTAL = 406
 assert sum(_NO_MECHANISM_ALGORITHM_COUNTS.values()) == _NO_MECHANISM_TOTAL
 
 _NOT_IMPLEMENTED_KEYS: frozenset[str] = frozenset(
@@ -292,7 +292,7 @@ assert len(_NOT_IMPLEMENTED_KEYS) == 40
 
 # The 27 rows at algorithm 0x05 (Winbond/Atmel/SST 5V boot-block family) --
 # pinned as a SET, per the plan's instruction that this bucket ("the 0x05
-# surface's 27") is small enough to name directly, unlike no_mechanism's 405.
+# surface's 27") is small enough to name directly, unlike no_mechanism's 406.
 _ALGORITHM_0X05_KEYS: frozenset[str] = frozenset(
     {
         "ASD/AE29F1008",
@@ -337,7 +337,7 @@ assert (
 
 _NOT_READABLE_0X0D_TOTAL = 84
 
-_GRAND_TOTAL = 746
+_GRAND_TOTAL = 747
 assert (
     _NO_MECHANISM_TOTAL + 40 + _NOT_READABLE_0X0D_TOTAL + _CURATION_SURFACE_TOTAL
     == _GRAND_TOTAL
@@ -345,9 +345,9 @@ assert (
 
 
 def test_no_mechanism_census_405_with_per_algorithm_decomposition() -> None:
-    """`no_mechanism` resolves for exactly 405 rows, decomposed by algorithm
-    into the seven counts D-09 names: 0x07 (170), 0x08 (127), 0x0B (32),
-    0x0E (20), 0x27 (2), 0x28 (34), 0x29 (20). 405 is too large a bucket to
+    """`no_mechanism` resolves for exactly 406 rows, decomposed by algorithm
+    into the seven counts D-09 names: 0x07 (171), 0x08 (127), 0x0B (32),
+    0x0E (20), 0x27 (2), 0x28 (34), 0x29 (20). 406 is too large a bucket to
     pin as a set (per the plan's instruction), so this pins the count plus
     the per-algorithm decomposition instead."""
     db = _load_db()
@@ -474,7 +474,7 @@ def test_0x05_0x06_curation_surface_217_matches_151_06_measurement() -> None:
 
 
 def test_total_arithmetic_sums_to_746() -> None:
-    """405 + 40 + 84 + 217 == 746, asserted as arithmetic over the ACTUAL
+    """406 + 40 + 84 + 217 == 747, asserted as arithmetic over the ACTUAL
     measured counts (not the literal constants alone), so a future row
     that shifts one bucket without shifting the total is still caught."""
     db = _load_db()
@@ -509,7 +509,7 @@ def test_total_arithmetic_sums_to_746() -> None:
 
 
 def test_no_row_resolves_to_a_silicon_only_token() -> None:
-    """No row, anywhere in the real 746-row database, resolves to
+    """No row, anywhere in the real 747-row database, resolves to
     `protected` or `unprotected` -- the two `SILICON_ONLY_TOKENS`, which
     `protection_gate_for_entry`'s signature is structurally incapable of
     returning (T-151-58)."""
@@ -532,7 +532,7 @@ def test_no_row_resolves_to_a_silicon_only_token() -> None:
 def test_ti_key_less_rows_resolve_to_no_mechanism_without_raising() -> None:
     """D-12 leg 6(a): the two TEXAS INSTRUMENTS rows (`2516`, `2532`) carry
     NEITHER `protect_on_after` nor `protect_off_before` at all -- the
-    744-of-746 exception. `protection_gate_for_entry` never reads either
+    744-of-747 exception. `protection_gate_for_entry` never reads either
     field (per its own docstring), so this asserts both rows resolve
     cleanly to `no_mechanism` (both are algorithm `0x0B`) rather than
     raising a `KeyError` on the missing fields."""

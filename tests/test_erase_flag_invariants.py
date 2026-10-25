@@ -5,7 +5,7 @@ Plans 08 through 11 inverted the old algorithm-13 exclusion tests -- their
 green runs prove the old assertions that used to clear FLAG_CAN_ERASE for
 this family are gone. They do NOT prove the change stayed inside its
 intended boundary. This module is that proof: it walks every one of the
-746 rows in the generated database and asserts that exactly the 84
+747 rows in the generated database and asserts that exactly the 84
 algorithm-13 rows gained the bit and nothing else moved.
 
 **Anti-vacuity rule, stated up front (the same trap
@@ -39,7 +39,7 @@ used throughout, so a developer's own `~/.firestarter/database.json`
 override can never change any of the counts asserted here.
 
 Coverage (5 legs):
-  1. Exactly 84 of the 746 total rows carry `programming.algorithm == 13`.
+  1. Exactly 84 of the 747 total rows carry `programming.algorithm == 13`.
   2. Every one of those 84 rows carries the erase capability bit after
      conversion.
   3. Every row that is NOT algorithm 13 has a bit value matching the
@@ -144,15 +144,15 @@ def _erase_capability_bit(db: EpromDatabase, manufacturer: str, chip: dict) -> b
     return bool(wire["flags"] & FLAG_CAN_ERASE)
 
 
-# Leg 1: exactly 84 of the 746 total rows are algorithm 13.
+# Leg 1: exactly 84 of the 747 total rows are algorithm 13.
 
 
 def test_exactly_84_algorithm_13_rows_across_all_746_rows() -> None:
-    """The 746 total is asserted in the same test as the 84 subset count --
+    """The 747 total is asserted in the same test as the 84 subset count --
     a change in either number invalidates every other leg in this module."""
     total_rows = _all_rows(_REAL_DB)
-    assert len(total_rows) == 746, (
-        f"expected 746 total database rows, found {len(total_rows)}"
+    assert len(total_rows) == 747, (
+        f"expected 747 total database rows, found {len(total_rows)}"
     )
 
     algo13_rows = _select_algorithm_13_rows(_REAL_DB)

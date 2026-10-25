@@ -22,10 +22,11 @@
         }
     },
     "DIP28_2764": {
-        "name": "JEDEC 2764/128",
+        "name": "JEDEC 27128/27C128 (16KB) and 27011",
+        "comment": "Pin 27 is PGM: firmware 3.2.0+ drives rw-pin high for reads and low for writes. A programmed NEC D27128D read returned only 0x03 without this mapping and recognizable Award BIOS data with it. The 27011 family shares this map but its paging issue is tracked separately.",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
-            "pgm-pin": [27],
+            "pgm-pin": [27], "rw-pin": [27],
             "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26],
             "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
             "ce-pin": [20], "oe-pin": [22]

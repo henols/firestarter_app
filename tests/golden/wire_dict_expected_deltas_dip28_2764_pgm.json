@@ -1,0 +1,682 @@
+{
+  "deltas": {
+    "AMD|AM27128A|5": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "AMD|AM27C128|13": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "ASI Semic|SMJ27C128|2": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "ATMEL|AT27C011|3": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "ATMEL|AT27C128|7": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "CATALYST(CSI)|CAT27128A|2": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "CYPRESS|CY27C128|3": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "FAIRCHILD|NM27C128,NMC27C128B,NMC27C128C|8": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "FUJITSU|MBM27128|2": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "FUJITSU|MBM27C128P|8": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "GREENWICH|GR27128|1": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "HITACHI|HN27128AG,HN27128AP|0": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "INTEL|27128,D27128|5": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "INTEL|27128A,D27128A,D27128B|6": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "INTEL|27C128|14": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "INTEL|D27011|0": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "INTEL|D27C011|1": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "MICROCHIP memory|27C128|0": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "MITSUBISHI|M5M27C128|2": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "NEC|UPD27128|0": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "NEC|UPD27C128|5": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "NSC|NM27C128,NMC27C128B,NMC27C128C|4": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "SGS-THOMSON|M27128A|5": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "SGS-THOMSON|ST27128A|34": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "ST|M27128A|2": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "ST|ST27128A|33": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "TI|SMJ27C128,TMS27C128,TMS27PC128|0": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "WSI|WS27C128F|2": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    },
+    "WSI|WS57C128FB|6": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      }
+    }
+  },
+  "new_records": {
+    "NEC|D27128D,UPD27128D|14": {
+      "memory-size": 16384,
+      "algorithm": 7,
+      "pin-count": 28,
+      "vpp_mv": 21000,
+      "pulse-delay": 1000,
+      "chip-id": 0,
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "rw-pin": 14,
+        "vpp-pin": 15
+      },
+      "flags": 0
+    }
+  },
+  "meta": {
+    "decision": "Keep wire_dict_baseline.json unchanged. The shared 14-address-line DIP28_2764 map gains rw-pin 14 for 26 27128-family rows and three 27011-family rows; the new NEC D27128D row is recorded separately.",
+    "bench": "NEC D27128D Award BIOS: 16,384 bytes of 0x03 without rw-pin; legible Award data with it. Two reads differed at 13 bit positions, so clean contents remain unverified.",
+    "counts": {
+      "existing_records": 29,
+      "new_records": 1
+    },
+    "caveat": "The 27011 paging issue #136 is not resolved by this PGM change. No write test was performed."
+  }
+}

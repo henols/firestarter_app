@@ -25,7 +25,7 @@ Coverage (12 legs):
      (manufacturer, part_number) set equals the 18 named upstream-native
      rows below.
   3. Of the 18, exactly 15 carry 128 and exactly 3 carry 64.
-  4. Across all 746 rows, exactly 45 carry programming.page_size
+  4. Across all 747 rows, exactly 45 carry programming.page_size
      (18 upstream-native 0x0D rows + 27 upstream-native 0x05 rows -- no
      curated carrier remains, per Phase 194 D-01/D-02).
   5. Every emitted page_size anywhere in the database is a power of two in
@@ -311,11 +311,11 @@ def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
 def test_exactly_64_page_size_carriers_across_all_746_rows() -> None:
     db = _load_db(_DB_FILE)
     total_rows = sum(len(chips) for chips in db.values())
-    assert total_rows == 746, f"expected 746 total rows, found {total_rows}"
+    assert total_rows == 747, f"expected 747 total rows, found {total_rows}"
     carriers = _select_page_size_carriers(db)
     assert len(carriers) == 64, (
         f"expected exactly 64 page_size carriers (18 upstream-native 0x0D "
-        f"+ 27 upstream-native 0x05 + 19 DIP24_2816) across all 746 rows, found "
+        f"+ 27 upstream-native 0x05 + 19 DIP24_2816) across all 747 rows, found "
         f"{len(carriers)}: "
         f"{[(m, c.get('part_number', '?')) for m, c in carriers]}"
     )

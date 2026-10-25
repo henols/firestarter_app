@@ -48,12 +48,12 @@ helper's own docstring lists the UV plan shape as `blank-check,
 [write, verify]` -- a two-step block -- but `derive_plan` emits the erase
 step for a UV chip anyway, marked `supported=False` rather than omitted,
 and `cycle_block_bounds` does not filter on `Step.supported` when it walks
-`_CYCLE_BLOCK_OPS`. Measured against this plan's own corpus: all 270 UV
-plans (270 distinct UV part numbers, each at its single reachable scope)
+`_CYCLE_BLOCK_OPS`. Measured against this plan's own corpus: all 271 UV
+plans (271 distinct UV part numbers, each at its single reachable scope)
 carry a real, three-step cycle block of `write, verify, erase(NA)`, not the
 two-step shape the helper's docstring family list describes. A rule built
 by reading that docstring, rather than by calling the helper, would be
-wrong on all 270 of them.
+wrong on all 271 of them.
 
 **Reachability.** A gate authored before the content it guards can be
 unreachable and prove nothing, so every anti-vacuity leg below was
@@ -65,7 +65,7 @@ reach; three mutated-corpus legs
 (`test_removing_the_verify_flags_every_write_bearing_plan`,
 `test_an_unsupported_verify_flags_every_write_bearing_plan`,
 `test_a_region_skewed_verify_flags_every_write_bearing_plan`) prove it is
-sensitive on all 677 shipped plans, not on one hand-picked example. On
+sensitive on all 678 shipped plans, not on one hand-picked example. On
 top of both, four deliberate weakenings of `write_verify_violations`
 itself (return nothing; drop the `supported` conjunct; drop the three
 field-equality conjuncts; turn the out-of-block violation into a skip)
@@ -294,22 +294,22 @@ def test_a_fourteenth_op_fails_the_partition_closed(monkeypatch):
 def test_corpus_census_is_pinned():
     """The anti-empty floor every later sweep in this module rests on."""
     corpus = plan_corpus()
-    assert len(all_rows(REAL_DB)) == 746, len(all_rows(REAL_DB))
-    assert len(PART_NUMBERS) == 677, len(PART_NUMBERS)
-    assert len(corpus) == 677, len(corpus)
+    assert len(all_rows(REAL_DB)) == 747, len(all_rows(REAL_DB))
+    assert len(PART_NUMBERS) == 678, len(PART_NUMBERS)
+    assert len(corpus) == 678, len(corpus)
     total_steps = sum(len(plan.steps) for plan in corpus.values())
-    assert total_steps == 8124, total_steps
+    assert total_steps == 8136, total_steps
     unsupported_steps = sum(
         1 for plan in corpus.values() for s in plan.steps if not s.supported
     )
     # 4652 before the 19 DIP24_2816 erase steps became unsupported.
-    assert unsupported_steps == 4671, unsupported_steps
+    assert unsupported_steps == 4679, unsupported_steps
 
 
 def test_no_shipped_plan_emits_a_write_without_a_verify():
     """Roadmap success criterion 2."""
     corpus = plan_corpus()
-    assert len(corpus) == 677, (
+    assert len(corpus) == 678, (
         f"corpus size drifted to {len(corpus)} before this sweep could run "
         "-- a sweep that visits the wrong number of rows proves nothing"
     )
@@ -340,7 +340,7 @@ def test_no_shipped_plan_carries_an_unsupported_write():
 
 def test_one_chip_run_plan_alignment_smoke():
     """Proves the shared `mock_operator` double is wired correctly before
-    plan 175-04 builds a 677-plan `run_plan` sweep on it.
+    plan 175-04 builds a 678-plan `run_plan` sweep on it.
     `tests/test_chip_test.py:2612` is the shipped M8720 instance of the
     same alignment claim for a different chip; this leaves that one alone
     and cites it instead of restating it. `run_plan` with `runs < 2` and no
@@ -512,7 +512,7 @@ def test_an_unsupported_write_is_skipped_by_decision():
 def _write_bearing_plans():
     """Shared selector for Part B's three mutated-corpus legs (D-09). Each
     of those legs proves `write_verify_violations` is sensitive on all
-    677 shipped plans, not merely on one hand-built example, and each
+    678 shipped plans, not merely on one hand-built example, and each
     asserts this selector's size as an absolute number before mutating
     anything, so a sweep that silently visits zero rows cannot pass.
 
@@ -533,7 +533,7 @@ def _write_bearing_plans():
 
 def test_removing_the_verify_flags_every_write_bearing_plan():
     write_bearing = _write_bearing_plans()
-    assert len(write_bearing) == 677, (
+    assert len(write_bearing) == 678, (
         f"write-bearing corpus size drifted to {len(write_bearing)} -- a "
         "sweep that visits zero rows must not pass"
     )
@@ -555,7 +555,7 @@ def test_removing_the_verify_flags_every_write_bearing_plan():
 def test_an_unsupported_verify_flags_every_write_bearing_plan():
     """D-03, generalized across the whole corpus."""
     write_bearing = _write_bearing_plans()
-    assert len(write_bearing) == 677, (
+    assert len(write_bearing) == 678, (
         f"write-bearing corpus size drifted to {len(write_bearing)} -- a "
         "sweep that visits zero rows must not pass"
     )
@@ -581,7 +581,7 @@ def test_an_unsupported_verify_flags_every_write_bearing_plan():
 def test_a_region_skewed_verify_flags_every_write_bearing_plan():
     """D-04, generalized across the whole corpus."""
     write_bearing = _write_bearing_plans()
-    assert len(write_bearing) == 677, (
+    assert len(write_bearing) == 678, (
         f"write-bearing corpus size drifted to {len(write_bearing)} -- a "
         "sweep that visits zero rows must not pass"
     )
@@ -679,12 +679,12 @@ def test_every_executable_erase_has_a_blank_check_behind_it_in_the_block():
     """Roadmap-adjacent D-05 leg. Generalizes
     `tests/test_chip_test_blank_check_order.py:130`
     (`test_at28c256_blank_check_moves_after_erase_but_stays_na`) from one
-    hand-pinned chip's absolute Plan.steps indexes to all 677 chips at
+    hand-pinned chip's absolute Plan.steps indexes to all 678 chips at
     their single reachable scope, scoped to the production cycle block
     rather than to raw positions. Does not restate that module's
     index-5/index-4 assertions."""
     corpus = plan_corpus()
-    assert len(corpus) == 677, (
+    assert len(corpus) == 678, (
         f"corpus size drifted to {len(corpus)} before this sweep could run "
         "-- a sweep that visits the wrong number of rows proves nothing"
     )
@@ -927,8 +927,8 @@ def uv_blank_check_order_violations(plan):
 def test_no_uv_plan_claims_the_full_device_region_policy():
     corpus = plan_corpus()
     uv_plans = [key for key, plan in corpus.items() if plan.is_uv]
-    assert len(uv_plans) == 270, (
-        f"UV plan count drifted to {len(uv_plans)}, expected 270"
+    assert len(uv_plans) == 271, (
+        f"UV plan count drifted to {len(uv_plans)}, expected 271"
     )
     offenders = [
         (key, violations)
@@ -952,8 +952,8 @@ def test_the_uv_slot_policy_is_claimed_only_by_uv_plans():
         for s in plan.steps
         if s.region_policy == chip_test.REGION_POLICY_UV_SLOT
     ]
-    assert len(slot_steps) == 540, (
-        f"uv-slot step count drifted to {len(slot_steps)}, expected 540"
+    assert len(slot_steps) == 542, (
+        f"uv-slot step count drifted to {len(slot_steps)}, expected 542"
     )
     offenders = [key for key, _s in slot_steps if not corpus[key].is_uv]
     assert not offenders, (
@@ -965,8 +965,8 @@ def test_the_uv_slot_policy_is_claimed_only_by_uv_plans():
 def test_a_uv_write_has_a_blank_check_ahead_of_it():
     corpus = plan_corpus()
     uv_plans = {key: plan for key, plan in corpus.items() if plan.is_uv}
-    assert len(uv_plans) == 270, (
-        f"UV plan count drifted to {len(uv_plans)}, expected 270"
+    assert len(uv_plans) == 271, (
+        f"UV plan count drifted to {len(uv_plans)}, expected 271"
     )
     offenders = [
         (key, violations)

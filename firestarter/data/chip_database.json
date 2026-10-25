@@ -10104,6 +10104,33 @@
         "pulse_duration_us": 0
       },
       "support_status": "supported"
+    },
+    {
+      "datasheet": "https://bitsavers.org/components/nec/_dataBooks/1986_NEC_Memory_Data_Book.pdf#page=338",
+      "electrical": {
+        "pin_count": 28,
+        "size_bytes": 16384,
+        "type": "UV-EPROM",
+        "vcc_mv": 5000,
+        "vdd_mv": 5000,
+        "vpp_mv": 21000
+      },
+      "part_number": "D27128D,UPD27128D",
+      "pinout": "DIP28_2764",
+      "programming": {
+        "algorithm": 7,
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000",
+        "infoic_page_size_raw": 0,
+        "protect_off_before": false,
+        "protect_on_after": false,
+        "pulse_duration_us": 1000
+      },
+      "provenance": "NEC 1986 Memory Data Book, \u00b5PD27128 pp. 9-5 to 9-8: 16,384 x 8 NMOS UV EPROM; D is the windowed CERDIP; unsuffixed 27128 is 250 ns; read requires PGM high; conventional programming specifies 21 V VPP and a 1 ms PGM pulse. D27128D/UPD27128D is absent from minipro infoic.xml.",
+      "source": "non-upstream-supplement",
+      "support_status": "supported",
+      "verification_note": "Read-only bench evidence on a programmed Award BIOS: the old map returned 16,384 bytes of 0x03; driving PGM high produced recognizable data, but two reads differed at 13 bits and no independent reference image was available. Writing, exact contents, and read reliability are not yet verified.",
+      "verification_status": "UNVERIFIED"
     }
   ],
   "NEXFLASH": [

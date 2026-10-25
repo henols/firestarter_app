@@ -1186,6 +1186,7 @@
   | UPD28C04            | NEC              |   24 |            | EEPROM      | -    |
   | UPD28C256           | NEC              |   28 |            | EEPROM      | -    |
   | UPD28C64            | NEC              |   28 |            | EEPROM      | -    |
+  | D27128D,UPD27128D   | NEC              |   28 |            | UV-EPROM    | 21.0v|
   | NX29F010            | NEXFLASH         |   32 | 0x0120     | Flash/EEPROM| -    |
   | NM27C010            | NSC              |   32 | 0x8F86     | UV-EPROM    | 13.0v|
   | NM27C020            | NSC              |   32 | 0x8F07     | UV-EPROM    | 13.0v|
