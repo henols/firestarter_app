@@ -549,6 +549,12 @@ class EpromOperator:
         # `--full` run, which never sets an abort_predicate, can never be
         # mistaken for this host's own doing.
         self._read_abort_intended: bool = False
+        # Whether the ERROR that ended the last `_run_state_machine` call was
+        # this host's own deliberate read stop (see `_is_own_read_abort`).
+        # Decided ONCE, where the error is caught, so the log level there and
+        # `_drive_region_compare`'s verdict can never disagree. Reset per
+        # operation alongside `_read_abort_stopped_at`.
+        self._read_abort_accepted: bool = False
         # SESS-01 (Phase 206): whether this operator is currently holding one
         # validated link open across multiple calls instead of connecting
         # and tearing down per call. Default off -- joins the transient
@@ -714,7 +720,11 @@ class EpromOperator:
                 # A leased setup whose ack was rejected (not a raised
                 # error) is a failed setup, treated identically to a cold
                 # connect failure: the caller's existing not-`command_dict`
-                # guard in `_operation_context` handles it unchanged.
+                # guard in `_operation_context` handles it unchanged. The
+                # firmware may still be mid-reply, so the held link is not
+                # trusted again: drop it, as the SerialError arm above does,
+                # and the next operation cold-connects.
+                self._disconnect_programmer()
                 return None, 0
             buffer_size = self._calculate_buffer_size()
             logger.debug(
@@ -869,6 +879,7 @@ class EpromOperator:
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
         self._read_abort_stopped_at = None
+        self._read_abort_accepted = False
         try:
             with logging_redirect_tqdm():
                 # --- INIT Phase ---
@@ -895,7 +906,14 @@ class EpromOperator:
             logger.error(f"Communication error during {operation_name}: {e}")
             return False, str(e)
         except EpromOperationError as e:
-            logger.error(f"Programmer error during {operation_name}: {e}")
+            self._read_abort_accepted = self._is_own_read_abort(e.error_code)
+            if self._read_abort_accepted:
+                # The host stopped this read on purpose; the caller reports
+                # the compare result. An ERROR line here would read as a
+                # hardware fault on every non-blank or mismatching chip.
+                logger.debug(f"Read stopped by the host during {operation_name}: {e}")
+            else:
+                logger.error(f"Programmer error during {operation_name}: {e}")
             # Debug session w27c512-devtest-all-bad: record the firmware's
             # own id and text before collapsing this to a bool, so the
             # diagnostic report can state WHY a step failed instead of
@@ -905,6 +923,35 @@ class EpromOperator:
             return False, str(e)
         finally:
             progress.close()
+            # A leased link outlives this call: never carry a read stop's
+            # expected-error mark into the next operation.
+            if self.comm is not None:
+                self.comm.expected_error_id = None
+
+    def _is_own_read_abort(self, error_code: int | None) -> bool:
+        """Whether an ERROR is the consequence of this host's own read stop.
+
+        D-08: the deliberate stop and a genuine timeout both surface as an
+        ERROR carrying MSG_ERR_TIMEOUT -- the two are wire-identical. Accept
+        the error as this host's own doing ONLY when all four hold: the
+        default path actually asked for a stop (`_read_abort_intended`), the
+        read loop actually recorded one (`_read_abort_stopped_at` is not
+        `None`), the firmware's own error id is exactly the timeout id (not
+        some other fault wearing its clothes), and the stop happened
+        recently enough that this error frame could plausibly be its
+        consequence (the bounded window). Any single condition failing
+        means a real fault -- a mismatching chip whose read failed for an
+        unrelated reason must never be reported as a mismatch, and this
+        host's own deliberate abort must never be reported as hardware
+        trouble.
+        """
+        stopped_at = self._read_abort_stopped_at
+        return (
+            self._read_abort_intended
+            and stopped_at is not None
+            and error_code == MSG_ERR_TIMEOUT
+            and (time.monotonic() - stopped_at) <= READ_ABORT_ACCEPTANCE_WINDOW_S
+        )
 
     def _execute_phase(
         self, phase_name: str, progress: ClassProgressHandler
@@ -1208,7 +1255,11 @@ class EpromOperator:
                     if abort_predicate is not None and abort_predicate():
                         stopped = True
                         self._read_abort_stopped_at = time.monotonic()
-                        logger.info(
+                        # The firmware's ack-wait timeout is now the expected
+                        # end of this read: log it at DEBUG, not ERROR.
+                        # `_run_state_machine` clears this on the way out.
+                        self.comm.expected_error_id = MSG_ERR_TIMEOUT
+                        logger.debug(
                             f"Read stopped in flight at 0x{start_addr:06x} "
                             "(abort predicate fired)."
                         )
@@ -2801,28 +2852,11 @@ class EpromOperator:
 
         aborted = False
         if not is_ok:
-            # D-08: the deliberate stop and a genuine timeout both surface
-            # here as `_run_state_machine` returning `(False, ...)` with
-            # `last_firmware_error_code == MSG_ERR_TIMEOUT` -- the two are
-            # wire-identical. Accept the error as this host's own doing ONLY
-            # when all four hold: the default path actually asked for a stop
-            # (`_read_abort_intended`), the read loop actually recorded one
-            # (`stopped_at` is not `None`), the firmware's own error id is
-            # exactly the timeout id (not some other fault wearing its
-            # clothes), and the stop happened recently enough that this
-            # error frame could plausibly be its consequence (the bounded
-            # window). Any single condition failing means a real fault: take
-            # the exit-2 path exactly as before -- a mismatching chip whose
-            # read failed for an unrelated reason must never be reported as
-            # a mismatch, and this host's own deliberate abort must never be
-            # reported as hardware trouble.
-            stopped_at = self._read_abort_stopped_at
-            aborted = (
-                self._read_abort_intended
-                and stopped_at is not None
-                and self.last_firmware_error_code == MSG_ERR_TIMEOUT
-                and (time.monotonic() - stopped_at) <= READ_ABORT_ACCEPTANCE_WINDOW_S
-            )
+            # D-08: `_run_state_machine` already decided, with
+            # `_is_own_read_abort`, whether the error that ended the read was
+            # this host's own stop. Anything else is a real fault: take the
+            # exit-2 path exactly as before.
+            aborted = self._read_abort_accepted
             if not aborted:
                 return 2
 

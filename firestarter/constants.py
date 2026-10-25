@@ -200,3 +200,15 @@ REVISION_2_1 = 0x03  # via EEPROM override only — ADC cannot distinguish
 REVISION_2_2 = 0x04  # via EEPROM override only — ADC cannot distinguish
 REVISION_2_3 = 0x05  # R41=10k physical detect
 REVISION_UNKNOWN = 0xFE  # ADC band-gap or pre-detect-resistor + A2 indeterminate
+
+# Accepted bands for the stored voltage-divider resistors and the calibrated
+# bandgap. Firmware sync: rurp_shield.h VALUE_R1_MIN/MAX and
+# VALUE_R2_MIN/MAX (+/-25 % of 270000 and 44000 ohm), and rurp_voltage_math.h
+# RURP_BANDGAP_MIN_MV/MAX_MV. The firmware refuses a config command with a
+# value outside these bands; the host refuses it first.
+CONFIG_R1_MIN = 202500
+CONFIG_R1_MAX = 337500
+CONFIG_R2_MIN = 33000
+CONFIG_R2_MAX = 55000
+CONFIG_BANDGAP_MIN_MV = 1000
+CONFIG_BANDGAP_MAX_MV = 1200

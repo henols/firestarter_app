@@ -527,7 +527,13 @@ class TestDispatchChain:
         monkeypatch.setattr(
             EpromDatabase,
             "convert_to_programmer",
-            lambda self, full: {"memory-size": _PAYLOAD_SIZE, "address": 0, "flags": 0},
+            lambda self, full: {
+                "memory-size": _PAYLOAD_SIZE,
+                "pin-count": 28,
+                "vpp_mv": 12000,
+                "address": 0,
+                "flags": 0,
+            },
         )
 
         argv_saved = sys.argv

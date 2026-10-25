@@ -1244,7 +1244,7 @@ class TestFetchAllReleasesJsonParsing:
 
         monkeypatch.setattr(firmware.requests, "get", mock_get)
         fm = FirmwareManager(config_manager=MagicMock())
-        with caplog.at_level(logging.INFO, logger="FirmwareManager"):
+        with caplog.at_level(logging.INFO, logger=firmware.logger.name):
             result = fm._fetch_all_releases(max_pages=2)
         assert len(result) == 2  # 2 pages × 1 release each
         assert any("capped" in r.message.lower() for r in caplog.records)
@@ -1290,7 +1290,7 @@ class TestCompareVersionsAdditionalBranches:
     ):
         """When both strings are unparseable, returns False and logs warning."""
         fm = FirmwareManager(config_manager=MagicMock())
-        with caplog.at_level(logging.WARNING, logger="FirmwareManager"):
+        with caplog.at_level(logging.WARNING, logger=firmware.logger.name):
             result = fm._compare_versions("garbage_string", "another_garbage")
         assert result is False
         # The warning text references the strings being compared.

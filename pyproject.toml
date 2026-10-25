@@ -73,6 +73,7 @@ test = [
     "ruff>=0.15.14",
     "mypy>=2.1.0,<3",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.6",
     "types-pyserial>=3.5.0.20260519",
 ]
 

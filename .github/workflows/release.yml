@@ -80,6 +80,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      # actions/checkout fetches the pushed tag as a lightweight tag. If an
+      # annotated release tag is on the same commit, git describe picks that
+      # older tag, and the build carries the wrong version. Fetch the real tags.
+      - name: Fetch the annotated tags
+        run: git fetch --force --tags origin
+
       - name: Build the sdist and the wheel
         run: python3 -m pip install --upgrade build && python3 -m build
 
