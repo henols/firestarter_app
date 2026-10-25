@@ -165,6 +165,11 @@ _MOVED_PIN_MAPS = {
         "chips. 27128/27C128 chips use DIP28_27128 and 27011 chips use "
         "DIP28_27011.",
     ),
+    "DIP32_27C020": (
+        ("DIP32_27C301",),
+        "Your pin-map override for DIP32_27C020 no longer applies to "
+        "27C301/27C1000 chips (OE on pin 2, A16 on pin 24). They use DIP32_27C301.",
+    ),
     "DIP32_28C512_EEPROM": (
         ("DIP32_28C040",),
         "Your pin-map override for DIP32_28C512_EEPROM is not used. "

@@ -33,7 +33,7 @@ from firestarter.jumper_table import (
 )
 
 ROW_COUNT = 748
-PIN_MAP_COUNT = 18
+PIN_MAP_COUNT = 19
 
 
 @pytest.fixture(scope="module")
@@ -227,8 +227,10 @@ def test_vpp_on_oe_maps_get_no_jp3_vpp_position_and_no_closed_jp4(
 def test_32pin_vpp_on_pin1_maps_get_jp4_open_and_no_jumper(
     rendered: list[tuple[str, dict]],
 ) -> None:
-    rows = [s for p, s in rendered if p in ("DIP32_STD", "DIP32_27C020")]
-    assert len(rows) == 70 + 88
+    rows = [
+        s for p, s in rendered if p in ("DIP32_STD", "DIP32_27C020", "DIP32_27C301")
+    ]
+    assert len(rows) == 70 + 83 + 5
     for spec in rows:
         rev20 = spec["jumpers"][REV20_KEY]["jumpers"]["jp4"]
         rev22 = spec["jumpers"][REV22_KEY]["jumpers"]["jp4"]
@@ -323,6 +325,7 @@ EXPECTED_REV01 = {
     "DIP28_6264": (Jp1.A13, Jp2.VCC, Jp3.NO_JUMPER),
     "DIP32_STD": (Jp1.A13, Jp2.A17, Jp3.PIN32),
     "DIP32_27C020": (Jp1.A13, Jp2.A17, Jp3.PIN32),
+    "DIP32_27C301": (Jp1.A13, Jp2.A17, Jp3.PIN32),
     "DIP32_27C801": (Jp1.A13, Jp2.A17, Jp3.NO_JUMPER),
     "DIP32_SST39SF040": (Jp1.A13, Jp2.A17, Jp3.NO_JUMPER),
     "DIP32_28C040": (Jp1.A13, Jp2.A17, Jp3.NO_JUMPER),

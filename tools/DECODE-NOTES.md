@@ -51,7 +51,8 @@ These are the `variant_lo` values that `resolve_pinout_key` switches on:
 | 21 (28-pin) | any | `DIP28_2764` | 2764 / 27C64 layout. `<maps>` index 21 leaves pin 26 unbonded. |
 | 12 (32-pin) | `0x03` | `DIP32_27C801` | 1 MB 27C080 / M27C801 class. **A19 on pin 1**, VPP on pin 24 shared with /OE. |
 | 12 (32-pin) | `0x02` | `DIP32_STD` | 512 KB 27C040 class. Pin 1 = VPP, pin 31 = A18. |
-| 12 (32-pin) | else | `DIP32_27C020` through the residual `_PGM_ON_PIN31_MAX_SIZE` size arm | The `0x00`, `0x01` and `0x04` classes. The size threshold still separates them (see below). |
+| 12 (32-pin) | `0x00` | `DIP32_27C301` | Mask-ROM-compatible 27C301 / 27C1000 class: MBM27C1000, MBM27C2000, HN27C301G, HN27C301AG, M27C1000. **OE on pin 2, A16 on pin 24**, the JEDEC pins swapped. The shield drives pin 24 as OE, so the generator marks these rows `adapter-required` (henols/firestarter#70). |
+| 12 (32-pin) | else | `DIP32_27C020` through the residual `_PGM_ON_PIN31_MAX_SIZE` size arm | The `0x01` class, and the `0x00` and `0x04` classes of the other maps. The size threshold still separates them (see below). |
 
 **The 32-pin `proto_id == 0x08` cluster.** An earlier rule ignored `variant_lo` in this cluster and
 used a `mem_size` threshold. That rule put every chip above 256 KB on `DIP32_STD` with

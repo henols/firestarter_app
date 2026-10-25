@@ -5989,7 +5989,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MBM27C1000P,MBM27C1000",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5999,7 +5999,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 500
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -6058,7 +6059,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MBM27C2000P,MBM27C2000",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6068,7 +6069,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -6464,7 +6466,7 @@
         "vpp_mv": 12500
       },
       "part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6474,7 +6476,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -6486,7 +6489,7 @@
         "vpp_mv": 12500
       },
       "part_number": "HN27C301G",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -6496,7 +6499,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -11966,7 +11970,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C1000",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11976,7 +11980,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {

@@ -188,6 +188,22 @@ class TestDipToRurpPinTranslation:
             db._merge_pin_maps(db.pin_maps, {"DIP28_2764": {"name": "mine"}})
         assert "DIP28_27128" in caplog.text
 
+    def test_a_dip32_27c020_override_warns_that_the_27c301_rows_moved(self, caplog):
+        db = EpromDatabase(skip_local_override=True)
+        with caplog.at_level(logging.WARNING):
+            db._merge_pin_maps(db.pin_maps, {"DIP32_27C020": {"name": "mine"}})
+        assert "DIP32_27C301" in caplog.text
+
+    def test_27c301_has_oe_on_pin_2_and_a16_on_pin_24(self):
+        db = EpromDatabase(skip_local_override=True)
+        assert db.get_eprom("MBM27C1000")["pin-map"] == "DIP32_27C301"
+        pins = db.get_pin_map(32, "DIP32_27C301")
+        assert pins["oe-pin"] == [2]
+        assert pins["address-bus-pins"][16] == 24
+        jedec = db.get_pin_map(32, "DIP32_27C020")
+        assert jedec["oe-pin"] == [24]
+        assert jedec["address-bus-pins"][16] == 2
+
     def test_a_dip32_28c512_eeprom_override_warns_that_it_is_unused(self, caplog):
         db = EpromDatabase(skip_local_override=True)
         with caplog.at_level(logging.WARNING):

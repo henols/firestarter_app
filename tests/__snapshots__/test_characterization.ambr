@@ -595,6 +595,8 @@
   Eprom Info          
   Name:               MBM27C1000P,MBM27C1000
   Manufacturer:       FUJITSU
+  Support status:      adapter-required
+  Reason:              adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins.
   Number of pins:     32
   Memory size         0x20000
   Type:               UV-EPROM
@@ -610,14 +612,14 @@
          32-DIP package
           -----v-----
     VPP -|  1     32 |- VCC   
-    A16 -|  2     31 |- PGM   
+    OE  -|  2     31 |- PGM   
     A15 -|  3     30 |- A17   
     A12 -|  4     29 |- A14   
     A7  -|  5     28 |- A13   
     A6  -|  6     27 |- A8    
     A5  -|  7     26 |- A9    
     A4  -|  8     25 |- A11   
-    A3  -|  9     24 |- OE    
+    A3  -|  9     24 |- A16   
     A2  -| 10     23 |- A10   
     A1  -| 11     22 |- CE    
     A0  -| 12     21 |- D7    

@@ -115,6 +115,16 @@
             "ce-pin": [22], "oe-pin": [24], "pgm-pin": [31]
         }
     },
+    "DIP32_27C301": {
+        "name": "Mask-ROM-compatible 32-pin UV-EPROM (27C301 / 27C1000 — OE on pin 2, A16 on pin 24)",
+        "comment": "infoic.xml pin map 12 with protocol 0x08 and variant_lo 0x00. Only MBM27C1000, MBM27C2000, HN27C301G, HN27C301AG and M27C1000 carry it; variant_lo 0x01 in the same map is the JEDEC 27C020 layout. Pin functions are from datasheets/MBM27C1000.pdf (page 4-61 pin assignment, page 4-63 pin description): pin 1 VPP, pin 2 OE, pin 22 CE, pin 24 A16, pin 31 PGM, pin 30 NC. one-rom chip-types.json type 27C301 (aliases 27C1000, 27C100) gives the same OE and A16 pins. JEDEC 27C010/27C020 swap pins 2 and 24, so on DIP32_27C020 these parts drive OE high whenever A16 is 1 (henols/firestarter#70). Pin 30 is A17 for the 256K MBM27C2000 row: <maps> index 12 bonds it, and it is the only bonded pin that has no other function on this layout. No MBM27C2000 datasheet is vendored to confirm it.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 24, 30],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [2], "pgm-pin": [31]
+        }
+    },
     "DIP32_27C801": {
         "name": "JEDEC 32-pin UV-EPROM 1M (27C080 / M27C801 — A19 on pin 1, VPP on pin 24)",
         "comment": "Per piersfinlayson/one-rom docs/CHIP-TYPES.md (datasheet-verified): the 8 Mbit 27C080/M27C801 class has 20 address lines (A0-A19) with A19 at pin 1, and VPP at pin 24 shared with /OE — the same OE/VPP sharing DIP28_27512 uses at pin 22. /PGM is pin 22 shared with /CE. Distinct from DIP32_STD (27C040 class: pin 1 = VPP, pin 31 = A18, 19 address lines) and from DIP32_27C020 (pin 31 = PGM). Assigned by resolve_pinout_key to pin_count=32 && pm_idx=12 && proto_id=0x08 && variant_lo=0x03 — the eight 1 MB rows AM27C080, AM27LV080, AT27C080, M27C801 (x2), MX27C8000, MX27C8000A, UPD27C8001. HARDWARE: A19 at pin 1 means socket pin 1 carries an address line, and on Rev 2.x shields socket pin 1 is also the VPP-enable line (JP5 = A19_CUT bridges it to the switched VPP node). JP5 must be cut for these parts, per the shield silkscreen.",
