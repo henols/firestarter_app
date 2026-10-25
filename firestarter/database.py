@@ -406,7 +406,7 @@ class EpromDatabase:
         # this host. Chips absent from both sources omit the field and
         # ride the firmware's own named AT28C page-size floor constant.
         # The internal dict key is page_size (underscore); the WIRE
-        # key is page-size (hyphen, JSON_KEY_PAGE_SIZE in constants.py) --
+        # key is page-size (hyphen, KEY_PAGE_SIZE in command_frame.py) --
         # deliberately distinct spellings for the same English word.
         page_size_val = programming.get("page_size")
         if page_size_val:

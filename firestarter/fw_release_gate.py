@@ -24,6 +24,14 @@ feature version, and that CLI installs it. Feature version 3.2 is skipped
 because 3.2.0b1 on PyPI is a JSON-era CLI; a binary 3.2 firmware would pass
 its ceiling.
 
+The floor holds only because no binary release can carry a lower version:
+tools/release.sh and release.yml in both repos refuse to tag a commit that
+carries the frame below MIN_FEATURE. So every release below the floor is
+JSON-era, and the refusal's 'firestarter=={feature}.*' pin names a JSON-era
+CLI. Until the first 3.3 tag exists, a CLI built from an untagged checkout
+reports the previous line (for example 3.1.1b2.devN) and refuses every
+release; the first 3.3 tag ends that.
+
 Apart from that floor, the reverse pairing -- a CLI newer than the
 firmware -- is NOT gated here.
 `_maybe_auto_route_to_pre` in cli_handlers.py steers channel selection away from
@@ -53,10 +61,12 @@ No I/O, no environment reads, no serial access.
 
 from packaging.version import InvalidVersion, Version
 
+from firestarter import command_frame as cf
 from firestarter.exceptions import FirmwareReleaseRefusedError
 
 # The first feature version whose firmware decodes the binary command frame.
-BINARY_FRAME_MIN_FEATURE = (3, 3)
+# Generated from command_frame.toml; both release scripts refuse a tag below it.
+BINARY_FRAME_MIN_FEATURE = cf.MIN_FEATURE
 
 _REFUSAL_FORMAT = (
     "Firmware {release} needs a newer CLI. This CLI is {app}. "

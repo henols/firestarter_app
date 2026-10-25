@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 84
+Total messages: 85
 """
 
 from dataclasses import dataclass
@@ -127,6 +127,7 @@ MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_ERR_FL4_PAGE_ALIGN = 0xC0
 MSG_ERR_CALIBRATION = 0xC1
 MSG_ERR_BAD_COMMAND = 0xC2
+MSG_ERR_FRAME_VERSION = 0xC3
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -819,6 +820,15 @@ CATALOG: dict[int, MessageDef] = {
         name="MSG_ERR_BAD_COMMAND",
         severity=SEVERITY_ERROR,
         format="Command refused, reason %d",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0xC3: MessageDef(
+        id=0xC3,
+        name="MSG_ERR_FRAME_VERSION",
+        severity=SEVERITY_ERROR,
+        format="Firmware reads command frame version %d",
         params=(("u8", "dec"),),
         param_bytes=1,
         wire_format="id_frame",

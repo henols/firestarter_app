@@ -43,6 +43,11 @@ a dev checkout behaves as a beta build. A checkout with no tags (a shallow clone
 `0.1.devN`, so CI checks out with `fetch-depth: 0`. `tools/release.sh X.Y.Z` checks the version and
 pushes the tag. `publish.yml` is a manual re-publish of an existing tag.
 
+**The binary-frame floor.** A commit that carries the binary command frame cannot be tagged below
+`command_frame.MIN_FEATURE` (`3.3`). `release.sh` and `release.yml` both refuse it, because a
+JSON-era CLI of a lower feature version would install the firmware. `fw_release_gate` refuses to
+install firmware below the same floor.
+
 **`mypy` is not a CI gate.** Only the local `pre-commit` config runs it. That config runs
 `ruff-check`, then `ruff-format`, then `mypy`.
 
@@ -156,6 +161,11 @@ code from `command_frame.REFUSALS`.
 version query again as the JSON `{"state":13}`. It does this so that it can read the version and the
 board of the firmware that it is about to replace. No other path sends JSON.
 
+**Firmware of another frame version** reads the magic and answers `MSG_ERR_FRAME_VERSION`
+(`0xC3`), with the frame version it reads as the parameter. `setup_command` raises
+`FirmwareFrameVersionError` (a `FirmwareOutdatedError` subclass). The message names the side to
+upgrade. No path resends anything for it, `fw` included.
+
 The firmware sends INIT, MAIN, END and status messages as catalog message ID frames. It still sends
 `OK` and `DATA` as text lines. The host parser accepts the text prefixes `OK`, `DATA`, `ERROR`,
 `WARN`, `INFO` and `DEBUG` (`serial_comm.py::EXPECTED_PREFIXES`).
@@ -230,6 +240,8 @@ command frame layout is not in this table: it is generated (see Wire Protocol).
 | Command codes, control flags, `CMD_FRAME_MAX` | `firestarter_fw/include/firestarter.h` | values |
 | `CTRL_*` control-register bits | `firestarter_fw/include/rurp_pinout.h` | names and hex values |
 | `REVISION_*` hardware revisions | `firestarter_fw/include/rurp_shield.h` | names and byte values |
+
+The command-dict keys are not in `constants.py`. Use the generated `command_frame.KEY_*`.
 
 The project reserves two revision bytes. `0xFF` shows that no EEPROM override is present. `0xFE`
 (`REVISION_UNKNOWN`) shows that the ADC band-gap check found no band.

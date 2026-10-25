@@ -11,6 +11,9 @@ JSON-era firmware parses every frame as JSON. jsmn rejects the binary magic
 byte, so that firmware answers every binary command with 0xA0. A chip
 operation must refuse with FirmwareOutdatedError. Only the firmware-update
 read path may resend, and only the version query, as JSON.
+
+Binary firmware of another frame version answers MSG_ERR_FRAME_VERSION (0xC3)
+with the version it reads. Nothing is resent for it.
 """
 
 import struct
@@ -18,11 +21,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from firestarter import command_frame as cf
 from firestarter.command_codec import encode_command
 from firestarter.constants import COMMAND_FW_VERSION, COMMAND_READ
-from firestarter.exceptions import FirmwareOutdatedError
+from firestarter.exceptions import FirmwareFrameVersionError, FirmwareOutdatedError
 from firestarter.frame_parser import _crc8_ccitt, cobs_decode
-from firestarter.messages import MSG_ERR_BAD_COMMAND, MSG_ERR_BAD_FRAME, MSG_OK_READY
+from firestarter.messages import (
+    MSG_ERR_BAD_COMMAND,
+    MSG_ERR_BAD_FRAME,
+    MSG_ERR_FRAME_VERSION,
+    MSG_OK_READY,
+)
 from tests.conftest import build_frame
 
 _READ = {
@@ -126,3 +135,41 @@ def test_bad_command_renders_its_reason(make_comm, fake_serial):
     ok, message = comm.expect_ack()
     assert not ok
     assert message == "Command refused: an address line is outside the bus"
+
+
+@pytest.mark.parametrize(
+    ("firmware_version", "advice"),
+    [(2, "Upgrade the CLI"), (0, "firestarter fw --install")],
+)
+def test_frame_version_mismatch_names_the_side_to_upgrade(
+    make_comm, fake_serial, firmware_version, advice
+):
+    comm, sent = _comm(
+        make_comm,
+        fake_serial,
+        build_frame(MSG_ERR_FRAME_VERSION, bytes([firmware_version])),
+    )
+    with pytest.raises(FirmwareFrameVersionError, match=advice) as exc_info:
+        comm.setup_command(_READ, MagicMock())
+    assert exc_info.value.firmware == firmware_version
+    assert exc_info.value.host == cf.VERSION
+    assert len(sent) == 1
+
+
+def test_update_path_sends_no_json_to_another_frame_version(make_comm, fake_serial):
+    """A frame-version refusal comes from binary firmware: the JSON query
+    would only draw MSG_ERR_BAD_FRAME, so the update path resends nothing."""
+    comm, sent = _comm(
+        make_comm, fake_serial, build_frame(MSG_ERR_FRAME_VERSION, bytes([2]))
+    )
+    with pytest.raises(FirmwareFrameVersionError, match="Upgrade the CLI"):
+        comm.setup_command(
+            {"state": COMMAND_FW_VERSION}, MagicMock(), allow_outdated_firmware=True
+        )
+    assert len(sent) == 1
+
+
+def test_frame_version_error_is_surfaced_like_outdated_firmware():
+    """Every path that re-raises FirmwareOutdatedError (port probe, `fw`
+    version read) must re-raise this one too, not report "no programmer"."""
+    assert issubclass(FirmwareFrameVersionError, FirmwareOutdatedError)

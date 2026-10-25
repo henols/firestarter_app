@@ -7,6 +7,7 @@ MAGIC = 0xF5
 VERSION = 1
 HEADER_SIZE = 7
 HEADER_FORMAT = ">BBBHH"
+MIN_FEATURE = (3, 3)
 
 ADDRESS_LINES = 20
 BUS_LINES = 24
@@ -75,3 +76,25 @@ REFUSALS = {
     9: "the config frame names an unknown or unsupported value",
     10: "a memory command lacks memory-size, algorithm, pin-count or vpp_mv",
 }
+
+# Command-dict keys, one per frame field
+KEY_MEM_SIZE = "memory-size"
+KEY_ADDRESS = "address"
+KEY_REGION_END = "region-end"
+KEY_PROTOCOL = "algorithm"
+KEY_PINS = "pin-count"
+KEY_VPP_MV = "vpp_mv"
+KEY_PULSE_DELAY = "pulse-delay"
+KEY_CHIP_ID = "chip-id"
+KEY_PAGE_SIZE = "page-size"
+KEY_READ_SETTLING_US = "read-settling-delay"
+KEY_READ_STROBE_US = "read-strobe-us"
+KEY_ADDRESS_LINES = "bus"
+KEY_RW_LINE = "rw-pin"
+KEY_VPP_LINE = "vpp-pin"
+KEY_STATIC_HIGH_MASK = "static-high"
+KEY_R1 = "r1"
+KEY_R2 = "r2"
+KEY_REV = "rev"
+KEY_VCC = "vcc"
+KEY_BG = "bg"

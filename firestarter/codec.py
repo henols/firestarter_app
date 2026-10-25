@@ -31,6 +31,7 @@ from firestarter.messages import (
     MSG_DATA_CHUNK,
     MSG_DEBUG,
     MSG_ERR_BAD_COMMAND,
+    MSG_ERR_FRAME_VERSION,
     MSG_INFO_CMD,
     MSG_INFO_HW,
     MSG_INFO_PHYSICAL_HW,
@@ -278,15 +279,17 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
 
     # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
     # loop can obtain the chip data without a second read call.
-    chunk_payload = None
+    # MSG_ERR_FRAME_VERSION also carries its parameter bytes, so setup can
+    # compare the firmware's frame version with this host's.
+    payload = None
     if (
         msg_id == MSG_DATA_CHUNK
         and values
         and isinstance(values[0], (bytes, bytearray))
     ):
-        chunk_payload = bytes(values[0])
+        payload = bytes(values[0])
+    elif msg_id == MSG_ERR_FRAME_VERSION:
+        payload = params_bytes
 
     severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-    return LogMessage(
-        severity=severity_label, text=text, id=msg_id, payload=chunk_payload
-    )
+    return LogMessage(severity=severity_label, text=text, id=msg_id, payload=payload)

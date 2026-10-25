@@ -161,27 +161,16 @@ FLAG_VERBOSE = 0x80
 # argument. See test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on.
 FLAG_SKIP_SDP_UNLOCK = 0x100
 
-# Command-dict keys. command_frame.MEMORY_FIELDS (generated from the meta
-# repo's tools/protocol/command_frame.toml) maps each key to its frame field.
-# Dev sweep knobs: host-tunable read-timing parameters, emitted by
-# consistency_check_eprom() into each read's command dict.
-JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
-JSON_KEY_READ_STROBE_US = "read-strobe-us"
-# Per-chip page size wire field. Emitted by database.py's
-# convert_to_programmer only when the DB supplies a page_size --
-# emit-when-present, mirrors the chip-id pattern. When absent, firmware
-# falls back to its own named AT28C page-size floor constant.
-JSON_KEY_PAGE_SIZE = "page-size"
-# Absolute, exclusive end address of the operation's region. Emitted by
-# _setup_operation in eprom_operations.py, not by database.py's
-# convert_to_programmer -- the region is a property of the operation (which
-# bytes are being written), not of the chip row.
-# Absent-semantics are the OPPOSITE of page-size above: absent means the
-# WHOLE DEVICE. page-size guards a destructive write, so refusing on
-# absence is the safe direction there; this field guards a relaxation of an
-# existing whole-device check, so falling back to the stricter existing
-# behaviour on absence is the safe direction here instead.
-JSON_KEY_REGION_END = "region-end"
+# Command-dict keys are generated: command_frame.KEY_* (from the meta repo's
+# tools/protocol/command_frame.toml). Absent-semantics of two of them:
+# - KEY_PAGE_SIZE: emitted by database.convert_to_programmer only when the DB
+#   supplies a page size. When absent, firmware falls back to its own named
+#   AT28C page-size floor constant.
+# - KEY_REGION_END: emitted by _setup_operation in eprom_operations.py, because
+#   the region is a property of the operation, not of the chip row. Absent
+#   means the WHOLE DEVICE, the opposite of page-size: this field guards a
+#   relaxation of an existing whole-device check, so falling back to the
+#   stricter behaviour on absence is the safe direction.
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
 # Documentary only — Python does not write the control register directly

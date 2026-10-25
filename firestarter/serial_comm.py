@@ -20,6 +20,7 @@ import serial.tools.list_ports
 
 import firestarter.codec as codec
 import firestarter.command_codec as command_codec
+import firestarter.command_frame as cf
 import firestarter.transport_counters as transport_counters
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
 from firestarter.constants import (
@@ -35,6 +36,7 @@ from firestarter.constants import (
     REVISION_2_3,
 )
 from firestarter.exceptions import (
+    FirmwareFrameVersionError,
     FirmwareOutdatedError,
     HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
@@ -60,6 +62,7 @@ from firestarter.messages import (
     CATALOG,
     MSG_ERR_BAD_FRAME,
     MSG_ERR_EMPTY_INPUT,
+    MSG_ERR_FRAME_VERSION,
     MSG_ERR_PROTOCOL_NOT_IMPLEMENTED,
     MSG_OK_READY,
 )
@@ -139,6 +142,9 @@ class SerialCommunicator:
     # can tell an unsupported frame from any other refusal. Class-level for
     # the same reason as the three above.
     last_ack_error_id: int | None = None
+    # The parameter bytes of that ERROR when the decoder keeps them
+    # (MSG_ERR_FRAME_VERSION), else None.
+    last_ack_error_payload: bytes | None = None
 
     def __init__(
         self,
@@ -587,6 +593,7 @@ class SerialCommunicator:
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
         self.last_ack_error_id = None
+        self.last_ack_error_payload = None
         while True:
             response = self.get_response(timeout)
             if response.type == "OK":
@@ -595,6 +602,7 @@ class SerialCommunicator:
                 if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
                     raise ProtocolNotImplementedError(response.message)
                 self.last_ack_error_id = response.id
+                self.last_ack_error_payload = response.payload
                 return False, response.message
             # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
@@ -900,6 +908,9 @@ class SerialCommunicator:
                     break
                 is_ok, msg = self.expect_ack(timeout=remaining)
 
+        if not is_ok and self.last_ack_error_id == MSG_ERR_FRAME_VERSION:
+            self._refuse_frame_version()
+
         if not is_ok and self.last_ack_error_id == MSG_ERR_BAD_FRAME:
             is_ok, msg = self._recover_from_unsupported_frame(
                 command_to_send, allow_outdated_firmware
@@ -977,6 +988,34 @@ class SerialCommunicator:
         config_manager.remember_port(self.port_name)  # never promotes a typed --port
         return True
 
+    def _refuse_frame_version(self) -> None:
+        """Raise FirmwareFrameVersionError for a MSG_ERR_FRAME_VERSION ack.
+
+        The firmware read the binary magic and refused the frame version, so it
+        is binary firmware of another frame version, never JSON-era firmware.
+        No path resends anything, the firmware-update read path included: a
+        JSON query would only draw a MSG_ERR_BAD_FRAME. The parameter is the
+        frame version the firmware reads, and it names the side to upgrade.
+        """
+        payload = self.last_ack_error_payload or b""
+        firmware = payload[0] if payload else 0
+        if firmware > cf.VERSION:
+            advice = (
+                "The firmware is newer than this CLI. Upgrade the CLI: "
+                "'pip install --upgrade firestarter'."
+            )
+        else:
+            advice = (
+                "The firmware is older than this CLI. Upgrade the firmware "
+                "using 'firestarter fw --install'."
+            )
+        raise FirmwareFrameVersionError(
+            f"The firmware on {self.port_name} reads command frame version "
+            f"{firmware}, and this CLI sends version {cf.VERSION}. {advice}",
+            firmware=firmware,
+            host=cf.VERSION,
+        )
+
     def _recover_from_unsupported_frame(
         self, command_to_send: dict, allow_outdated_firmware: bool
     ) -> Tuple[bool, str | None]:  # noqa: UP006
@@ -984,8 +1023,10 @@ class SerialCommunicator:
 
         Firmware from before the binary command protocol parses every frame
         as JSON, and jsmn rejects the binary magic byte, so it answers every
-        binary command with this id. A chip operation must refuse: this host
-        has no JSON command path.
+        binary command with this id. Binary firmware answers a frame version
+        it does not read with MSG_ERR_FRAME_VERSION instead, so this id means
+        JSON-era firmware (or a frame corrupted past the CRC). A chip
+        operation must refuse: this host has no JSON command path.
 
         The firmware-update read path is the one exception, for the same
         reason it waives the version gate: it reads the version of firmware

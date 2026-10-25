@@ -42,8 +42,13 @@ class CommandEncodeError(EpromOperationError, ValueError):
     """
 
 
+def _is_int(value: Any) -> bool:
+    # bool is an int subclass; True must not encode as 1.
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _int(key: str, value: Any, fmt: str) -> int:
-    if not isinstance(value, int) or not 0 <= value <= _FORMAT_MAX[fmt]:
+    if not _is_int(value) or not 0 <= value <= _FORMAT_MAX[fmt]:
         raise CommandEncodeError(
             f"'{key}' must be an integer in 0..{_FORMAT_MAX[fmt]}, got {value!r}"
         )
@@ -51,7 +56,7 @@ def _int(key: str, value: Any, fmt: str) -> int:
 
 
 def _line(key: str, value: Any) -> int:
-    if not isinstance(value, int) or not 0 <= value < cf.BUS_LINES:
+    if not _is_int(value) or not 0 <= value < cf.BUS_LINES:
         raise CommandEncodeError(
             f"'{key}' line {value!r} is outside bus lines 0..{cf.BUS_LINES - 1}; "
             f"the shield cannot drive this pin of the chip's pin map as a bus line"

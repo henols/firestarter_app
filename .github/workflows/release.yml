@@ -46,6 +46,17 @@ jobs:
             echo "::error::tag '$TAG' points at a commit that is not on main"
             exit 1
           fi
+          # tools/release.sh makes the same check. A commit without the binary
+          # command frame has no floor.
+          FLOOR=$(sed -n 's/^MIN_FEATURE = (\([0-9]*\), \([0-9]*\))$/\1.\2/p' firestarter/command_frame.py 2>/dev/null || true)
+          if [ -n "$FLOOR" ]; then
+            IFS=. read -r V_MAJOR V_MINOR _ <<<"$TAG"
+            IFS=. read -r F_MAJOR F_MINOR <<<"$FLOOR"
+            if (( V_MAJOR < F_MAJOR || (V_MAJOR == F_MAJOR && V_MINOR < F_MINOR) )); then
+              echo "::error::tag '$TAG' is below $FLOOR, the first version of the binary command frame"
+              exit 1
+            fi
+          fi
           PRERELEASE=false
           if [[ "$TAG" =~ (b|rc)[0-9]+$ ]]; then
             PRERELEASE=true

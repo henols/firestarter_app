@@ -31,10 +31,6 @@ from firestarter.constants import (
     COMMAND_READ,
     COMMAND_WRITE,
     FLAG_SKIP_SDP_UNLOCK,
-    JSON_KEY_PAGE_SIZE,
-    JSON_KEY_READ_SETTLING_DELAY,
-    JSON_KEY_READ_STROBE_US,
-    JSON_KEY_REGION_END,
 )
 from firestarter.database import EpromDatabase
 
@@ -95,15 +91,30 @@ def test_every_host_command_has_a_payload_kind():
     assert 4 not in cf.PAYLOAD_KIND and 6 not in cf.PAYLOAD_KIND
 
 
-def test_named_command_keys_are_frame_fields():
-    frame_keys = {key for _, key, _, _, _ in cf.MEMORY_FIELDS}
-    for key in (
-        JSON_KEY_PAGE_SIZE,
-        JSON_KEY_READ_SETTLING_DELAY,
-        JSON_KEY_READ_STROBE_US,
-        JSON_KEY_REGION_END,
-    ):
-        assert key in frame_keys
+@pytest.mark.parametrize(
+    "command",
+    [
+        _with(pin_count=True),
+        {"state": COMMAND_FW_VERSION, "flags": True},
+        _with_bus(bus=[True, 1, 2]),
+        _with_bus(rw_pin=False),
+    ],
+    ids=["pin-count", "flags", "bus line", "rw-pin"],
+)
+def test_bool_is_not_an_integer(command):
+    with pytest.raises(CommandEncodeError):
+        encode_command(command)
+
+
+def test_every_frame_field_has_one_key_constant():
+    field_keys = {name: key for name, key, _, _, _ in cf.MEMORY_FIELDS}
+    field_keys.update({name: key for name, key, _, _ in cf.CONFIG_FIELDS})
+    constants = {
+        name[len("KEY_") :].lower(): value
+        for name, value in vars(cf).items()
+        if name.startswith("KEY_")
+    }
+    assert constants == field_keys
 
 
 def test_every_database_chip_encodes_for_every_memory_command():
