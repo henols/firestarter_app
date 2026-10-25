@@ -46,7 +46,9 @@ These are the `variant_lo` values that `resolve_pinout_key` switches on:
 | 23 (24-pin) | else (`0x00`) | `DIP24_2716` | 2KB UV-EPROM |
 | 22 (28-pin) | `0x10` | `DIP28_27512` | **VPP on pin 22** (OE/VPP shared) |
 | 22 (28-pin) | `0x11` | `DIP28_27256` | **VPP on pin 1** |
-| 22 (28-pin) | else | `DIP28_2764` | 27C128 / 27C64 layout |
+| 22 (28-pin) | else, `pin_map` `0x90000c16` | `DIP28_27011` | 27011 page-addressed EPROM. Only the 27011 rows carry this `pin_map` in the cluster. Paging is not implemented (henols/firestarter#136). |
+| 22 (28-pin) | else | `DIP28_27128` | 27128 / 27C128 layout. `<maps>` index 22 bonds pin 26 as A13. |
+| 21 (28-pin) | any | `DIP28_2764` | 2764 / 27C64 layout. `<maps>` index 21 leaves pin 26 unbonded. |
 | 12 (32-pin) | `0x03` | `DIP32_27C801` | 1 MB 27C080 / M27C801 class. **A19 on pin 1**, VPP on pin 24 shared with /OE. |
 | 12 (32-pin) | `0x02` | `DIP32_STD` | 512 KB 27C040 class. Pin 1 = VPP, pin 31 = A18. |
 | 12 (32-pin) | else | `DIP32_27C020` through the residual `_PGM_ON_PIN31_MAX_SIZE` size arm | The `0x00`, `0x01` and `0x04` classes. The size threshold still separates them (see below). |
@@ -571,7 +573,8 @@ The filter is every row with `electrical.vpp_mv` at 18000 mV or more. The map is
 `tests/test_vpp_rail_classification.py`:
 
 - **30 rows**: **21 at 18000 mV, 3 at 21000 mV, 6 at 25000 mV**. All are `support_status: supported`.
-- Ten rows are on the drop-resistor path: algorithm `0x07`, pinout `DIP28_2764`, `vpp-pin: [1]`.
+- Ten rows are on the drop-resistor path: algorithm `0x07`, pinout `DIP28_2764` or
+  `DIP28_27128`, `vpp-pin: [1]`.
 - Twenty rows are on the direct-VPE path: algorithm `0x0B`, pinout
   `DIP24_2716`/`DIP24_2732`/`DIP24_2532`, `vpp-pin: [21]`.
 - The measured drop-resistor ceiling of 17380 mV reaches **none** of the thirty. The nine rows at
@@ -582,14 +585,14 @@ The filter is every row with `electrical.vpp_mv` at 18000 mV or more. The map is
 
 | Path | Required VPP | Manufacturer | Part Number | Algorithm | Pinout | Reason |
 |---|---|---|---|---|---|---|
-| drop-resistor | 21000 mV | FUJITSU | MBM27128 | 0x07 | DIP28_2764 | Changed 2026-09-19 from its datasheet (Figure 3), 18000 → 21000, after issue #71. |
-| drop-resistor | 18000 mV | FUJITSU | MBM27C128P | 0x07 | DIP28_2764 | Upstream decode. VPP low byte `0xF0` saturates at the largest table entry (18000 mV), the model maximum. Not a per-part value. |
+| drop-resistor | 21000 mV | FUJITSU | MBM27128 | 0x07 | DIP28_27128 | Changed 2026-09-19 from its datasheet (Figure 3), 18000 → 21000, after issue #71. |
+| drop-resistor | 18000 mV | FUJITSU | MBM27C128P | 0x07 | DIP28_27128 | Upstream decode. VPP low byte `0xF0` saturates at the largest table entry (18000 mV), the model maximum. Not a per-part value. |
 | drop-resistor | 18000 mV | FUJITSU | MBM27C64 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
 | drop-resistor | 18000 mV | HITACHI | HN27C64G | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
 | drop-resistor | 18000 mV | HITACHI | HN27C64FP | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
 | drop-resistor | 18000 mV | INTEL | 2764 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
-| drop-resistor | 18000 mV | INTEL | 27128,D27128 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
-| drop-resistor | 18000 mV | MITSUBISHI | M5M27C128 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | INTEL | 27128,D27128 | 0x07 | DIP28_27128 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | MITSUBISHI | M5M27C128 | 0x07 | DIP28_27128 | Upstream decode, `0xF0` saturation, as above. |
 | drop-resistor | 18000 mV | NEC | UPD2764,UPD2764C,UPD2764D | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
 | drop-resistor | 18000 mV | TI | TMS2764 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
 | direct-vpe | 25000 mV | INTEL | 2732,2732A,M2732,M2732A | 0x0B | DIP24_2732 | An `UNSOURCED` entry in `tools/datasheet_overrides.json` holds it. No datasheet citation. |

@@ -33,7 +33,7 @@ from firestarter.jumper_table import (
 )
 
 ROW_COUNT = 746
-PIN_MAP_COUNT = 16
+PIN_MAP_COUNT = 18
 
 
 @pytest.fixture(scope="module")
@@ -314,6 +314,8 @@ EXPECTED_REV01 = {
     "DIP24_2816": (Jp1.VCC, Jp2.DOES_NOT_MATTER, Jp3.NO_JUMPER),
     "DIP24_6116": (Jp1.VCC, Jp2.DOES_NOT_MATTER, Jp3.NO_JUMPER),
     "DIP28_2764": (Jp1.A13, Jp2.VCC, Jp3.PIN28),
+    "DIP28_27128": (Jp1.A13, Jp2.VCC, Jp3.PIN28),
+    "DIP28_27011": (Jp1.A13, Jp2.VCC, Jp3.PIN28),
     "DIP28_27256": (Jp1.A13, Jp2.VCC, Jp3.PIN28),
     "DIP28_27512": (Jp1.A13, Jp2.VCC, Jp3.NO_JUMPER),
     "DIP28_28C256": (Jp1.A13, Jp2.VCC, Jp3.NO_JUMPER),

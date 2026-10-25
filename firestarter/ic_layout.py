@@ -127,15 +127,16 @@ class EpromSpecBuilder:
         self.db = db_instance
 
     @staticmethod
-    def _first_pin(pin_field: list) -> int:
+    def _first_pin(pin_field: list | int) -> int:
         """Extract a scalar pin number from a single-element list pin field.
 
         Pin map fields like vpp-pin, oe-pin, and rw-pin are stored as
         single-element lists in pinouts.json (e.g. [22]).  This helper
         returns the first element so the caller can use it as an integer
-        index or in arithmetic comparisons.
+        index or in arithmetic comparisons. A local pin-map override may
+        give a bare int, as get_bus_config accepts; that is returned as is.
         """
-        return pin_field[0]
+        return pin_field[0] if isinstance(pin_field, list) else pin_field
 
     def get_chip_type_string(self, protocol_id: int | None = None) -> str:
         """Return a user-facing chip-type label.
@@ -342,6 +343,14 @@ class EpromSpecBuilder:
                 if "oe-pin" in pin_map_details
                 else None
             )  # noqa: E501
+            pgm_pin = (
+                self._first_pin(pin_map_details["pgm-pin"])
+                if "pgm-pin" in pin_map_details
+                else None
+            )
+            # Label PGM first, so a map that also names a real WE keeps R/W(WE).
+            if pgm_pin is not None and pgm_pin <= pin_count:
+                pin_names[pgm_pin - 1] = "PGM"
             if rw_pin is not None and rw_pin <= pin_count:
                 pin_names[rw_pin - 1] = "R/W(WE)"
             if vpp_pin is not None and vpp_pin <= pin_count:

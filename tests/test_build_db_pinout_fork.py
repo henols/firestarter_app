@@ -60,3 +60,43 @@ class TestDerivedSizeBoundaryFork:
 
     def test_boundary_value_262145_is_one_step_past_the_fork(self):
         assert self._resolve(262145) == "DIP32_STD"
+
+
+class TestDip28_2764FamilyPinMapComesFromInfoicPinMap:
+    """infoic.xml <maps> index 21 leaves pin 26 unbonded (2764/27C64) and
+    index 22 bonds it as A13 (27128). Within pm_idx 22 only the 27011 rows
+    carry pin_map 0x90000c16. The infoic pin_map alone selects the pin map;
+    chip size does not."""
+
+    _SIZES = (8192, 16384, 131072)
+
+    def _resolve(self, pin_map_raw, mem_size):
+        return build_db.resolve_pinout_key(
+            pin_count=28,
+            variant=0x13,
+            flags_int=0,
+            pm_idx=pin_map_raw & 0xFF,
+            proto_id=0x07,
+            mem_size=mem_size,
+            pin_map_raw=pin_map_raw,
+        )
+
+    @pytest.mark.parametrize("mem_size", _SIZES)
+    @pytest.mark.parametrize(
+        ("pin_map_raw", "key"),
+        [
+            (0x00006F15, "DIP28_2764"),
+            (0x00000C16, "DIP28_27128"),
+            (0x90000C16, "DIP28_27011"),
+        ],
+    )
+    def test_pin_map_selects_the_key_at_every_size(self, pin_map_raw, key, mem_size):
+        assert self._resolve(pin_map_raw, mem_size) == key
+
+    @pytest.mark.parametrize("key", sorted(build_db._2764_FAMILY))
+    def test_erasable_2764_family_row_is_still_promoted_to_0x0d(self, key):
+        assert build_db.classify(1, 0x07, 21, 0x10, key, 8192) == (
+            "EEPROM",
+            0x0D,
+            key,
+        )

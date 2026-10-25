@@ -23,7 +23,9 @@ that assert specific chip data is forbidden — it would merge
 (RESEARCH Pitfall 4).
 """
 
-import pytest  # noqa: F401
+import logging
+
+import pytest
 
 from firestarter.database import ROM_CE, ROM_OE, EpromDatabase, pin_conversions
 
@@ -130,6 +132,61 @@ class TestDipToRurpPinTranslation:
     Tests assert against the real chip_database.json + pinouts.json data via
     the EpromDatabase(skip_local_override=True) construction seam.
     """
+
+    @pytest.mark.parametrize(
+        ("name", "pin_map", "bus_lines"),
+        [
+            ("TMS2764", "DIP28_2764", 13),
+            ("2764", "DIP28_2764", 13),
+            ("AM2764A", "DIP28_2764", 13),
+            ("TMS27C64", "DIP28_2764", 13),
+            ("AM27128A", "DIP28_27128", 14),
+            ("TMS27C128", "DIP28_27128", 14),
+            ("D27011", "DIP28_27011", 14),
+        ],
+    )
+    def test_2764_family_drives_pgm_as_the_rw_line(self, name, pin_map, bus_lines):
+        """PGM (pin 27) must be high for read, so it goes on the wire as rw-pin."""
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom(name)
+        assert chip is not None
+        assert chip["pin-map"] == pin_map
+        assert chip["bus-config"] == {
+            "bus": list(range(bus_lines)),
+            "rw-pin": pin_conversions[28][27],
+            "vpp-pin": pin_conversions[28][1],
+        }
+
+    def test_2764_pin_26_is_nc_and_27128_pin_26_is_a13(self):
+        db = EpromDatabase(skip_local_override=True)
+        assert db.get_pin_map(28, "DIP28_2764")["nc-pin"] == [26]
+        assert db.get_pin_map(28, "DIP28_27128")["address-bus-pins"][13] == 26
+
+    @pytest.mark.parametrize(
+        ("pins", "expected_rw"),
+        [
+            ({"pgm-pin": [27]}, 27),
+            ({"pgm-pin": 27}, 27),
+            ({"pgm-pin": [27], "rw-pin": [1]}, 1),
+            ({}, None),
+        ],
+    )
+    def test_rw_line_comes_from_rw_pin_else_pgm_pin(self, pins, expected_rw):
+        db = EpromDatabase(skip_local_override=True)
+        db.pin_maps["TEST_MAP"] = {
+            "pins": {"address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3], **pins}
+        }
+        bus_config = db.get_bus_config(28, "TEST_MAP")
+        if expected_rw is None:
+            assert "rw-pin" not in bus_config
+        else:
+            assert bus_config["rw-pin"] == pin_conversions[28][expected_rw]
+
+    def test_a_dip28_2764_override_warns_that_the_27128_rows_moved(self, caplog):
+        db = EpromDatabase(skip_local_override=True)
+        with caplog.at_level(logging.WARNING):
+            db._merge_pin_maps(db.pin_maps, {"DIP28_2764": {"name": "mine"}})
+        assert "DIP28_27128" in caplog.text
 
     def test_dip28_w27c512_bus_has_16_lines(self):
         """W27C512 has 16 address lines (A0-A15) — bus list must have 16 entries."""

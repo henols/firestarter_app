@@ -190,7 +190,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM27128A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -366,7 +366,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -1478,7 +1478,7 @@
         "vpp_mv": 13000
       },
       "part_number": "SMJ27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -1612,7 +1612,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AT27C011",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27011",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -1700,7 +1700,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AT27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -3331,7 +3331,7 @@
         "vpp_mv": 13000
       },
       "part_number": "CAT27128A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -4222,7 +4222,7 @@
         "vpp_mv": 13000
       },
       "part_number": "CY27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -5403,7 +5403,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C128,NMC27C128B,NMC27C128C",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -5603,7 +5603,7 @@
         "vpp_mv": 21000
       },
       "part_number": "MBM27128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -5735,7 +5735,7 @@
         "vpp_mv": 18000
       },
       "part_number": "MBM27C128P",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -6001,7 +6001,7 @@
         "vpp_mv": 13000
       },
       "part_number": "GR27128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -6069,7 +6069,7 @@
         "vpp_mv": 13000
       },
       "part_number": "HN27128AG,HN27128AP",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -7031,7 +7031,7 @@
         "vpp_mv": 13000
       },
       "part_number": "D27011",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27011",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -7053,7 +7053,7 @@
         "vpp_mv": 13000
       },
       "part_number": "D27C011",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27011",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -7141,7 +7141,7 @@
         "vpp_mv": 18000
       },
       "part_number": "27128,D27128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -7163,7 +7163,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27128A,D27128A,D27128B",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -7339,7 +7339,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -8870,7 +8870,7 @@
         "vpp_mv": 13000
       },
       "part_number": "27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -9406,7 +9406,7 @@
         "vpp_mv": 18000
       },
       "part_number": "M5M27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -9806,7 +9806,7 @@
         "vpp_mv": 12000
       },
       "part_number": "UPD27128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -9916,7 +9916,7 @@
         "vpp_mv": 12000
       },
       "part_number": "UPD27C128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -10229,7 +10229,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C128,NMC27C128B,NMC27C128C",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -11277,7 +11277,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M27128A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -11916,7 +11916,7 @@
         "vpp_mv": 12000
       },
       "part_number": "ST27128A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -13314,7 +13314,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M27128A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -13997,7 +13997,7 @@
         "vpp_mv": 12000
       },
       "part_number": "ST27128A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -14889,7 +14889,7 @@
         "vpp_mv": 13000
       },
       "part_number": "SMJ27C128,TMS27C128,TMS27PC128",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -16270,7 +16270,7 @@
         "vpp_mv": 13000
       },
       "part_number": "WS27C128F",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -16358,7 +16358,7 @@
         "vpp_mv": 13000
       },
       "part_number": "WS57C128FB",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_27128",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
