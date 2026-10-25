@@ -134,6 +134,12 @@ class SerialCommunicator:
     firmware_identity: str | None = None
     hw_revision: int | None = None
     write_block_budget_s: int | None = None
+    # The id of an ERROR frame that the caller caused on purpose, so the
+    # frame is logged at DEBUG, not ERROR. A read that stops acking at the
+    # first mismatch sets it to MSG_ERR_TIMEOUT: the firmware's ack-wait
+    # timeout is then the expected end of that read, not a fault. Declared
+    # at class level for the same reason as the identity fields above.
+    expected_error_id: int | None = None
 
     def __init__(
         self,
@@ -300,7 +306,10 @@ class SerialCommunicator:
         message = response.message
         level = logging.DEBUG
         if response.type == "ERROR":
-            level = logging.ERROR
+            if response.id is not None and response.id == self.expected_error_id:
+                level = logging.DEBUG
+            else:
+                level = logging.ERROR
         elif response.type == "WARN":
             level = logging.WARNING
         elif response.type == "INFO":

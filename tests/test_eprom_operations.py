@@ -1200,6 +1200,129 @@ class TestVerifyEpromReadAbort:
         assert result.compared == 4  # 2 chunks x 2 bytes, before the stop
         assert result.compared < result.total
 
+    @staticmethod
+    def _error_records(caplog) -> list:
+        """ERROR records other than the operation's own verdict line
+        (`Blank check for X failed.` / `Verify for X failed.`), which is
+        the intended outcome on a mismatch, not a fault report."""
+        return [
+            r
+            for r in caplog.records
+            if r.levelno >= logging.ERROR and not r.message.endswith(" failed.")
+        ]
+
+    def test_blank_check_abort_on_a_non_blank_chip_logs_no_error(
+        self, make_comm, fake_serial, caplog
+    ) -> None:
+        """`firestarter blank` on a non-blank chip: the host stops at the
+        first non-0xFF chunk and the firmware's ack-wait timeout ends the
+        read. That timeout is the host's own doing, so neither the firmware's
+        ERROR frame nor the state machine may log at ERROR -- the operator
+        must see the mismatch summary and the failed verdict only, never
+        `ERROR: Timeout` / `Programmer error during READ`."""
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, b"\x12\x34"))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with (
+            patch(
+                "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+                side_effect=_fake_find_and_connect,
+            ),
+            caplog.at_level(logging.DEBUG),
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_MINIMAL_EPROM_DATA))
+
+        assert verdict == 1
+        assert self._error_records(caplog) == []
+        assert any(r.message.startswith("Mismatch ") for r in caplog.records)
+
+    def test_verify_abort_logs_no_error(
+        self, make_comm, fake_serial, tmp_path, caplog
+    ) -> None:
+        """The same deliberate stop on the verify path logs nothing at ERROR
+        and still resolves to exit 1."""
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01\x02\x03\x04")
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, b"\xfe\x02"))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with (
+            patch(
+                "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+                side_effect=_fake_find_and_connect,
+            ),
+            caplog.at_level(logging.DEBUG),
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+        assert self._error_records(caplog) == []
+
+    def test_timeout_outside_the_window_still_logs_an_error(
+        self, make_comm, fake_serial, tmp_path, caplog, monkeypatch
+    ) -> None:
+        """A timeout that is NOT this host's stop (here: beyond the
+        acceptance window) is a real fault and must stay loud: the state
+        machine logs it at ERROR and the verdict is exit 2."""
+        import firestarter.eprom_operations as eprom_ops_mod
+
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01\x02\x03\x04")
+
+        class _FakeTime:
+            def __init__(self, values):
+                self._it = iter(values)
+
+            def monotonic(self):
+                return next(self._it)
+
+            def __getattr__(self, name):
+                import time as real_time
+
+                return getattr(real_time, name)
+
+        stop_time = 1_000.0
+        check_time = stop_time + eprom_ops_mod.READ_ABORT_ACCEPTANCE_WINDOW_S + 1.0
+        monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, b"\xfe\x02"))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with (
+            patch(
+                "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+                side_effect=_fake_find_and_connect,
+            ),
+            caplog.at_level(logging.DEBUG),
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 2
+        assert any(
+            r.message.startswith("Programmer error during")
+            for r in self._error_records(caplog)
+        )
+
 
 def test_read_timing_settling_emitted_in_command() -> None:
     """consistency_check_eprom(..., read_settling_us=50) puts "read-settling-delay"
