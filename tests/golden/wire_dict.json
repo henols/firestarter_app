@@ -13466,8 +13466,8 @@
       "flags": 0,
       "memory-size": 16384,
       "pin-count": 28,
-      "pulse-delay": 100,
-      "vpp_mv": 12000
+      "pulse-delay": 1000,
+      "vpp_mv": 21000
     },
     "NEC|UPD27256|1": {
       "algorithm": 7,
@@ -13495,8 +13495,8 @@
       "flags": 0,
       "memory-size": 32768,
       "pin-count": 28,
-      "pulse-delay": 200,
-      "vpp_mv": 12000
+      "pulse-delay": 1000,
+      "vpp_mv": 21000
     },
     "NEC|UPD27512|2": {
       "algorithm": 7,
