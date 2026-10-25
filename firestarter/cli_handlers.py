@@ -4,7 +4,6 @@ This module is the production CLI surface; main.py re-exports `cli` as `main`
 for the console-script entry point.
 """
 
-import datetime
 import functools
 import hashlib
 import json
@@ -106,6 +105,7 @@ from firestarter.protection_readability import (
     protection_gate_for_entry,
 )
 from firestarter.sdp_capability import SDP_PROTOCOL_ID, sdp_capability
+from firestarter.timestamps import iso_cet
 
 logger = logging.getLogger("Firestarter")
 
@@ -1908,10 +1908,10 @@ def fw(
 
             print(_json.dumps(releases, indent=2))
         else:
-            print(f"{'Version':<12} {'Channel':<14} {'Published':<22} Asset URL")
+            print(f"{'Version':<12} {'Channel':<14} {'Published':<25} Asset URL")
             for r in releases:
                 print(
-                    f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}"  # noqa: E501
+                    f"{r['version']:<12} {r['channel']:<14} {r['published']:<25} {r['asset_url']}"  # noqa: E501
                 )
             if not releases:
                 print(f"No releases found for board {board}.")
@@ -2638,7 +2638,7 @@ def _write_artifact(
     out_path.mkdir(parents=True, exist_ok=True)
 
     artifact: Dict[str, Any] = {  # noqa: UP006
-        "generated": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated": iso_cet(),
         "harness_version": "71",
         "cells": cells,
     }
