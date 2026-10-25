@@ -157,12 +157,5 @@
     "fields": {
       "electrical.vdd_mv": { "was": 1800, "is": 5000 }
     }
-  },
-  "TI/TMS2764": {
-    "datasheet": "datasheets/TMS2764.pdf",
-    "note": "TI TMS2764 datasheet, J-package pinout and operation table: pin 26 is NC, pin 27 is PGM and must be high for read, and pin 1 VPP is at VCC for read. Use a dedicated 13-address-line pinout so other 2764/27128-family parts retain their existing map. Bench check on RURP Rev 2.0-class/Uno: before mapping PGM as rw-pin, address 0 returned 0x03; afterwards the full 8192-byte blank check passed. No programming test was performed.",
-    "fields": {
-      "pinout": { "was": "DIP28_2764", "is": "DIP28_TMS2764" }
-    }
   }
 }

@@ -131,19 +131,20 @@ class TestDipToRurpPinTranslation:
     the EpromDatabase(skip_local_override=True) construction seam.
     """
 
-    def test_tms2764_pgm_is_high_for_read_and_pin_26_is_not_address(self):
-        """TMS2764 uses A0-A12 and needs PGM pin 27 high during reads."""
+    def test_8k_2764_family_pgm_is_high_for_read_and_pin_26_is_not_address(self):
+        """Standard 8KB 2764/27C64 chips share the same read pinout."""
         db = EpromDatabase(skip_local_override=True)
-        chip = db.get_eprom("TMS2764")
-        assert chip is not None
-        assert chip["pin-map"] == "DIP28_TMS2764"
-        assert chip["bus-config"] == {
-            "bus": list(range(13)),
-            "rw-pin": pin_conversions[28][27],
-            "vpp-pin": pin_conversions[28][1],
-        }
-        assert db.get_pin_map(28, "DIP28_TMS2764")["nc-pin"] == [26]
-        assert db.get_eprom("2764")["pin-map"] == "DIP28_2764"
+        for name in ("TMS2764", "2764", "AM2764A", "M2764A", "TMS27C64"):
+            chip = db.get_eprom(name)
+            assert chip is not None
+            assert chip["pin-map"] == "DIP28_2764_8K"
+            assert chip["bus-config"] == {
+                "bus": list(range(13)),
+                "rw-pin": pin_conversions[28][27],
+                "vpp-pin": pin_conversions[28][1],
+            }
+        assert db.get_pin_map(28, "DIP28_2764_8K")["nc-pin"] == [26]
+        assert db.get_eprom("AM27128A")["pin-map"] == "DIP28_2764"
 
     def test_dip28_w27c512_bus_has_16_lines(self):
         """W27C512 has 16 address lines (A0-A15) — bus list must have 16 entries."""

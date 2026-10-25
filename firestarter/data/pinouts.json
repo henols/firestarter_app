@@ -31,8 +31,9 @@
             "ce-pin": [20], "oe-pin": [22]
         }
     },
-    "DIP28_TMS2764": {
-        "name": "TI TMS2764 (8KB)",
+    "DIP28_2764_8K": {
+        "name": "JEDEC 2764/27C64 (8KB)",
+        "comment": "8KB 2764/27C64 pinout: A0-A12 only, pin 26 NC, and pin 27 PGM held high for read. See datasheets/TMS2764.pdf.",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
             "pgm-pin": [27], "rw-pin": [27], "nc-pin": [26],

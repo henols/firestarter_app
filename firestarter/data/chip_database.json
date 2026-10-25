@@ -168,7 +168,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM2764A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -256,7 +256,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM27C64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -3309,7 +3309,7 @@
         "vpp_mv": 13000
       },
       "part_number": "CAT2764A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -5381,7 +5381,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C64Q,NM27LC64,NMC27C64Q",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -5669,7 +5669,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MBM2764",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -5867,7 +5867,7 @@
         "vpp_mv": 18000
       },
       "part_number": "MBM27C64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -5979,7 +5979,7 @@
         "vpp_mv": 13000
       },
       "part_number": "GR2764",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -6289,7 +6289,7 @@
         "vpp_mv": 18000
       },
       "part_number": "HN27C64G",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -6311,7 +6311,7 @@
         "vpp_mv": 18000
       },
       "part_number": "HN27C64FP",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -6557,7 +6557,7 @@
         "vpp_mv": 13000
       },
       "part_number": "HY27C64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -6647,7 +6647,7 @@
         "vpp_mv": 13000
       },
       "part_number": "HY27C64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -7097,7 +7097,7 @@
         "vpp_mv": 18000
       },
       "part_number": "2764",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -7119,7 +7119,7 @@
         "vpp_mv": 12000
       },
       "part_number": "2764A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -8980,7 +8980,7 @@
         "vpp_mv": 13000
       },
       "part_number": "27C64,27LV64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -9024,7 +9024,7 @@
         "vpp_mv": 13000
       },
       "part_number": "27HC64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -9872,7 +9872,7 @@
         "vpp_mv": 18000
       },
       "part_number": "UPD2764,UPD2764C,UPD2764D",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -10207,7 +10207,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C64Q,NMC27C64Q",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -10317,7 +10317,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27LC64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -11365,7 +11365,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M2764A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -11519,7 +11519,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M27C64A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -11960,7 +11960,7 @@
         "vpp_mv": 12000
       },
       "part_number": "ST2764A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -12004,7 +12004,7 @@
         "vpp_mv": 12000
       },
       "part_number": "TS27C64A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -13402,7 +13402,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M2764A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -13556,7 +13556,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M27C64A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -14041,7 +14041,7 @@
         "vpp_mv": 12000
       },
       "part_number": "ST2764A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -14107,7 +14107,7 @@
         "vpp_mv": 12000
       },
       "part_number": "TS27C64A",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -14999,7 +14999,7 @@
         "vpp_mv": 18000
       },
       "part_number": "TMS2764",
-      "pinout": "DIP28_TMS2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
@@ -15109,7 +15109,7 @@
         "vpp_mv": 13000
       },
       "part_number": "TMS27C64,TMS27PC64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": true,
@@ -16336,7 +16336,7 @@
         "vpp_mv": 12000
       },
       "part_number": "WS27C64",
-      "pinout": "DIP28_2764",
+      "pinout": "DIP28_2764_8K",
       "programming": {
         "algorithm": 7,
         "chip_id_check": false,
