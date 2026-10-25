@@ -12,6 +12,8 @@ from typing import Any
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
 
+_NON_ZERO_WIRE_FIELDS = ("memory-size", "pin-count", "vpp_mv")
+
 
 def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     """Resolve a chip name to its programmer-config dict.
@@ -74,4 +76,14 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     data = db.convert_to_programmer(full) if full else None
     if not data:
         raise ChipNotFoundError(name)
+
+    # The firmware refuses a memory command whose memory-size, pin-count or
+    # vpp_mv is 0, with the same 'Bad JSON' answer that old firmware gives.
+    # No shipped row has a 0 here; a user database override can.
+    zero_fields = [key for key in _NON_ZERO_WIRE_FIELDS if not data.get(key)]
+    if zero_fields:
+        raise ChipNotImplementedError(
+            f"{name}: the chip entry gives 0 for {', '.join(zero_fields)}. "
+            "The programmer cannot use a value of 0 there."
+        )
     return data

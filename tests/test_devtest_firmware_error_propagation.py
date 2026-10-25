@@ -63,7 +63,12 @@ from firestarter.diagnostic_report import (
     dedup_fingerprint,
 )
 from firestarter.eprom_operations import EpromOperator
-from firestarter.messages import MSG_ERR_NOT_BLANK
+from firestarter.messages import (
+    MSG_END_DONE,
+    MSG_ERR_NOT_BLANK,
+    MSG_INIT_DONE,
+    MSG_MAIN_DONE,
+)
 
 from .conftest import build_frame
 
@@ -152,10 +157,12 @@ def test_a_cleared_slot_cannot_carry_a_previous_operations_failure(
     operator._run_state_machine("erase")
     assert operator.last_firmware_error_code == MSG_ERR_NOT_BLANK
 
-    # Second call: no ERROR frame fed. Whatever it returns, the slot must be
-    # empty -- the assertion under test is the CLEAR, not the outcome.
+    # Second call: a clean INIT/MAIN/END run with no ERROR frame. The slot
+    # must be empty after it.
+    for frame_id in (MSG_INIT_DONE, MSG_MAIN_DONE, MSG_END_DONE):
+        fake_serial.feed(build_frame(frame_id, b""))
     operator.comm = make_comm()
-    operator._run_state_machine("erase")
+    assert operator._run_state_machine("erase")[0] is True
 
     assert operator.last_firmware_error_code is None
     assert operator.last_firmware_error_message is None

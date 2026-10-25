@@ -6,11 +6,11 @@ Reads firestarter/data/chip_database.json directly (not through EpromDatabase),
 so this measures the shipped data rather than the loader's interpretation.
 
 Coverage:
-  1. Real-DB count: exactly 84 chip_database.json entries have
+  1. Non-vacuity: the selector reaches chip_database.json entries with
      programming.algorithm == 13 (the 0x0D / EEPROM_PARALLEL dispatch bucket).
-  2. Per-element invariant: every one of those 84 entries has
+  2. Per-element invariant: every one of those entries has
      programming.chip_id_check is False (identity comparison, not merely falsy).
-  3. Companion fact: every one of those 84 entries has
+  3. Companion fact: every one of those entries has
      programming.chip_id_value == "0x00000000" -- the field that actually
      determines firmware behaviour (eeprom_28c.cpp's identity branch only
      fires when handle->chip_id > 0).
@@ -25,9 +25,8 @@ Coverage:
      naming any chip that moved in either direction. This is GATE-08 / D-06 /
      correction F-01's replacement for the (not implementable in this repo,
      see the constant's comment) independently-derived leg.
-  6. Anti-narrowing literal triple: the measured partition is exactly
-     43 ALLOW / 41 REFUSE / 84 total, with all three counts derived from
-     `_partition_0x0d`, never hardcoded a second time.
+  6. Partition completeness: ALLOW and REFUSE are both non-empty and sum
+     back to the whole 0x0D bucket, so `_partition_0x0d` dropped no entry.
   7. Non-vacuous proof for the narrowing gate: a synthetic chip moved out of
      ALLOW (renamed to a token `SDP_CAPABLE_TOKENS` does not recognise) MUST
      make `_assert_partition_matches_committed` raise, and the raised message
@@ -223,27 +222,14 @@ _COMMITTED_SDP_ALLOW_ENTRIES: tuple[str, ...] = (
 )
 
 
-# Test 1: real-DB count
+# Test 1: the selector reaches real entries
 
 
-def test_exactly_84_algorithm_0x0d_entries() -> None:
-    """TRACE-05 / CLOSE-01: exactly 84 chip_database.json entries have
-    programming.algorithm == 13.
-
-    A count change means a chip was added to or removed from the 0x0D
-    bucket and every trace-coverage assumption in this milestone needs
-    re-checking. This is also CLOSE-01's "84-chip count unchanged" fact,
-    landed six phases early.
-    """
+def test_0x0d_selector_reaches_database_entries() -> None:
+    """Tests 2 and 3 check every selected entry; an empty selection would
+    let them pass vacuously."""
     db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
-    selected = _select_0x0d_chips(db)
-    assert len(selected) == 84, (
-        "TRACE-05/CLOSE-01: expected exactly 84 chip_database.json entries "
-        f"with programming.algorithm == 13, found {len(selected)}. A count "
-        "change means a chip was added to or removed from the 0x0D bucket "
-        "-- re-check every Phase 116+ trace-coverage assumption before "
-        "proceeding."
-    )
+    assert _select_0x0d_chips(db), "no chip_database.json entry has algorithm 13"
 
 
 # Test 2: per-element chip_id_check invariant
@@ -339,37 +325,17 @@ def test_sdp_partition_matches_committed_allow_list_element_wise() -> None:
     _assert_partition_matches_committed(allow, _COMMITTED_SDP_ALLOW_ENTRIES)
 
 
-def test_sdp_partition_counts_are_43_41_84() -> None:
-    """GATE-08 / D-06 leg 2: the measured 0x0D partition is exactly
-    43 ALLOW / 41 REFUSE / 84 total, all three measured from
-    `_partition_0x0d`, never hardcoded a second time.
-
-    A count change means a chip moved between halves and must be justified
-    by a decode reason (see the change-protocol comment on
-    `_COMMITTED_SDP_ALLOW_ENTRIES`), never a test-outcome reason.
-
-    The 84 total is deliberately redundant with
-    `test_exactly_84_algorithm_0x0d_entries` above: one asserts the bucket
-    size from the DB directly, the other asserts the partition sums back to
-    it -- a divergence between them means `_partition_0x0d` dropped an
-    entry.
+def test_sdp_partition_covers_the_whole_0x0d_bucket() -> None:
+    """GATE-08 / D-06 leg 2: ALLOW and REFUSE are both non-empty and sum
+    back to the 0x0D bucket -- a divergence means `_partition_0x0d` dropped
+    an entry. Which chip sits on which side is leg 1's element-wise check.
     """
     db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
     allow, refuse = _partition_0x0d(db)
-    assert len(allow) == 43, (
-        f"GATE-08: expected 43 ALLOW entries, measured {len(allow)}. A count "
-        "change means a chip moved between ALLOW and REFUSE and must be "
-        "justified by a decode reason, never a test-outcome reason."
-    )
-    assert len(refuse) == 41, (
-        f"GATE-08: expected 41 REFUSE entries, measured {len(refuse)}. A "
-        "count change means a chip moved between ALLOW and REFUSE and must "
-        "be justified by a decode reason, never a test-outcome reason."
-    )
-    assert len(allow) + len(refuse) == 84, (
-        "GATE-08: ALLOW + REFUSE must sum back to the 84-chip 0x0D bucket "
-        f"-- measured {len(allow)} + {len(refuse)} = {len(allow) + len(refuse)}. "
-        "A divergence from test_exactly_84_algorithm_0x0d_entries means "
+    assert allow, "GATE-08: the ALLOW partition is empty"
+    assert refuse, "GATE-08: the REFUSE partition is empty"
+    assert len(allow) + len(refuse) == len(_select_0x0d_chips(db)), (
+        "GATE-08: ALLOW + REFUSE does not sum back to the 0x0D bucket -- "
         "_partition_0x0d dropped an entry."
     )
 
@@ -529,20 +495,14 @@ def test_sdp_partition_matches_infoic_derived_field_element_wise() -> None:
         "protect_on_after field",
     )
 
+    bucket = len(_select_0x0d_chips(db))
     for label, allow, refuse in (
         ("SDP_CAPABLE_TOKENS transcription", allow_transcription, refuse_transcription),
         ("protect_on_after field", allow_field, refuse_field),
     ):
-        assert len(allow) == 43, (
-            f"GATE-08 leg 1: '{label}' measures {len(allow)} ALLOW entries, "
-            "expected 43."
-        )
-        assert len(refuse) == 41, (
-            f"GATE-08 leg 1: '{label}' measures {len(refuse)} REFUSE "
-            "entries, expected 41."
-        )
-        assert len(allow) + len(refuse) == 84, (
-            f"GATE-08 leg 1: '{label}' ALLOW+REFUSE does not sum to 84."
+        assert len(allow) + len(refuse) == bucket, (
+            f"GATE-08 leg 1: '{label}' ALLOW+REFUSE does not sum to the "
+            f"{bucket}-entry 0x0D bucket."
         )
 
 

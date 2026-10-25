@@ -562,8 +562,13 @@ def test_read_adc_raw_parses_three_frames(hw_config, make_comm, fake_serial) -> 
 def test_read_adc_raw_returns_none_when_nothing_parses(
     hw_config, make_comm, fake_serial
 ) -> None:
-    """Non-vacuity: with no ADC frame on the wire the method returns None, an
-    honest 'not measured', never a fabricated zero-filled reading."""
+    """Non-vacuity: when none of the three DATA frames is an ADC frame the
+    method returns None, an honest 'not measured', never a fabricated
+    zero-filled reading."""
+    # Three DATA frames that read cleanly but are not ADC frames: each is
+    # skipped by the parser, none is a transport error.
+    for _ in range(3):
+        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
     comm = make_comm()
 
     hw = HardwareManager(hw_config)
@@ -572,3 +577,52 @@ def test_read_adc_raw_returns_none_when_nothing_parses(
         return_value=comm,
     ):
         assert hw.read_adc_raw() is None
+    # All three frames were consumed, so the None is the parse result, not
+    # a timeout on an empty wire.
+    assert fake_serial.read(1) == b""
+
+
+def _cfg_ack(params: bytes) -> bytes:
+    from firestarter.messages import MSG_OK_CFG
+
+    return build_frame(MSG_OK_CFG, params)
+
+
+def test_read_calibration_reads_bandgap_from_current_ack(
+    hw_config, make_comm, fake_serial
+) -> None:
+    fake_serial.feed(_cfg_ack(struct.pack(">IIBH", 270000, 44000, 0xFF, 1083)))
+    comm = make_comm()
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        cal = hw.read_calibration()
+    assert cal == {"r1": 270000, "r2": 44000, "bandgap_mv": 1083}
+
+
+def test_read_calibration_returns_none_for_legacy_9_byte_ack(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """3.1.0 firmware sends MSG_OK_CFG without the bandgap. The reply still
+    decodes, and read_calibration reports older firmware (None), no crash."""
+    fake_serial.feed(_cfg_ack(struct.pack(">IIB", 270000, 44000, 0xFF)))
+    comm = make_comm()
+    acks = []
+    real_expect_ack = comm.expect_ack
+
+    def _spy():
+        result = real_expect_ack()
+        acks.append(result)
+        return result
+
+    comm.expect_ack = _spy
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        assert hw.read_calibration() is None
+    # The ack decoded: the None comes from the missing field, not a timeout.
+    assert acks == [(True, "R1: 270000, R2: 44000")]

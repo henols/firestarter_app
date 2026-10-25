@@ -40,6 +40,12 @@ from firestarter.messages import (
 
 logger = logging.getLogger("Codec")
 
+# Older, shorter forms of fixed-width acks that the host still accepts. The
+# value is the legacy param-region length; the decoder reads only the leading
+# catalog params that fit in it. MSG_OK_CFG gained the trailing u16 bandgap in
+# 3.1.0b4, so the 3.1.0 stable firmware still sends the 9-byte form.
+_LEGACY_PARAM_BYTES = {MSG_OK_CFG: 9}
+
 # REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
 # Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
 # so unknown bytes fall back to "Rev{n}" instead of raising.
@@ -71,9 +77,13 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
       effective!=0xFF → "Rev{effective}, Override HW: Rev{physical}"
 
     P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8,
-                       params[3]=bandgap_mv u16 (v1.43)
-      override==0xFF → "R1: {r1}, R2: {r2}"
+                       params[3]=bandgap_mv u16 (absent on firmware before 3.1.0b4)
+      override==0xFF → "R1: {r1}, R2: {r2}, Bandgap: {n} mV"
       override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}, Bandgap: {n} mV"
+      The Bandgap clause is always present when the ack carries the field:
+      HardwareManager.read_calibration keys on it. The 9-byte form from older
+      firmware has no bandgap, so it renders without the Bandgap clause, and
+      read_calibration reports that firmware as too old.
       Override clause now routes through
       _REVISION_SILKSCREEN so the same byte that surfaces as "Rev 2.0-class"
       via MSG_OK_REV no longer surfaces as "Rev2" on the adjacent ack line.
@@ -96,8 +106,8 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
         eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
         return f"{eff_str}, Override HW: {phys_str}"
 
-    if msg_id == MSG_OK_CFG and len(params) == 4:
-        r1, r2, override, bandgap_mv = params[0], params[1], params[2], params[3]
+    if msg_id == MSG_OK_CFG and len(params) in (3, 4):
+        r1, r2, override = params[0], params[1], params[2]
         head = f"R1: {r1}, R2: {r2}"
         if override != 0xFF:
             # Route the override byte through
@@ -106,9 +116,12 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
             # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
             override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
             head += f", Override HW: {override_str}"
+        if len(params) == 3:
+            # Firmware before 3.1.0b4 sends no bandgap field.
+            return head
         # v1.43 appended the calibrated reference. Rendered last so the
         # override clause keeps the position every prior release put it in.
-        return f"{head}, Bandgap: {bandgap_mv} mV"
+        return f"{head}, Bandgap: {params[3]} mV"
 
     # Silkscreen-aware rendering for the two
     # boot-time INFO surfaces that carry the same revision byte as
@@ -230,18 +243,27 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
     # entries carry param_bytes == -1 in the catalog; for those we
     # cannot pre-validate, but _decode_param will surface any overrun
     # via IndexError below.
-    if entry.param_bytes >= 0 and len(params_bytes) != entry.param_bytes:
+    legacy_len = _LEGACY_PARAM_BYTES.get(msg_id)
+    is_legacy = legacy_len is not None and len(params_bytes) == legacy_len
+    if (
+        entry.param_bytes >= 0
+        and len(params_bytes) != entry.param_bytes
+        and not is_legacy
+    ):
         logger.warning(
             f"Param shape mismatch for ID 0x{msg_id:02x} ({entry.name}): "
             f"expected {entry.param_bytes} bytes, got {len(params_bytes)}"
         )
         return None
 
-    # Decode each param per the catalog grammar.
+    # Decode each param per the catalog grammar. A legacy short form stops
+    # at the end of its shorter param region.
     values: List[Any] = []  # noqa: UP006
     cursor = 0
     try:
         for ptype, _prender in entry.params:
+            if is_legacy and cursor >= len(params_bytes):
+                break
             value, cursor = _decode_param(ptype, params_bytes, cursor)
             values.append(value)
     except (IndexError, struct.error, ValueError) as exc:

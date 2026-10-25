@@ -48,8 +48,10 @@ Commit the regenerated database together with the change.
 
 ## Releases
 
-A push to `beta` publishes a pre-release to GitHub and PyPI. A push to `main` publishes a stable
-release when the version in `firestarter/__init__.py` has no tag yet. The
+All work goes to `main` through pull requests. A merge publishes nothing. A release happens only
+when a maintainer pushes a version tag on `main`: `3.2.0b1` publishes a pre-release and `3.2.0` a
+stable release, to GitHub and PyPI. The tag is the version; no file holds it. Run
+`tools/release.sh <version>` to check and push the tag. The
 [release runbook](https://github.com/henols/firestarter/blob/main/RELEASING.md) has the details.
 
 ## Pull requests
