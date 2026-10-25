@@ -75,6 +75,7 @@ REFUSALS = {
     8: "a read timing exceeds 1000 us",
     9: "the config frame names an unknown or unsupported value",
     10: "a memory command lacks memory-size, algorithm, pin-count or vpp_mv",
+    11: "the start address is past the end of the device or the write region",
 }
 
 # Command-dict keys, one per frame field
