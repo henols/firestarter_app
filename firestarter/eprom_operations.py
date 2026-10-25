@@ -722,7 +722,11 @@ class EpromOperator:
                 # A leased setup whose ack was rejected (not a raised
                 # error) is a failed setup, treated identically to a cold
                 # connect failure: the caller's existing not-`command_dict`
-                # guard in `_operation_context` handles it unchanged.
+                # guard in `_operation_context` handles it unchanged. The
+                # firmware may still be mid-reply, so the held link is not
+                # trusted again: drop it, as the SerialError arm above does,
+                # and the next operation cold-connects.
+                self._disconnect_programmer()
                 return None, 0
             buffer_size = self._calculate_buffer_size()
             logger.debug(
