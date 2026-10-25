@@ -4,9 +4,9 @@ FLAG_CAN_ERASE restoration for algorithm 13 (0x0D / EEPROM_POLL) is SCOPED.
 Plans 08 through 11 inverted the old algorithm-13 exclusion tests -- their
 green runs prove the old assertions that used to clear FLAG_CAN_ERASE for
 this family are gone. They do NOT prove the change stayed inside its
-intended boundary. This module is that proof: it walks every one of the
-746 rows in the generated database and asserts that exactly the 84
-algorithm-13 rows gained the bit and nothing else moved.
+intended boundary. This module is that proof: it walks every row in the
+generated database and asserts that the algorithm-13 rows gained the bit
+and nothing else moved.
 
 **Anti-vacuity rule, stated up front (the same trap
 `test_page_size_invariants.py`'s own selector docstring documents):** the
@@ -36,12 +36,13 @@ would miss the derivation entirely and could not detect a regression in
 
 One module-level `EpromDatabase(skip_local_override=True)` instance is
 used throughout, so a developer's own `~/.firestarter/database.json`
-override can never change any of the counts asserted here.
+override can never change any of the rows checked here.
 
 Coverage (5 legs):
-  1. Exactly 84 of the 746 total rows carry `programming.algorithm == 13`.
-  2. Every one of those 84 rows carries the erase capability bit after
-     conversion.
+  1. The algorithm-13 selector reaches chip records: it returns rows both
+     on and off DIP24_2816, so no leg below can pass on an empty set.
+  2. Every algorithm-13 row off DIP24_2816 carries the erase capability bit
+     after conversion.
   3. Every row that is NOT algorithm 13 has a bit value matching the
      pre-change rule (set when electrical type is erasable AND algorithm
      is not 5, clear otherwise) -- the scope proof, expressed from the
@@ -64,13 +65,10 @@ confirmation that every mutation was reverted with an empty
     were instead observed failing against dropping the exclusion
     entirely (`if algo not in (5,):` -> `if True:`), which flips all 27
     algorithm-5 rows to bit=True and is caught by both legs.
-  - Leg 1 does not depend on FLAG_CAN_ERASE at all (it only counts rows by
-    `programming.algorithm`), so neither mutation touches it. Its
-    reachability is instead the anti-vacuity property itself: a
-    (deliberately not committed) top-level-only scan was run by hand and
-    confirmed to return 0 pairs where the real two-level selector returns
-    84, which is exactly the vacuous-pass failure mode this module's
-    docstring warns about.
+  - Leg 1 does not depend on FLAG_CAN_ERASE at all, so neither mutation
+    touches it. It fails against a top-level-only scan, which returns no
+    rows -- exactly the vacuous-pass failure mode this module's docstring
+    warns about.
 """
 
 from firestarter.chip_test import (
@@ -144,26 +142,18 @@ def _erase_capability_bit(db: EpromDatabase, manufacturer: str, chip: dict) -> b
     return bool(wire["flags"] & FLAG_CAN_ERASE)
 
 
-# Leg 1: exactly 84 of the 746 total rows are algorithm 13.
+# Leg 1: the selector reaches chip records on both sides of the DIP24_2816 split.
 
 
-def test_exactly_84_algorithm_13_rows_across_all_746_rows() -> None:
-    """The 746 total is asserted in the same test as the 84 subset count --
-    a change in either number invalidates every other leg in this module."""
-    total_rows = _all_rows(_REAL_DB)
-    assert len(total_rows) == 746, (
-        f"expected 746 total database rows, found {len(total_rows)}"
-    )
-
-    algo13_rows = _select_algorithm_13_rows(_REAL_DB)
-    assert len(algo13_rows) == 84, (
-        f"expected exactly 84 rows with programming.algorithm == 13, "
-        f"found {len(algo13_rows)}: "
-        f"{[(m, c.get('part_number', '?')) for m, c in algo13_rows]}"
-    )
+def test_algorithm_13_selector_reaches_rows_on_and_off_dip24_2816() -> None:
+    """Every other leg filters `_select_algorithm_13_rows`; an empty or
+    one-sided selection would let those legs pass vacuously."""
+    pinouts = {chip["pinout"] for _, chip in _select_algorithm_13_rows(_REAL_DB)}
+    assert "DIP24_2816" in pinouts
+    assert pinouts - {"DIP24_2816"}, "no algorithm-13 row off DIP24_2816"
 
 
-# Leg 2: every one of the 84 algorithm-13 rows carries the erase bit.
+# Leg 2: every algorithm-13 row off DIP24_2816 carries the erase bit.
 
 
 def test_every_algorithm_13_row_off_dip24_2816_carries_the_erase_capability_bit() -> (

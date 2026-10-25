@@ -15,7 +15,6 @@ import shutil
 import statistics
 import time
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Tuple  # noqa: UP035
 
@@ -75,6 +74,7 @@ from firestarter.serial_comm import (
     WRITE_BUDGET_MAX_S,
     SerialCommunicator,
 )
+from firestarter.timestamps import iso_cet_basic
 from firestarter.utils import extract_hex_to_decimal
 from firestarter.write_blank_guard import (
     incomplete_refusal_text,
@@ -722,7 +722,11 @@ class EpromOperator:
                 # A leased setup whose ack was rejected (not a raised
                 # error) is a failed setup, treated identically to a cold
                 # connect failure: the caller's existing not-`command_dict`
-                # guard in `_operation_context` handles it unchanged.
+                # guard in `_operation_context` handles it unchanged. The
+                # firmware may still be mid-reply, so the held link is not
+                # trusted again: drop it, as the SerialError arm above does,
+                # and the next operation cold-connects.
+                self._disconnect_programmer()
                 return None, 0
             buffer_size = self._calculate_buffer_size()
             logger.debug(
@@ -1379,7 +1383,7 @@ class EpromOperator:
             # path is to use the actual board name -- but the unit-test
             # surface doesn't have a serial connection, so we fall back).
             if output_dir is None:
-                timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+                timestamp = iso_cet_basic()
                 output_dir = str(
                     Path(DEFAULT_RUN_OUTPUT_DIR)
                     / f"consistency-check-{eprom_name}-unknown-board-{timestamp}"
@@ -1556,7 +1560,7 @@ class EpromOperator:
         source_sha = hashlib.sha256(Path(source_image_path).read_bytes()).hexdigest()
 
         if output_dir is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            timestamp = iso_cet_basic()
             output_dir = str(
                 Path(DEFAULT_RUN_OUTPUT_DIR)
                 / f"write-cycle-{eprom_name}-unknown-board-{timestamp}"
@@ -1674,7 +1678,7 @@ class EpromOperator:
         from firestarter.serial_comm import FaultInjectingSerialCommunicator
 
         if output_dir is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            timestamp = iso_cet_basic()
             output_dir = f"fault-inject-{eprom_name}-{direction}-{timestamp}"
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -1941,7 +1945,7 @@ class EpromOperator:
             return False
 
         if output_dir is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            timestamp = iso_cet_basic()
             output_dir = f"fault-inject-latency-{fault_form}-{timestamp}"
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -2145,7 +2149,7 @@ class EpromOperator:
             return False
 
         if output_dir is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            timestamp = iso_cet_basic()
             output_dir = f"connect-cost-{timestamp}"
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)

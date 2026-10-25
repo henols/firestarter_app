@@ -694,6 +694,8 @@ class TestFirmwareList:
         assert releases[1]["version"] == "3.1.0b10"  # b10 > b1 requires Version sort
         assert releases[2]["version"] == "3.1.0b1"
         assert releases[3]["version"] == "3.0.0"
+        # GitHub's UTC published_at is shown as ISO 8601 in CET (CEST in May)
+        assert releases[0]["published"] == "2026-05-20T11:00:00+02:00"
         # Each element must have all 5 required keys
         required_keys = {"version", "tag", "channel", "published", "asset_url"}
         for r in releases:
@@ -1244,7 +1246,7 @@ class TestFetchAllReleasesJsonParsing:
 
         monkeypatch.setattr(firmware.requests, "get", mock_get)
         fm = FirmwareManager(config_manager=MagicMock())
-        with caplog.at_level(logging.INFO, logger="FirmwareManager"):
+        with caplog.at_level(logging.INFO, logger=firmware.logger.name):
             result = fm._fetch_all_releases(max_pages=2)
         assert len(result) == 2  # 2 pages × 1 release each
         assert any("capped" in r.message.lower() for r in caplog.records)
@@ -1290,7 +1292,7 @@ class TestCompareVersionsAdditionalBranches:
     ):
         """When both strings are unparseable, returns False and logs warning."""
         fm = FirmwareManager(config_manager=MagicMock())
-        with caplog.at_level(logging.WARNING, logger="FirmwareManager"):
+        with caplog.at_level(logging.WARNING, logger=firmware.logger.name):
             result = fm._compare_versions("garbage_string", "another_garbage")
         assert result is False
         # The warning text references the strings being compared.

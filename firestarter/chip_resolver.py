@@ -10,7 +10,48 @@ Single chokepoint between CLI dispatch and the EPROM database lookup/conversion.
 from typing import Any
 
 from firestarter.database import EpromDatabase
-from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
+from firestarter.exceptions import (
+    AmbiguousChipNameError,
+    ChipNotFoundError,
+    ChipNotImplementedError,
+)
+
+_NON_ZERO_WIRE_FIELDS = ("memory-size", "pin-count", "vpp_mv")
+
+
+def _qualified_choices(name: str, db: EpromDatabase) -> list[str]:
+    """The row `name` selects first, then each other row it selects that
+    programs differently, all as qualified names. Empty when one row, or rows
+    that program the same, are selected."""
+    alternatives = db.ambiguous_alternatives(name)
+    if not alternatives:
+        return []
+    raw_config, manufacturer = db.get_eprom_config(name)
+    return [db.qualified_chip_name(name, raw_config, manufacturer), *alternatives]
+
+
+def refuse_if_ambiguous(name: str, db: EpromDatabase) -> None:
+    """Refuse a name that selects chips that program differently: guessing
+    one would drive the wrong VPP, algorithm or timing."""
+    choices = _qualified_choices(name, db)
+    if choices:
+        listed = ", ".join(f"'{c}'" for c in choices)
+        raise AmbiguousChipNameError(
+            f"'{name}' names chips that program differently. Name one: {listed}."
+        )
+
+
+def describe_ambiguity(name: str, db: EpromDatabase) -> str | None:
+    """For display commands, which use the first row: the other rows `name`
+    selects, or None."""
+    choices = _qualified_choices(name, db)
+    if not choices:
+        return None
+    others = ", ".join(f"'{c}'" for c in choices[1:])
+    return (
+        f"'{name}' also names chips that program differently: {others}. "
+        f"This shows '{choices[0]}'."
+    )
 
 
 def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
@@ -23,6 +64,9 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     missing record (``get_eprom_config`` returns ``(None, None)``) and an empty
     conversion (``convert_to_programmer`` returns ``{}``) are treated as the
     not-found condition.
+
+    Raises ``AmbiguousChipNameError`` (a ``ChipNotFoundError``) when the name
+    selects rows that program differently; the message names each of them.
 
     Raises ``ChipNotImplementedError`` when the chip exists in the database but
     its ``support_status`` is not ``"supported"`` (covers protocol-not-implemented,
@@ -47,6 +91,7 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     # have a support_status, so raise ChipNotFoundError immediately.
     if raw_config is None:
         raise ChipNotFoundError(name)
+    refuse_if_ambiguous(name, db)
 
     # Support-status guard: refuse every program-capable operation
     # for non-supported chips BEFORE convert_to_programmer builds any wire dict.
@@ -74,4 +119,14 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     data = db.convert_to_programmer(full) if full else None
     if not data:
         raise ChipNotFoundError(name)
+
+    # The firmware refuses a memory command whose memory-size, pin-count or
+    # vpp_mv is 0, with the same 'Bad JSON' answer that old firmware gives.
+    # No shipped row has a 0 here; a user database override can.
+    zero_fields = [key for key in _NON_ZERO_WIRE_FIELDS if not data.get(key)]
+    if zero_fields:
+        raise ChipNotImplementedError(
+            f"{name}: the chip entry gives 0 for {', '.join(zero_fields)}. "
+            "The programmer cannot use a value of 0 there."
+        )
     return data

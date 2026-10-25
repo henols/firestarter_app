@@ -14,6 +14,7 @@ return the same instance.
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -145,6 +146,11 @@ def _read_config_file(filename: str) -> dict:
         return {}
 
 
+def _strip_mode(name: str) -> str:
+    """'DS1245AB(RW)' -> 'ds1245ab': the name without its mode annotation."""
+    return re.sub(r"\([^)]*\)", "", name).strip().lower()
+
+
 class EpromDatabase:
     """
     Manages the EPROM and pin map database for the Firestarter application.
@@ -157,6 +163,7 @@ class EpromDatabase:
     def __init__(self, skip_local_override: bool = False):
         self.proms: dict[str, Any] = {}
         self.pin_maps: dict[str, Any] = {}
+        self._names_needing_qualifier: dict[tuple[str, str], str] | None = None
         self._initialize_database_core(skip_local_override=skip_local_override)
         logger.debug("EpromDatabase initialized.")
 
@@ -426,46 +433,146 @@ class EpromDatabase:
             for ic_config in ics
         ]
 
+    def find_chip_configs(self, chip_name: str) -> list[tuple[dict, str]]:
+        """Return every database row `chip_name` selects, as
+        (config_dict, manufacturer) pairs in database order.
+
+        A name matches a row's `part_number` directly, or one of its
+        comma-separated aliases. Upstream infoic.xml encodes chip aliases as
+        comma-separated lists (e.g. "AT28C256,AT28C256E,AT28HC256"), which
+        build_db.py preserves in the part_number field.
+
+        infoic.xml also annotates many names with a parenthetical mode, such
+        as "(RW)", "(TEST)" or "(RW3.3V)" (e.g. "DS1245AB(RW),DS1245Y(RW)"). A
+        name matches an annotated alias with the annotation stripped, but only
+        when no row matches the name as typed: "DS1220(TEST)" selects the
+        (TEST) row, never the (RW) row that "DS1220" also matches.
+
+        The same part number can name rows of different manufacturers, which
+        program differently. `PART@MANUFACTURER` selects one manufacturer's
+        rows; see `resolve_manufacturer` for how the manufacturer matches.
+        """
+        name, at, wanted = chip_name.partition("@")
+        manufacturer_wanted = self.resolve_manufacturer(wanted) if at else None
+        if at and manufacturer_wanted is None:
+            return []
+        query = name.strip().lower()
+        query_stripped = _strip_mode(name)
+        exact: list[tuple[dict, str]] = []
+        stripped: list[tuple[dict, str]] = []
+        for manufacturer, ics in self.proms.items():
+            if manufacturer_wanted is not None and manufacturer != manufacturer_wanted:
+                continue
+            for ic_config in ics:
+                part_number = ic_config.get("part_number", "")
+                aliases = part_number.split(",")
+                if query == part_number.lower() or query in (
+                    a.strip().lower() for a in aliases
+                ):
+                    exact.append((ic_config, manufacturer))
+                elif query_stripped and query_stripped in (
+                    _strip_mode(a) for a in aliases
+                ):
+                    stripped.append((ic_config, manufacturer))
+        return exact or stripped
+
     def get_eprom_config(self, chip_name: str):
         """
         Retrieves the raw configuration data for a specific EPROM by its name.
             Returns (config_dict, manufacturer_str) or (None, None).
 
-        Matches against `part_number` directly OR against any of the
-        comma-separated alias names within it. Upstream infoic.xml encodes
-        chip aliases as comma-separated lists (e.g.,
-        "AT28C256,AT28C256E,AT28HC256"), which build_db.py preserves in
-        the part_number field. Without alias-aware lookup, queries like
-        `firestarter info AT28C256` failed despite the chip being in the DB.
-
-        Also handles infoic.xml's parenthetical mode annotations: many
-        chip names carry "(RW)", "(TEST)", "(RW3.3V)" etc. (e.g.,
-        "DS1245AB(RW),DS1245Y(RW)"). A plain query like "DS1245AB"
-        is normalized to match against the paren-stripped alias.
+        The first row `find_chip_configs` selects; see there for how a name
+        matches.
         """
-        import re
+        matches = self.find_chip_configs(chip_name)
+        return matches[0] if matches else (None, None)
 
-        def _strip_paren(s):
-            # "DS1245AB(RW)" -> "DS1245AB"; preserves the canonical chip name.
-            return re.sub(r"\([^)]*\)", "", s).strip().lower()
+    def resolve_manufacturer(self, wanted: str) -> str | None:
+        """The manufacturer `wanted` names: an exact name, ignoring case, else
+        the one manufacturer it is a prefix of. None when it names none, or is
+        a prefix of more than one."""
+        wanted = wanted.strip().lower()
+        if not wanted:
+            return None
+        names = list(self.proms)
+        exact = [m for m in names if m.lower() == wanted]
+        if exact:
+            return exact[0]
+        prefixed = [m for m in names if m.lower().startswith(wanted)]
+        return prefixed[0] if len(prefixed) == 1 else None
 
-        query = chip_name.lower()
-        query_stripped = _strip_paren(chip_name)
-        for manufacturer, ics in self.proms.items():
-            for ic_config in ics:
-                part_number = ic_config.get("part_number", "")
-                if query == part_number.lower():
-                    return ic_config, manufacturer
-                # Alias match: split on comma + match individual aliases.
-                # Try exact alias first, then paren-stripped alias.
-                if "," in part_number or "(" in part_number:
-                    aliases = [a.strip().lower() for a in part_number.split(",")]
-                    if query in aliases:
-                        return ic_config, manufacturer
-                    aliases_stripped = [_strip_paren(a) for a in part_number.split(",")]
-                    if query_stripped and query_stripped in aliases_stripped:
-                        return ic_config, manufacturer
-        return None, None
+    def qualified_chip_name(
+        self, chip_name: str, ic_config: dict, manufacturer: str
+    ) -> str:
+        """The name that selects this one row: the row's alias that `chip_name`
+        matched, with its mode annotation, then `@` and the manufacturer.
+
+        The manufacturer is its first word when that word names it alone, so
+        the name needs no shell quoting ('27C128@MICROCHIP', not
+        '27C128@MICROCHIP memory').
+        """
+        name = chip_name.partition("@")[0].strip()
+        aliases = [a.strip() for a in ic_config.get("part_number", "").split(",")]
+        alias = next(
+            (a for a in aliases if a.lower() == name.lower()),
+            next(
+                (a for a in aliases if _strip_mode(a) == _strip_mode(name)),
+                aliases[0],
+            ),
+        )
+        first_word = manufacturer.split()[0] if manufacturer.split() else manufacturer
+        short = (
+            first_word
+            if self.resolve_manufacturer(first_word) == manufacturer
+            else manufacturer
+        )
+        return f"{alias}@{short}"
+
+    def names_needing_qualifier(self) -> dict[tuple[str, str], str]:
+        """Every row with an alias that, typed as shown, also selects rows that
+        program differently, keyed (manufacturer, part_number), with the
+        qualified name that selects it. Such a row can only be named with
+        `@MANUFACTURER`."""
+        if self._names_needing_qualifier is None:
+            by_name: dict[str, list[tuple[dict, str]]] = {}
+            for manufacturer, ics in self.proms.items():
+                for ic_config in ics:
+                    for alias in ic_config.get("part_number", "").split(","):
+                        by_name.setdefault(alias.strip().lower(), []).append(
+                            (ic_config, manufacturer)
+                        )
+            needing: dict[tuple[str, str], str] = {}
+            for name, rows in by_name.items():
+                if len(rows) < 2:
+                    continue
+                wires = [
+                    self.convert_to_programmer(self._map_data(ic, m)) for ic, m in rows
+                ]
+                if all(w == wires[0] for w in wires[1:]):
+                    continue
+                for ic, m in rows:
+                    needing.setdefault(
+                        (m, ic.get("part_number", "")),
+                        self.qualified_chip_name(name, ic, m),
+                    )
+            self._names_needing_qualifier = needing
+        return self._names_needing_qualifier
+
+    def ambiguous_alternatives(self, chip_name: str) -> list[str]:
+        """Name the other rows `chip_name` selects that program differently
+        from the one `get_eprom_config` uses, each as a qualified name that
+        selects that row alone. Empty when the choice cannot matter.
+        """
+        matches = self.find_chip_configs(chip_name)
+        if len(matches) < 2:
+            return []
+        chosen = self.convert_to_programmer(self._map_data(*matches[0]))
+        return [
+            self.qualified_chip_name(chip_name, ic_config, manufacturer)
+            for ic_config, manufacturer in matches[1:]
+            if self.convert_to_programmer(self._map_data(ic_config, manufacturer))
+            != chosen
+        ]
 
     def get_eprom(self, chip_name: str):
         """

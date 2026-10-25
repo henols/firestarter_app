@@ -135,6 +135,9 @@ def test_probe_port_still_fails_on_a_genuine_unrecoverable_error() -> None:
         patch.object(SerialCommunicator, "send_json_command", return_value=15),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),
+        # The window is spent on an empty wire either way; its length is
+        # not what this test checks.
+        patch("firestarter.serial_comm.SETUP_ACK_RECOVERY_TIMEOUT_S", 0.1),
     ):
         comm = SerialCommunicator._probe_port(
             port_name="/dev/fake",

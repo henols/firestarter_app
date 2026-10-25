@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import struct
 from typing import TYPE_CHECKING, cast
 from unittest.mock import Mock
@@ -95,6 +96,40 @@ def _pyusb_is_absent() -> bool:
 collect_ignore: list = []
 if _pyusb_is_absent():
     collect_ignore.append("test_pyusb_api_surface.py")
+
+
+# `dev test` runs a `gh issue list --author @me` dedup query through
+# `submit.find_prior_report`, bound as a default argument, so patching the
+# module attribute does not reach it. A stub `gh` first on PATH answers every
+# call as "not authenticated" (exit 4): no test waits on GitHub, depends on the
+# developer's gh login, or branches on their real issues.
+@pytest.fixture(autouse=True)
+def _offline_gh(tmp_path_factory, monkeypatch):
+    bin_dir = tmp_path_factory.getbasetemp() / "offline-gh-bin"
+    gh = bin_dir / "gh"
+    if not gh.exists():
+        bin_dir.mkdir(exist_ok=True)
+        gh.write_text("#!/bin/sh\nexit 4\n")
+        gh.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+
+
+# `disconnect()` drains the port with `consume_remaining_input(timeout=0.5)`.
+# A fake serial port answers every read at once, so the drain only ends when
+# the window runs out: 0.5 s of wall time per disconnect, a full second for a
+# write with a guard read. Any parsed frame restarts the window, so a short one
+# still drains everything a test fed. An explicit timeout is kept.
+@pytest.fixture(autouse=True)
+def _short_drain_window(monkeypatch):
+    from firestarter.serial_comm import SerialCommunicator
+
+    drain = SerialCommunicator.consume_remaining_input
+
+    def _short_drain(self, timeout: float = 0.02) -> None:
+        drain(self, timeout)
+
+    monkeypatch.setattr(SerialCommunicator, "consume_remaining_input", _short_drain)
+
 
 # Module-level reference constants — independent of firestarter.serial_comm
 # so tests do not pass tautologically on a bug in the production constant.
@@ -217,6 +252,7 @@ def make_comm(fake_serial):
         instance.hw_revision = None
         instance.write_block_budget_s = None
         instance.seen_message_ids = set()
+        instance.setup_refusal = None
         return instance
 
     return _factory
