@@ -1492,7 +1492,6 @@ def hw(app: AppContext) -> None:
 
 
 _BANDGAP_NOMINAL_MV = 1100
-_DIVIDER_GAIN = 314000 / 44000
 
 
 @cli.command(name="cal")
