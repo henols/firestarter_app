@@ -105,9 +105,9 @@ _ALGORITHM_TO_VPP_PATH = {
 
 _UNMAPPED_PATH_LABEL = "unmapped"
 
-_EXPECTED_TOTAL_ROWS = 30
-_EXPECTED_VOLTAGE_HISTOGRAM = {18000: 21, 21000: 3, 25000: 6}
-_EXPECTED_PATH_HISTOGRAM = {"drop-resistor": 10, "direct-vpe": 20}
+_EXPECTED_TOTAL_ROWS = 31
+_EXPECTED_VOLTAGE_HISTOGRAM = {18000: 21, 21000: 4, 25000: 6}
+_EXPECTED_PATH_HISTOGRAM = {"drop-resistor": 11, "direct-vpe": 20}
 
 
 def _load_db() -> dict:
@@ -218,13 +218,13 @@ def test_per_path_algorithm_and_pin_count_are_uniform() -> None:
         if _ALGORITHM_TO_VPP_PATH.get(chip["programming"]["algorithm"]) == "direct-vpe"
     ]
 
-    assert len(drop_resistor) == 10
+    assert len(drop_resistor) == 11
     assert all(chip["programming"]["algorithm"] == 0x07 for chip in drop_resistor)
     assert all(chip["electrical"]["pin_count"] == 28 for chip in drop_resistor)
     drop_resistor_mv = dict(
         collections.Counter(chip["electrical"]["vpp_mv"] for chip in drop_resistor)
     )
-    assert drop_resistor_mv == {18000: 9, 21000: 1}, (
+    assert drop_resistor_mv == {18000: 9, 21000: 2}, (
         f"expected the drop-resistor voltage sub-histogram {{18000: 9, "
         f"21000: 1}} (nine rows at the floor plus the one row plan 199-01 "
         f"moved), measured {drop_resistor_mv}"
@@ -282,7 +282,7 @@ def test_boundary_is_at_or_above_not_strictly_above() -> None:
     )
 
 
-def test_injecting_a_synthetic_row_makes_the_total_go_to_31() -> None:
+def test_injecting_a_synthetic_row_makes_the_total_go_to_32() -> None:
     """Non-vacuity, defect class closed: a census helper that silently
     matched anything -- an empty row list, a swallowed exception, a filter
     that never selected -- would pass every other test in this module.
@@ -305,8 +305,8 @@ def test_injecting_a_synthetic_row_makes_the_total_go_to_31() -> None:
     baseline_rows, _, _, _ = _census(db)
     mutated_rows, _, _, _ = _census(mutated)
 
-    assert len(baseline_rows) == 30
-    assert len(mutated_rows) == 31, (
+    assert len(baseline_rows) == 31
+    assert len(mutated_rows) == 32, (
         f"injecting one synthetic row at the floor into an in-memory deep "
         f"copy must shift the total from 30 to 31, measured "
         f"{len(mutated_rows)}"
@@ -333,7 +333,7 @@ def test_rewriting_an_algorithm_shifts_the_path_histogram() -> None:
 
     _, _, mutated_path_histogram, _ = _census(mutated)
 
-    assert mutated_path_histogram == {"drop-resistor": 9, "direct-vpe": 21}, (
+    assert mutated_path_histogram == {"drop-resistor": 10, "direct-vpe": 21}, (
         f"rewriting one drop-resistor row's algorithm to the direct-VPE "
         f"algorithm, in an in-memory deep copy, must shift the path "
         f"histogram to 9 and 21, measured {mutated_path_histogram}"
@@ -368,16 +368,16 @@ _REQUIRED_TEST_NAMES = (
     "test_every_row_in_the_census_is_supported",
     "test_per_path_algorithm_and_pin_count_are_uniform",
     "test_boundary_is_at_or_above_not_strictly_above",
-    "test_injecting_a_synthetic_row_makes_the_total_go_to_31",
+    "test_injecting_a_synthetic_row_makes_the_total_go_to_32",
     "test_rewriting_an_algorithm_shifts_the_path_histogram",
     "test_rewriting_support_status_breaks_the_all_supported_claim",
 )
 
 _DEFINITION_GUARD_COUNTS = {
-    "_EXPECTED_TOTAL_ROWS" + " = 30": 1,
-    "_EXPECTED_VOLTAGE_HISTOGRAM" + " = {18000: 21, 21000: 3, 25000: 6}": 1,
-    "_EXPECTED_PATH_HISTOGRAM" + ' = {"drop-resistor": 10, "direct-vpe": 20}': 1,
-    "=" + "= 30": 1,
+    "_EXPECTED_TOTAL_ROWS" + " = 31": 1,
+    "_EXPECTED_VOLTAGE_HISTOGRAM" + " = {18000: 21, 21000: 4, 25000: 6}": 1,
+    "_EXPECTED_PATH_HISTOGRAM" + ' = {"drop-resistor": 11, "direct-vpe": 20}': 1,
+    "=" + "= 32": 1,
     "=" + "= 31": 1,
 }
 
@@ -386,8 +386,8 @@ _WEAKENING_IDIOMS = (
     "pytest.mark." + "skip",
     "issub" + "set",
     "firestarter" + "_fw",
-    ">" + "= 30",
-    ">" + "= 10",
+    ">" + "= 31",
+    ">" + "= 11",
     ">" + "= 20",
 )
 

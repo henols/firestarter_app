@@ -1160,6 +1160,7 @@
   | M5M27C128           | MITSUBISHI       |   28 |            | UV-EPROM    | 18.0v|
   | M5M27C256K          | MITSUBISHI       |   28 |            | UV-EPROM    | 12.0v|
   | M5M28F101,M5M28F101A| MITSUBISHI       |   32 | 0x1CD0     | Flash/EEPROM| 12.0v|
+  | M5L2764K,M5L2764K-2 | MITSUBISHI       |   28 |            | UV-EPROM    | 21.0v|
   | V29C31001B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
   | V29C31001T          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
   | V29C31002B          | MOSEL VITELIC    |   32 |            | Flash/EEPROM| -    |
