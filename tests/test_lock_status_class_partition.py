@@ -12,9 +12,9 @@ specific non-vacuous form:
 
   - The exhaustiveness leg (below) was **red by construction** before plan
     `151-06` assigned the `XICOR/X88C64P,X88C64S` row (`algorithm: 52`,
-    `0x34`) a class: D-09's seven named no-mechanism algorithms sum to 405,
-    not 406, so that row landed in no class under D-09's literal
-    enumeration. The red-then-green transcript for this is recorded
+    `0x34`) a class: at that time D-09's seven named no-mechanism
+    algorithms summed to one row short of the database, so that row landed
+    in no class under D-09's literal enumeration. The red-then-green transcript for this is recorded
     verbatim in `151-12-SUMMARY.md`, produced by temporarily removing `52`
     from `protection_readability.NOT_IMPLEMENTED_PROTOCOL_IDS`, observing
     this leg fail naming that row, then restoring the set and observing it
@@ -22,17 +22,21 @@ specific non-vacuous form:
 
 Coverage (task numbering matches `151-12-PLAN.md`):
   Task 1 (this file's first half):
-    1. Exhaustiveness -- all 746 rows resolve into the frozen token set.
+    1. Exhaustiveness -- every database row resolves into the frozen token
+       set.
     2. Disjointness / determinism -- one token per row, two consecutive
        walks byte-equal.
-    3. The census, pinned as literals: `no_mechanism` 405 (with the seven
-       per-algorithm counts), `not_implemented` 40 (the `39 at 0x10 + 1 at
-       0x34` decomposition, the OD-2 / `151-DESIGN.md` §4 correction that
-       supersedes `151-VALIDATION.md`'s earlier figure of 39), the `0x0D`
-       84 / curation 24 split of `not_readable`, the `0x05`+`0x06` 217
-       surface split 81/24/112 (matching `151-06-SUMMARY.md`'s measured
-       distribution exactly), and the total arithmetic
-       405 + 40 + 84 + 217 == 746.
+    3. The census, pinned as literals: `no_mechanism` by per-algorithm
+       count, `not_implemented` as a key set (the `0x10` rows plus the one
+       `0x34` row, the OD-2 / `151-DESIGN.md` §4 correction that supersedes
+       `151-VALIDATION.md`'s earlier figure), the `0x0D` / curation split
+       of `not_readable`, the `0x05`+`0x06` curation surface split by token
+       (matching `151-06-SUMMARY.md`'s measured distribution), and the
+       total arithmetic over all of them.
+
+       Each count is written once, as a literal below. The totals are
+       computed from those literals, so a new database row changes one
+       number and no test name or docstring.
   Task 2 (this file's second half):
     4. Structural unreachability of `protected`/`unprotected`.
     6. Robustness: the two key-less TEXAS INSTRUMENTS rows, the ten
@@ -173,9 +177,9 @@ def _resolve_database_or_raise(db: dict) -> list[_RowResolution]:
 # Leg 1: exhaustiveness
 
 
-def test_all_746_rows_resolve_exhaustively() -> None:
-    """Every one of the 746 committed database rows resolves into the
-    frozen gate-token set, and the walk raises for none of them.
+def test_every_row_resolves_exhaustively() -> None:
+    """Every committed database row resolves into the frozen gate-token
+    set, and the walk raises for none of them.
 
     Non-vacuity: this leg was **observed red** on the `XICOR/X88C64P,X88C64S`
     row before plan `151-06` classed `algorithm: 52`. The red-then-green
@@ -187,8 +191,10 @@ def test_all_746_rows_resolve_exhaustively() -> None:
     """
     db = _load_db()
     resolutions = _resolve_database_or_raise(db)
-    assert len(resolutions) == 748, (
-        f"D-12 leg 1: expected 748 resolved rows, measured {len(resolutions)}"
+    database_rows = len(_all_rows(db))
+    assert len(resolutions) == database_rows, (
+        f"D-12 leg 1: expected all {database_rows} database rows to resolve, "
+        f"measured {len(resolutions)}"
     )
     unknown_tokens = {r.token for r in resolutions} - _ALL_GATE_TOKENS
     assert not unknown_tokens, (
@@ -217,7 +223,7 @@ def test_exactly_one_token_per_row() -> None:
 def test_two_consecutive_walks_are_byte_equal() -> None:
     """Two consecutive walks over the same database produce identical
     per-row results -- proves `protection_gate_for_entry` is pure over the
-    real 746-row corpus, not merely over the hand-picked cases in
+    real corpus, not merely over the hand-picked cases in
     `test_protection_resolution.py`."""
     db = _load_db()
     first = _resolve_database_or_raise(db)
@@ -240,12 +246,11 @@ _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
     0x28: 34,
     0x29: 20,
 }
-_NO_MECHANISM_TOTAL = 407
-assert sum(_NO_MECHANISM_ALGORITHM_COUNTS.values()) == _NO_MECHANISM_TOTAL
+_NO_MECHANISM_TOTAL = sum(_NO_MECHANISM_ALGORITHM_COUNTS.values())
 
 _NOT_IMPLEMENTED_KEYS: frozenset[str] = frozenset(
     {
-        # -- 0x10 (39 rows) --
+        # -- 0x10 --
         "AMD/AM28F010",
         "AMD/AM28F010A",
         "AMD/AM28F020",
@@ -285,14 +290,14 @@ _NOT_IMPLEMENTED_KEYS: frozenset[str] = frozenset(
         "ST/M28F512,M28F512B,M28F010",
         "TI/TMS28F010,TMS28F010A,TMS28F010B",
         "TI/TMS28F020",
+        # -- 0x34 --
         "XICOR/X88C64P,X88C64S",
     }
 )
-assert len(_NOT_IMPLEMENTED_KEYS) == 40
 
-# The 27 rows at algorithm 0x05 (Winbond/Atmel/SST 5V boot-block family) --
+# The rows at algorithm 0x05 (Winbond/Atmel/SST 5V boot-block family) --
 # pinned as a SET, per the plan's instruction that this bucket ("the 0x05
-# surface's 27") is small enough to name directly, unlike no_mechanism's 405.
+# surface") is small enough to name directly, unlike no_mechanism.
 _ALGORITHM_0X05_KEYS: frozenset[str] = frozenset(
     {
         "ASD/AE29F1008",
@@ -324,32 +329,30 @@ _ALGORITHM_0X05_KEYS: frozenset[str] = frozenset(
         "WINBOND/W29EE011",
     }
 )
-assert len(_ALGORITHM_0X05_KEYS) == 27
 
 _CURATION_READ_PERMITTED = 81
 _CURATION_UNDOCUMENTED_ALIAS = 112
 _CURATION_NOT_READABLE = 24
-_CURATION_SURFACE_TOTAL = 217
-assert (
+_CURATION_SURFACE_TOTAL = (
     _CURATION_READ_PERMITTED + _CURATION_UNDOCUMENTED_ALIAS + _CURATION_NOT_READABLE
-    == _CURATION_SURFACE_TOTAL
 )
 
 _NOT_READABLE_0X0D_TOTAL = 84
 
-_GRAND_TOTAL = 748
-assert (
-    _NO_MECHANISM_TOTAL + 40 + _NOT_READABLE_0X0D_TOTAL + _CURATION_SURFACE_TOTAL
-    == _GRAND_TOTAL
+_GRAND_TOTAL = (
+    _NO_MECHANISM_TOTAL
+    + len(_NOT_IMPLEMENTED_KEYS)
+    + _NOT_READABLE_0X0D_TOTAL
+    + _CURATION_SURFACE_TOTAL
 )
 
 
-def test_no_mechanism_census_407_with_per_algorithm_decomposition() -> None:
-    """`no_mechanism` resolves for exactly 405 rows, decomposed by algorithm
-    into the seven counts D-09 names: 0x07 (170), 0x08 (127), 0x0B (32),
-    0x0E (20), 0x27 (2), 0x28 (34), 0x29 (20). 405 is too large a bucket to
-    pin as a set (per the plan's instruction), so this pins the count plus
-    the per-algorithm decomposition instead."""
+def test_no_mechanism_census_with_per_algorithm_decomposition() -> None:
+    """`no_mechanism` resolves for exactly `_NO_MECHANISM_TOTAL` rows,
+    decomposed by algorithm into the seven algorithms D-09 names, with the
+    counts in `_NO_MECHANISM_ALGORITHM_COUNTS`. The bucket is too large to
+    pin as a set (per the plan's instruction), so this pins the
+    per-algorithm decomposition instead."""
     db = _load_db()
     resolutions = _resolve_database_or_raise(db)
     no_mechanism = [r for r in resolutions if r.token == GATE_TOKEN_NO_MECHANISM]
@@ -366,11 +369,11 @@ def test_no_mechanism_census_407_with_per_algorithm_decomposition() -> None:
     )
 
 
-def test_not_implemented_census_40_pinned_as_a_set() -> None:
-    """`not_implemented` resolves for exactly 40 rows -- 39 at `0x10` plus
-    the single `0x34` row (`151-DESIGN.md` §4, OD-2). This figure
-    SUPERSEDES `151-VALIDATION.md`'s earlier figure of 39, because that
-    document predates the `0x34` resolution. Pinned as a set with a
+def test_not_implemented_census_pinned_as_a_set() -> None:
+    """`not_implemented` resolves for exactly `_NOT_IMPLEMENTED_KEYS` -- the
+    `0x10` rows plus the single `0x34` row (`151-DESIGN.md` §4, OD-2). This
+    SUPERSEDES `151-VALIDATION.md`'s earlier figure, which left out the
+    `0x34` row because that document predates its resolution. Pinned as a set with a
     symmetric-difference failure message, following
     `test_b15_page_size_corroboration.py:230-243`'s shape."""
     db = _load_db()
@@ -383,7 +386,7 @@ def test_not_implemented_census_40_pinned_as_a_set() -> None:
     symmetric_difference = measured_keys ^ _NOT_IMPLEMENTED_KEYS
     assert not symmetric_difference, (
         "D-12 leg 3: measured not_implemented rows disagree with the pinned "
-        f"40-row set. Symmetric difference: {sorted(symmetric_difference)}"
+        f"set. Symmetric difference: {sorted(symmetric_difference)}"
     )
     assert "XICOR/X88C64P,X88C64S" in measured_keys, (
         "D-12 leg 3: the OD-2 row XICOR/X88C64P,X88C64S must be among the "
@@ -391,24 +394,24 @@ def test_not_implemented_census_40_pinned_as_a_set() -> None:
     )
 
 
-def test_algorithm_0x05_surface_27_pinned_as_a_set() -> None:
-    """The 27 rows at algorithm 0x05 are pinned as a set, independent of
+def test_algorithm_0x05_surface_pinned_as_a_set() -> None:
+    """The rows at algorithm 0x05 are pinned as a set, independent of
     which gate token each one individually resolves to -- this checks DB
     population stability for the bucket the plan names as small enough to
-    pin directly ("the 0x05 surface's 27")."""
+    pin directly ("the 0x05 surface")."""
     db = _load_db()
     measured_keys = {_key(v, p) for v, p, alg in _all_rows(db) if alg == 0x05}
     symmetric_difference = measured_keys ^ _ALGORITHM_0X05_KEYS
     assert not symmetric_difference, (
         "D-12 leg 3: the measured algorithm-0x05 population disagrees with "
-        f"the pinned 27-row set. Symmetric difference: "
+        f"the pinned set. Symmetric difference: "
         f"{sorted(symmetric_difference)}"
     )
 
 
-def test_not_readable_84_from_0x0d_plus_curation_additions() -> None:
-    """`not_readable` resolves for at least the 84 `0x0D` rows -- every one
-    of them, since `NOT_READABLE_PROTOCOL_IDS` classifies unconditionally
+def test_not_readable_from_0x0d_plus_curation_additions() -> None:
+    """`not_readable` resolves for every `0x0D` row
+    (`_NOT_READABLE_0X0D_TOTAL`), since `NOT_READABLE_PROTOCOL_IDS` classifies unconditionally
     by protocol id -- plus whatever the 0x05/0x06 curation adds on top."""
     db = _load_db()
     resolutions = _resolve_database_or_raise(db)
@@ -426,10 +429,11 @@ def test_not_readable_84_from_0x0d_plus_curation_additions() -> None:
     assert len(not_readable) == _NOT_READABLE_0X0D_TOTAL + _CURATION_NOT_READABLE
 
 
-def test_0x05_0x06_curation_surface_217_matches_151_06_measurement() -> None:
+def test_0x05_0x06_curation_surface_matches_151_06_measurement() -> None:
     """The `0x05`+`0x06` surface splits into `read_permitted` /
     `not_readable` / `undocumented_alias` exactly matching the distribution
-    `151-06-SUMMARY.md` measured: 81 / 24 / 112, summing to 217. Per
+    `151-06-SUMMARY.md` measured, pinned in the three `_CURATION_*`
+    literals. Per
     orchestrator constraint 4, a disagreement here is a stop-and-report
     condition, never adjusted to fit."""
     db = _load_db()
@@ -473,10 +477,11 @@ def test_0x05_0x06_curation_surface_217_matches_151_06_measurement() -> None:
     )
 
 
-def test_total_arithmetic_sums_to_748() -> None:
-    """405 + 40 + 84 + 217 == 746, asserted as arithmetic over the ACTUAL
-    measured counts (not the literal constants alone), so a future row
-    that shifts one bucket without shifting the total is still caught."""
+def test_total_arithmetic_sums_to_the_database_row_count() -> None:
+    """The per-token counts sum to `_GRAND_TOTAL` and to the database's
+    own row count, asserted as arithmetic over the ACTUAL measured counts
+    (not the literal constants alone), so a future row that shifts one
+    bucket without shifting the total is still caught."""
     db = _load_db()
     resolutions = _resolve_database_or_raise(db)
     no_mechanism = sum(1 for r in resolutions if r.token == GATE_TOKEN_NO_MECHANISM)
@@ -495,6 +500,10 @@ def test_total_arithmetic_sums_to_748() -> None:
         + read_permitted
         + undocumented_alias
     )
+    assert measured_total == len(_all_rows(db)), (
+        f"D-12 leg 3: measured token counts sum to {measured_total}, but the "
+        f"database holds {len(_all_rows(db))} rows"
+    )
     assert measured_total == _GRAND_TOTAL, (
         f"D-12 leg 3: measured token counts sum to {measured_total}, "
         f"expected {_GRAND_TOTAL}. no_mechanism={no_mechanism} "
@@ -502,14 +511,14 @@ def test_total_arithmetic_sums_to_748() -> None:
         f"read_permitted={read_permitted} undocumented_alias={undocumented_alias}"
     )
     assert no_mechanism == _NO_MECHANISM_TOTAL
-    assert not_implemented == 40
+    assert not_implemented == len(_NOT_IMPLEMENTED_KEYS)
     assert not_readable + read_permitted + undocumented_alias == (
         _NOT_READABLE_0X0D_TOTAL + _CURATION_SURFACE_TOTAL
     )
 
 
 def test_no_row_resolves_to_a_silicon_only_token() -> None:
-    """No row, anywhere in the real 746-row database, resolves to
+    """No row, anywhere in the real database, resolves to
     `protected` or `unprotected` -- the two `SILICON_ONLY_TOKENS`, which
     `protection_gate_for_entry`'s signature is structurally incapable of
     returning (T-151-58)."""
@@ -531,8 +540,8 @@ def test_no_row_resolves_to_a_silicon_only_token() -> None:
 
 def test_ti_key_less_rows_resolve_to_no_mechanism_without_raising() -> None:
     """D-12 leg 6(a): the two TEXAS INSTRUMENTS rows (`2516`, `2532`) carry
-    NEITHER `protect_on_after` nor `protect_off_before` at all -- the
-    744-of-746 exception. `protection_gate_for_entry` never reads either
+    NEITHER `protect_on_after` nor `protect_off_before` at all -- the only
+    rows without them. `protection_gate_for_entry` never reads either
     field (per its own docstring), so this asserts both rows resolve
     cleanly to `no_mechanism` (both are algorithm `0x0B`) rather than
     raising a `KeyError` on the missing fields."""
