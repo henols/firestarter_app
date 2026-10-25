@@ -169,6 +169,10 @@ _DELTAS_198 = _HERE / "golden" / "wire_dict_expected_deltas_198.json"
 _DELTAS_199 = _HERE / "golden" / "wire_dict_expected_deltas_199.json"
 # Applied LAST: it sets flags=0 on 19 records that the 153 layer set to 2.
 _DELTAS_DIP24_2816 = _HERE / "golden" / "wire_dict_expected_deltas_dip24_2816.json"
+# Sets bus-config on the 29 DIP28_2764_8K records. No other layer names them.
+_DELTAS_DIP28_2764_8K = (
+    _HERE / "golden" / "wire_dict_expected_deltas_dip28_2764_8k.json"
+)
 
 _GOLDEN_PAGE_SIZE_RECORD_KEYS = {
     "WINBOND|W29C020,W29C020C,W29C022|7",
@@ -271,6 +275,7 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
     deltas_198 = json.loads(_DELTAS_198.read_text(encoding="utf-8"))["deltas"]
     deltas_199 = json.loads(_DELTAS_199.read_text(encoding="utf-8"))["deltas"]
     deltas_dip24 = json.loads(_DELTAS_DIP24_2816.read_text(encoding="utf-8"))["deltas"]
+    deltas_8k = json.loads(_DELTAS_DIP28_2764_8K.read_text(encoding="utf-8"))["deltas"]
 
     golden_page_size_keys = {
         key for key, wire in recorded.items() if "page-size" in wire
@@ -477,6 +482,29 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         assert delta_wire["flags"] != deltas_153[key]["flags"], key
         assert "page-size" not in recorded[key], key
 
+    # DIP28_2764_8K layer: exactly the 29 records of that pin map. Each one
+    # moves from the 14-line 2764/27128 bus to 13 lines plus PGM as rw-pin,
+    # and no earlier layer names any of them.
+    other_layers = (
+        deltas_149,
+        deltas_153,
+        deltas_182,
+        deltas_194,
+        deltas_197,
+        deltas_198,
+        deltas_199,
+        deltas_dip24,
+    )
+    assert len(deltas_8k) == 29, sorted(deltas_8k)
+    for layer in other_layers:
+        assert not set(deltas_8k) & set(layer)
+    for key, delta_wire in deltas_8k.items():
+        assert set(delta_wire) == {"bus-config"}, key
+        assert recorded[key]["bus-config"]["bus"] == list(range(14)), key
+        assert delta_wire["bus-config"]["bus"] == list(range(13)), key
+        assert "rw-pin" not in recorded[key]["bus-config"], key
+        assert "rw-pin" in delta_wire["bus-config"], key
+
     expected = copy.deepcopy(recorded)
     for key, delta_wire in deltas_149.items():
         expected[key].update(delta_wire)
@@ -493,6 +521,8 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
     for key, delta_wire in deltas_199.items():
         expected[key].update(delta_wire)
     for key, delta_wire in deltas_dip24.items():
+        expected[key].update(delta_wire)
+    for key, delta_wire in deltas_8k.items():
         expected[key].update(delta_wire)
 
     live = _capture_wire_dicts(_REAL_DB)
@@ -513,7 +543,9 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         "the 1 named Phase 199 delta "
         "(tests/golden/wire_dict_expected_deltas_199.json) plus exactly "
         "the 19 DIP24_2816 deltas, applied last "
-        "(tests/golden/wire_dict_expected_deltas_dip24_2816.json); "
+        "(tests/golden/wire_dict_expected_deltas_dip24_2816.json) plus "
+        "exactly the 29 DIP28_2764_8K deltas "
+        "(tests/golden/wire_dict_expected_deltas_dip28_2764_8k.json); "
         "if this is a legitimate NEW wire-value change, it must be added "
         "to a delta list deliberately, naming which chips and which keys "
         f"moved, in the commit message. Diff: {_describe_record_diff(expected, live)}"
@@ -584,6 +616,7 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
     deltas_198 = json.loads(_DELTAS_198.read_text(encoding="utf-8"))["deltas"]
     deltas_199 = json.loads(_DELTAS_199.read_text(encoding="utf-8"))["deltas"]
     deltas_dip24 = json.loads(_DELTAS_DIP24_2816.read_text(encoding="utf-8"))["deltas"]
+    deltas_8k = json.loads(_DELTAS_DIP28_2764_8K.read_text(encoding="utf-8"))["deltas"]
 
     expected = copy.deepcopy(recorded)
     for key, delta_wire in deltas_149.items():
@@ -600,7 +633,10 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
         expected[key].update(delta_wire)
     # The DIP24_2816 layer puts flags back to the golden value on its 19
     # records, so only the other 65 of the 84 still differ, on flags alone.
+    # The DIP28_2764_8K layer moves bus-config only, so it adds none.
     for key, delta_wire in deltas_dip24.items():
+        expected[key].update(delta_wire)
+    for key, delta_wire in deltas_8k.items():
         expected[key].update(delta_wire)
 
     live = _capture_wire_dicts(_REAL_DB)

@@ -57,6 +57,28 @@ def test_generate_pin_names_for_display_list_valued_pins_no_crash(
     )
 
 
+@pytest.mark.parametrize(
+    ("chip_name", "pin_26", "pin_27"),
+    [
+        ("TMS2764", "NC", "PGM"),  # DIP28_2764_8K: PGM is also the rw-pin
+        ("AM27128A", "A13", "PGM"),  # DIP28_2764: PGM, no rw-pin
+        ("AT28C256", "A13", "R/W(WE)"),  # DIP28_28C256: a real WE
+    ],
+)
+def test_pgm_pin_is_labelled_pgm_and_not_we(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+    chip_name: str,
+    pin_26: str,
+    pin_27: str,
+) -> None:
+    eprom = db.get_eprom(chip_name)
+    assert eprom is not None
+    names = spec_builder._generate_pin_names_for_display(eprom)
+    assert names is not None
+    assert (names[25], names[26]) == (pin_26, pin_27)
+
+
 def test_build_specifications_happy_path(
     spec_builder: EpromSpecBuilder,
     db: EpromDatabase,

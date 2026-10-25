@@ -312,6 +312,17 @@ JUMPER_TABLE: Mapping[str, JumperEntry] = {
         rev22_jp4=Jp4Rev22.POLE_28,
         probe_pending=True,
     ),
+    # Chip pin 26 is NC on this map, so JP1 is A13 only to agree with DIP28_2764.
+    "DIP28_2764_8K": JumperEntry(
+        vpp_lands=VppLanding.SOCKET_3,
+        pin1_signal="VPP",
+        jp1=Jp1.A13,
+        jp2=Jp2.VCC,
+        jp3=Jp3.PIN28,
+        rev20_jp4=Jp4Rev20.CLOSED,
+        rev22_jp4=Jp4Rev22.POLE_28,
+        probe_pending=True,
+    ),
     "DIP28_27256": JumperEntry(
         vpp_lands=VppLanding.SOCKET_3,
         pin1_signal="VPP",

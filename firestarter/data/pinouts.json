@@ -25,7 +25,7 @@
         "name": "JEDEC 2764/128",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
-            "pgm-pin": [27], "nc-pin": [26],
+            "pgm-pin": [27],
             "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26],
             "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
             "ce-pin": [20], "oe-pin": [22]
@@ -33,7 +33,7 @@
     },
     "DIP28_2764_8K": {
         "name": "JEDEC 2764/27C64 (8KB)",
-        "comment": "8KB 2764/27C64 pinout: A0-A12 only, pin 26 NC, and pin 27 PGM held high for read. See datasheets/TMS2764.pdf.",
+        "comment": "2764/27C64 pinout (infoic.xml pin map 21, which leaves pin 26 unbonded): A0-A12 only, pin 26 NC, and pin 27 PGM. PGM is also the rw-pin, so the firmware holds it high for read. See datasheets/TMS2764.pdf.",
         "pins": {
             "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
             "pgm-pin": [27], "rw-pin": [27], "nc-pin": [26],

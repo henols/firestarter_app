@@ -167,10 +167,10 @@ Key fields per chip entry:
 
 - `algorithm` — the upstream `protocol_id` integer. The firmware dispatches on it.
 - `vpp_mv` — the VPP voltage in millivolts, decoded from the `voltages` field.
-- `pinout` — the DIP pinout key. The shipped database uses 16 keys: `DIP24_2532`, `DIP24_2716`,
+- `pinout` — the DIP pinout key. The shipped database uses 17 keys: `DIP24_2532`, `DIP24_2716`,
   `DIP24_2732`, `DIP24_2816`, `DIP24_6116`, `DIP28_27256`, `DIP28_27512`, `DIP28_2764`,
-  `DIP28_28C64`, `DIP28_28C256`, `DIP28_JEDEC_SRAM_8K`, `DIP32_27C020`, `DIP32_27C801`,
-  `DIP32_28C512_EEPROM`, `DIP32_SST39SF040` and `DIP32_STD`.
+  `DIP28_2764_8K`, `DIP28_28C64`, `DIP28_28C256`, `DIP28_JEDEC_SRAM_8K`, `DIP32_27C020`,
+  `DIP32_27C801`, `DIP32_28C512_EEPROM`, `DIP32_SST39SF040` and `DIP32_STD`.
 
 `part_number` can hold more than one name in one comma-separated string, for example
 `W27C512,W27E512`. An exact-string match on one part number therefore misses rows. Split the field
@@ -189,7 +189,7 @@ the promotion they go to `configure_eprom`. Two arms promote:
 1. `pinout_key` is `DIP24_2816`. Promote for all protocols.
 2. `proto_id` is `0x07`, `0x08` or `0x0B`, **and** one of these is true:
    - `pinout_key` is `DIP28_28C64` or `DIP28_28C256`.
-   - `pinout_key` is `DIP28_2764` and `flags & 0x10` is set.
+   - `pinout_key` is `DIP28_2764` or `DIP28_2764_8K`, and `flags & 0x10` is set.
 
 A real 5V flash chip on the same DIP28 layout keeps its flash algorithm. A later arm handles it.
 **Do not make either arm wider.**

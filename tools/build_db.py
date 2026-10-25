@@ -210,9 +210,12 @@ def resolve_pinout_key(
             elif variant_lo == 0x11:
                 key = "DIP28_27256"  # VPP on pin 1
             else:
-                key = "DIP28_2764"  # 27C128/27C64 layout
+                key = "DIP28_2764"  # 27128/27C128 layout, A13 on pin 26
         elif pm_idx == 21:
-            key = "DIP28_2764"  # 27C64 family; pm_idx unique to this family
+            # 2764/27C64 family; pm_idx unique to this family.
+            # [VERIFIED: infoic.xml <maps> index 21 leaves pin 26 unbonded;
+            #  index 22 bonds it as A13]
+            key = "DIP28_2764_8K"
         elif pm_idx == 20:
             key = "DIP28_28C256"  # 28C256 EEPROM; no VPP
         elif pm_idx == 19:
@@ -284,7 +287,7 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
          protocol; algorithm 0x28 (SRAM_STD) when the chip arrived with an
          EPROM-family proto (0x07/0x08/0x0B), else proto_id.
       2. 5V-EEPROM pinout clusters — DIP24_2816 / DIP28_28C64 / DIP28_28C256, or
-         DIP28_2764 with the erasable bit set → EEPROM / 0x0D
+         DIP28_2764 / DIP28_2764_8K with the erasable bit set → EEPROM / 0x0D
          (configure_eeprom28c, no VPP).
       3. EPROM-family proto (0x07/0x08/0x0B) → EEPROM if flags&0x10 else UV-EPROM,
          algorithm proto_id (keeps 12V VPP; W27C512 etc. land here).
@@ -317,7 +320,8 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
     #    These pinouts have no programming VPP; route to configure_eeprom28c (0x0D).
     #    SCOPE (matches the deleted Rule 1 + Rule 2 exactly — do NOT broaden):
     #      - DIP24_2816 (was Rule 1): force 0x0D for any proto (24-pin 28C family).
-    #      - DIP28_28C64 / DIP28_28C256 / (DIP28_2764 with flags&0x10) (was Rule 2):
+    #      - DIP28_28C64 / DIP28_28C256 / (DIP28_2764 or DIP28_2764_8K with
+    #        flags&0x10) (was Rule 2):
     #        flip ONLY EPROM-family proto (0x07/0x08/0x0B) chips. Genuine 5V FLASH
     #        on the same DIP28 layout (AT29C256/AT29LV256, proto 0x05) is NOT a 28C
     #        EEPROM — it must keep its Flash algorithm (handled by arm 4 below). The
@@ -326,7 +330,7 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
         return "EEPROM", 0x0D, pinout_key
     if proto_id in {0x07, 0x08, 0x0B} and (
         pinout_key in {"DIP28_28C64", "DIP28_28C256"}
-        or (pinout_key == "DIP28_2764" and (flags & 0x10))
+        or (pinout_key in {"DIP28_2764", "DIP28_2764_8K"} and (flags & 0x10))
     ):
         return "EEPROM", 0x0D, pinout_key
 
@@ -722,10 +726,6 @@ def main():
                 )
                 mem_size = _decoded_view["electrical.size_bytes"]
                 pin_count = _decoded_view["electrical.pin_count"]
-                # The shared 2764/27128 map includes A13 at pin 26. Standard
-                # 8KB 2764/27C64 parts instead have NC there and PGM on pin 27.
-                if pinout_key == "DIP28_2764" and mem_size == 8192:
-                    pinout_key = "DIP28_2764_8K"
                 _d_vpp_mv = _decoded_view["electrical.vpp_mv"]
                 _d_vcc_mv = _decoded_view["electrical.vcc_mv"]
                 _d_vdd_mv = _decoded_view["electrical.vdd_mv"]

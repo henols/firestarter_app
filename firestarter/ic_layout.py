@@ -344,6 +344,10 @@ class EpromSpecBuilder:
             )  # noqa: E501
             if rw_pin is not None and rw_pin <= pin_count:
                 pin_names[rw_pin - 1] = "R/W(WE)"
+            # A UV EPROM drives PGM through rw-pin, so its PGM label wins.
+            for pgm_pin in pin_map_details.get("pgm-pin", []):
+                if pgm_pin <= pin_count:
+                    pin_names[pgm_pin - 1] = "PGM"
             if vpp_pin is not None and vpp_pin <= pin_count:
                 pin_names[vpp_pin - 1] = "VPP"
                 # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different  # noqa: E501

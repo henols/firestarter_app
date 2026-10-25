@@ -60,3 +60,36 @@ class TestDerivedSizeBoundaryFork:
 
     def test_boundary_value_262145_is_one_step_past_the_fork(self):
         assert self._resolve(262145) == "DIP32_STD"
+
+
+class TestDip28_2764PinMapComesFromPmIdx:
+    """infoic.xml <maps> index 21 leaves pin 26 unbonded (2764/27C64) and
+    index 22 bonds it as A13 (27128). pm_idx alone selects the pin map; chip
+    size does not."""
+
+    _SIZES = (8192, 16384, 131072)
+
+    def _resolve(self, pm_idx, mem_size):
+        return build_db.resolve_pinout_key(
+            pin_count=28,
+            variant=0x13,
+            flags_int=0,
+            pm_idx=pm_idx,
+            proto_id=0x07,
+            mem_size=mem_size,
+        )
+
+    @pytest.mark.parametrize("mem_size", _SIZES)
+    def test_pm_idx_21_selects_the_pin_26_nc_map(self, mem_size):
+        assert self._resolve(21, mem_size) == "DIP28_2764_8K"
+
+    @pytest.mark.parametrize("mem_size", _SIZES)
+    def test_pm_idx_22_selects_the_a13_map(self, mem_size):
+        assert self._resolve(22, mem_size) == "DIP28_2764"
+
+    def test_erasable_pm_idx_21_row_is_still_promoted_to_0x0d(self):
+        assert build_db.classify(1, 0x07, 21, 0x10, "DIP28_2764_8K", 8192) == (
+            "EEPROM",
+            0x0D,
+            "DIP28_2764_8K",
+        )
