@@ -259,7 +259,7 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
     from firestarter.exceptions import ProgrammerNotFoundError
 
     fake_ser = _FakeSerial()
-    fake_ser.feed(build_frame(MSG_ERR_NOT_SUPPORTED, bytes([0x00])))
+    fake_ser.feed(build_frame(MSG_ERR_NOT_SUPPORTED, b""))
 
     def mock_init(self, port=None, baud_rate=None, **kwargs):
         self.connection = fake_ser
@@ -288,6 +288,9 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
             )
         # Must NOT raise ProtocolNotImplementedError; must be generic not-found
         assert "No compatible programmer found" in str(exc_info.value)
+        # The board's own refusal is named, so the ERROR frame was read --
+        # a probe timeout raises the same type without it.
+        assert "'Not supported'" in str(exc_info.value)
 
 
 # Test A: PRIMARY proof — fed 0xBB frame -> CLI "Unsupported protocol:", exit 1
