@@ -154,6 +154,33 @@
       "name": "read_2716_vpp_line"
     },
     {
+      "cmd": 1,
+      "fields": {
+        "address": 2048,
+        "algorithm": 7,
+        "memory-size": 2048,
+        "pin-count": 28,
+        "vpp_mv": 12500
+      },
+      "flags": 0,
+      "frame": "f501010000003a000008000000080000000000071c30d400000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
+      "name": "read_address_at_device_end"
+    },
+    {
+      "cmd": 2,
+      "fields": {
+        "address": 1024,
+        "algorithm": 7,
+        "memory-size": 2048,
+        "pin-count": 28,
+        "region-end": 1024,
+        "vpp_mv": 12500
+      },
+      "flags": 0,
+      "frame": "f501020000003a000008000000040000000400071c30d400000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
+      "name": "write_address_at_region_end"
+    },
+    {
       "cmd": 14,
       "fields": {},
       "flags": 0,
@@ -312,6 +339,21 @@
       "frame": "f501010000003a000008000000000000000000071c000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
       "name": "memory_no_vpp",
       "refusal": 10
+    },
+    {
+      "frame": "f501010000003a000008000000080100001000071c30d400000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
+      "name": "read_address_past_device",
+      "refusal": 11
+    },
+    {
+      "frame": "f501020000003a000008000000040100000400071c30d400000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
+      "name": "write_address_past_region",
+      "refusal": 11
+    },
+    {
+      "frame": "f501020000003a00000800ffffffff00000000071c30d400000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
+      "name": "write_address_wraps",
+      "refusal": 11
     }
   ]
 }
