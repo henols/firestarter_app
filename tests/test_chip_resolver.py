@@ -78,7 +78,8 @@ def test_resolve_chip_nmos_graduated_resolves(db):
     pre-Phase-79 DB (M2716 was 'vpp-exceeds-max' and raised ChipNotImplementedError).
     Graduation is best-effort per CONTEXT D-07.
     """
-    result = resolve_chip("M2716", db=db)
+    # INTEL's M2716 row: the bare name also names the SGS-THOMSON and ST rows.
+    result = resolve_chip("M2716@INTEL", db=db)
     assert isinstance(result, dict)
     assert result.get("memory-size", 0) > 0
     # 25V chips dispatch to configure_eprom via protocol 0x0B (EPROM_LEGACY).

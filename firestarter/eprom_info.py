@@ -394,8 +394,16 @@ class EpromConsolePresenter:
 
 
 # --- Helper function for printing EPROM list (for testing/CLI) ---
-def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
+def print_eprom_list_table(
+    eproms_data: list,
+    spec_builder: EpromSpecBuilder,
+    qualified_names: dict[tuple[str, str], str] | None = None,
+):
     """Prints a list of EPROM data in a table format. For CLI/testing.
+
+    A row in `qualified_names` (keyed (manufacturer, name)) can only be named
+    with `@MANUFACTURER`; its Name cell ends in '*' and a line under the table
+    gives an example.
 
     Column layout:
     - Name: dynamic width clamped to [13, 20]; names longer than 20 chars are
@@ -413,18 +421,25 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
     # Compute the widest rendered name (including any [!] suffix) across all rows,
     # then clamp to the [13, 20] range.  Names that would exceed 20 chars are
     # truncated to 19 chars + '…' (ellipsis counts toward the 20-char cap).
-    def _render_name(raw_name: str, has_bus_config: bool) -> str:
+    qualified_names = qualified_names or {}
+
+    def _render_name(raw_name: str, has_bus_config: bool, marked: bool) -> str:
         """Return the name string as it will be rendered in the table cell."""
         name = raw_name
         if not has_bus_config:
             name = (name[:11] + "[!]") if len(name) > 11 else f"{name}[!]"
-        if len(name) > 20:
-            name = name[:19] + "…"  # ellipsis counts toward the 20-char cap
-        return name
+        cap = 19 if marked else 20
+        if len(name) > cap:
+            name = name[: cap - 1] + "…"  # ellipsis counts toward the cap
+        return name + "*" if marked else name
 
-    rendered_names = [
-        _render_name(ic.get("name", ""), bool(ic.get("bus-config")))
+    marked_rows = [
+        (ic.get("manufacturer", ""), ic.get("name", "")) in qualified_names
         for ic in eproms_data
+    ]
+    rendered_names = [
+        _render_name(ic.get("name", ""), bool(ic.get("bus-config")), marked)
+        for ic, marked in zip(eproms_data, marked_rows)
     ]
     name_w = max(13, min(20, max((len(n) for n in rendered_names), default=13)))
 
@@ -462,6 +477,19 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
             f"| {name: <{name_w}}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str_display: <12}| {vpp_str: <5}|"  # noqa: E501
         )
     logger.info(divider)
+    example = next(
+        (
+            qualified_names[(ic.get("manufacturer", ""), ic.get("name", ""))]
+            for ic, marked in zip(eproms_data, marked_rows)
+            if marked
+        ),
+        None,
+    )
+    if example:
+        logger.info(
+            "* This name also selects chips that program differently. "
+            f"Add @MANUFACTURER to choose one, e.g. {example}"
+        )
 
 
 # Standalone test function

@@ -23,7 +23,6 @@ human-input field gates it.
 
 from __future__ import annotations
 
-import datetime
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -45,6 +44,7 @@ from firestarter.chip_test import (
     repeat_policy_tag,
     resolve_error_name,
 )
+from firestarter.timestamps import iso_cet
 
 # ---------------------------------------------------------------------------
 # Module constants -- single sources of truth
@@ -774,8 +774,8 @@ class DiagnosticReport:
     over dataclass fields, so this field's absence from that list is the
     whole exclusion mechanism."""
 
-    def _utc_now(self) -> str:
-        return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    def _now(self) -> str:
+        return iso_cet()
 
     def _auto_capture_dict(self) -> dict[str, Any]:
         ac = self.auto_capture
@@ -1065,7 +1065,7 @@ class DiagnosticReport:
         """
         return {
             "schema_version": SCHEMA_VERSION,
-            "generated": self._utc_now(),
+            "generated": self._now(),
             "elapsed": self.elapsed,
             "auto_capture": self._auto_capture_dict(),
             "transport_health": self._transport_dict(),

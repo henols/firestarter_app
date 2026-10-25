@@ -133,16 +133,19 @@ def test_predicate_matches_real_database_guarded_rows_exactly():
     anywhere in this test."""
     db = EpromDatabase(skip_local_override=True)
 
+    # Each row by the qualified name that selects it alone: a bare part
+    # number shared by several manufacturers is refused as ambiguous.
     expected: set[str] = set()
     all_part_numbers: set[str] = set()
-    for vendor_chips in db.proms.values():
+    for manufacturer, vendor_chips in db.proms.items():
         for chip in vendor_chips:
             part_number = chip.get("part_number", "")
             if not part_number:
                 continue
-            all_part_numbers.add(part_number)
+            name = db.qualified_chip_name(part_number, chip, manufacturer)
+            all_part_numbers.add(name)
             if chip.get("programming", {}).get("algorithm") in GUARDED_PROTOCOL_IDS:
-                expected.add(part_number)
+                expected.add(name)
 
     actual: set[str] = set()
     for name in all_part_numbers:
@@ -240,14 +243,15 @@ def test_every_shipped_nor_unlock_row_resolves_erase_capable():
 
     nor_unlock_rows: set[str] = set()
     all_part_numbers: set[str] = set()
-    for vendor_chips in db.proms.values():
+    for manufacturer, vendor_chips in db.proms.items():
         for chip in vendor_chips:
             part_number = chip.get("part_number", "")
             if not part_number:
                 continue
-            all_part_numbers.add(part_number)
+            name = db.qualified_chip_name(part_number, chip, manufacturer)
+            all_part_numbers.add(name)
             if chip.get("programming", {}).get("algorithm") == NOR_UNLOCK_PROTOCOL_ID:
-                nor_unlock_rows.add(part_number)
+                nor_unlock_rows.add(name)
 
     erase_capable_rows: set[str] = set()
     for name in all_part_numbers:
