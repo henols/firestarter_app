@@ -664,3 +664,39 @@ Sources: `firestarter_app/tools/build_db.py` (`RURP_VPP_CEILING_MV`),
 `firestarter_fw/include/eprom.h`, `firestarter_fw/src/proms/eprom_params.cpp` (the `vpp_path`
 table for each protocol), `firestarter_app/tests/test_vpp_rail_classification.py` and
 `firestarter_app/firestarter/diagnostic_report.py` (`_RAIL_READING_DISCLOSURE`).
+
+---
+
+## 11. Connectivity: `<maps>`, `nc_pins` and the address width
+
+`infoic.xml` has a `<maps>` section of 121 `<map index="N">` records. `pm_idx` (the low byte of
+`pin_map`) is the index into it, as minipro's `get_pin_map()` uses it. Each record has a `<gnd>`
+pin and a `<mask>`: the ZIF-40 pins the programmer connects for that map. A part sits top-justified
+in the socket, so ZIF pin `z` in the lower half is chip pin `z - (40 - pin_count)`.
+`bonded_chip_pins()` does this conversion. GND is not in the mask.
+
+The generator uses the mask in three ways:
+
+- **`nc_pins`.** The address pins of the row's pinout key that the mask leaves unbonded. Example:
+  map 10 (27C010) leaves pin 30 unbonded, so the 27C010 rows on `DIP32_27C020` carry
+  `nc_pins: [30]`. The field is omitted when it is empty, or when the map has an empty mask: map 0,
+  the SRAM/NVRAM cluster, carries no connectivity.
+- **The unbonded-pin gate.** If a control or data pin of the key (`ce-pin`, `oe-pin`, `rw-pin`,
+  `pgm-pin`, `data-bus-pins`), or an address pin inside the chip's address width, is unbonded, the
+  generator stops and writes nothing. This gate found `DIP32_28C512_EEPROM` putting WE on pin 30,
+  which maps 9, 11 and 13 leave unbonded. That key is now `DIP32_28C040`, with WE on pin 31.
+- **The width warning.** If the chip's address width, `(code_memory_size - 1).bit_length()`, is
+  greater than the key's address lines, the generator prints a WARN. Today: the three 27011 rows
+  (page-addressed; henols/firestarter#136) and XICOR X88C64P (not dispatchable).
+
+**`vpp-pin` is exempt from the gate.** Maps 5, 7, 9 and 11 omit pin 1, but the 28F256 to 28F020
+rows on those maps use pin 1 for VPP. So the mask does not describe the VPP pin.
+
+**A map is an upper bound for its smallest member.** One map index covers a family, so a pin that
+only the larger members use shows as bonded for the smaller ones. Example: map 9 bonds pin 2 (A16)
+for the 64K CAT28C512. That is why the host bounds the bus by size, not by the mask:
+`get_bus_config()` keeps only the first `chip_address_width(memory-size)` address lines. Every
+`nc_pins` entry lies beyond its chip's address width (checked over the shipped database), so this
+bound also removes every unbonded pin from the bus, and it never shifts a line to another address
+bit.
+
