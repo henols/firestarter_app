@@ -31,7 +31,8 @@
       "provenance": 2,
       "source": 2,
       "verification_note": 2,
-      "verification_status": 2
+      "verification_status": 2,
+      "nc_pins": 221
     },
     "programming": {
       "algorithm": 746,
@@ -64,6 +65,7 @@
     "datasheet",
     "electrical",
     "infoic_page_size_raw",
+    "nc_pins",
     "page_size",
     "part_number",
     "pin_count",

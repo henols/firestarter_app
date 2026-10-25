@@ -188,6 +188,36 @@ class TestDipToRurpPinTranslation:
             db._merge_pin_maps(db.pin_maps, {"DIP28_2764": {"name": "mine"}})
         assert "DIP28_27128" in caplog.text
 
+    def test_a_dip32_28c512_eeprom_override_warns_that_it_is_unused(self, caplog):
+        db = EpromDatabase(skip_local_override=True)
+        with caplog.at_level(logging.WARNING):
+            db._merge_pin_maps(db.pin_maps, {"DIP32_28C512_EEPROM": {"name": "x"}})
+        assert "DIP32_28C040" in caplog.text
+
+    @pytest.mark.parametrize(
+        ("name", "bus_lines"),
+        [("CAT28C512", 16), ("AT28C010", 17), ("CAT28C020", 18), ("AT28C040", 19)],
+    )
+    def test_28c0x0_strobes_we_on_pin_31_with_its_own_address_width(
+        self, name, bus_lines
+    ):
+        """infoic <maps> 9/11/13 bond pin 31, not pin 30: WE is pin 31."""
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom(name)
+        assert chip["pin-map"] == "DIP32_28C040"
+        assert chip["bus-config"]["rw-pin"] == pin_conversions[32][31]
+        assert len(chip["bus-config"]["bus"]) == bus_lines
+
+    @pytest.mark.parametrize(
+        ("name", "bus_lines"),
+        [("AM27C010", 17), ("AM29F010", 17), ("AM28C17A", 11), ("TMS2764", 13)],
+    )
+    def test_the_bus_stops_at_the_chips_infoic_address_width(self, name, bus_lines):
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom(name)
+        assert len(chip["bus-config"]["bus"]) == bus_lines
+        assert chip["memory-size"] == 1 << bus_lines
+
     def test_dip28_w27c512_bus_has_16_lines(self):
         """W27C512 has 16 address lines (A0-A15) — bus list must have 16 entries."""
         db = EpromDatabase(skip_local_override=True)

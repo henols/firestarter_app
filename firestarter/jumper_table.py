@@ -422,9 +422,9 @@ JUMPER_TABLE: Mapping[str, JumperEntry] = {
         rev20_jp4=Jp4Rev20.OPEN,
         rev22_jp4=Jp4Rev22.NO_JUMPER,
     ),
-    "DIP32_28C512_EEPROM": JumperEntry(
+    "DIP32_28C040": JumperEntry(
         vpp_lands=VppLanding.NONE,
-        pin1_signal="UNASSIGNED",
+        pin1_signal="A18",
         jp1=Jp1.A13,
         jp2=Jp2.A17,
         jp3=Jp3.NO_JUMPER,

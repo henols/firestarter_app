@@ -141,7 +141,12 @@ _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 # function below is the sole pinout-selection path.
 
 with open(PINOUT_FILE) as _f:
-    VALID_PINOUT_KEYS = set(json.load(_f).keys())
+    _PINOUTS = json.load(_f)
+VALID_PINOUT_KEYS = set(_PINOUTS)
+
+# Pin-map fields whose pins the row's infoic <maps> entry must bond. vpp-pin is
+# exempt: maps 5/7/9/11 omit pin 1, which 28F256-28F020 use for VPP.
+_BONDED_PIN_FIELDS = ("ce-pin", "oe-pin", "rw-pin", "pgm-pin", "data-bus-pins")
 
 # 4. PROCESSING FUNCTIONS
 
@@ -161,6 +166,63 @@ def is_24pin_we_vpp_hazard(
         and proto_id in (0x07, 0x08, 0x0B)
         and bool(flags & 0x10)
         and not (pm_idx == 23 and (variant & 0xFF) == 0x10)
+    )
+
+
+def parse_maps(root):
+    """Return {map index: ZIF pins of its mask} from infoic.xml's <maps> section.
+
+    pm_idx (the pin_map low byte) indexes this table. A map with an empty mask
+    (map 0, the SRAM/NVRAM cluster) carries no connectivity and is left out.
+    """
+    maps = {}
+    for m in root.findall(".//maps/map"):
+        mask = (m.findtext("mask") or "").strip()
+        if mask:
+            maps[int(m.get("index"))] = frozenset(int(z) for z in mask.split(","))
+    return maps
+
+
+def bonded_chip_pins(zif_mask, pin_count):
+    """Chip pins that a ZIF-40 mask bonds, for a top-justified part.
+
+    The lower half of the part wraps to the bottom of the socket, so ZIF pin z
+    there is chip pin z - (40 - pin_count).
+    """
+    half = pin_count // 2
+    pins = set()
+    for z in zif_mask:
+        if z <= half:
+            pins.add(z)
+        elif z > 40 - half:
+            pins.add(z - (40 - pin_count))
+    return frozenset(pins)
+
+
+def _pin_list(field):
+    return field if isinstance(field, list) else [field]
+
+
+def nc_address_pins(pinout_key, bonded):
+    """Address-bus pins of pinout_key that the row's infoic map leaves unbonded."""
+    pins = _PINOUTS[pinout_key]["pins"]
+    return [p for p in pins.get("address-bus-pins", []) if p not in bonded]
+
+
+def unbonded_function_pins(pinout_key, bonded):
+    """Control and data pins of pinout_key that the row's infoic map leaves unbonded.
+
+    Any result is a wrong pin map: the host would strobe a pin that is not
+    connected on the chip.
+    """
+    pins = _PINOUTS[pinout_key]["pins"]
+    return sorted(
+        {
+            p
+            for field in _BONDED_PIN_FIELDS
+            for p in _pin_list(pins.get(field, []))
+            if p not in bonded
+        }
     )
 
 
@@ -262,7 +324,9 @@ def resolve_pinout_key(
             if proto_id in {0x05, 0x06}:
                 key = "DIP32_SST39SF040"  # 5V flash; no VPP, WE=31
             elif proto_id == 0x0D:
-                key = "DIP32_28C512_EEPROM"  # 5V EEPROM; WE=30, no VPP
+                # 5V EEPROM; WE=31, no VPP.
+                # [VERIFIED: infoic.xml <maps> 9/11/13 bond pin 31, not pin 30]
+                key = "DIP32_28C040"
             elif proto_id in {0x07, 0x08, 0x10}:
                 if proto_id == 0x08 and variant_lo == 0x03:
                     key = "DIP32_27C801"
@@ -564,6 +628,8 @@ def main():
 
     complete_db = {}
     total_chips = 0
+    infoic_maps = parse_maps(root)
+    _unbonded_failures = []
     _datasheet_overrides = load_datasheet_overrides(DATASHEET_OVERRIDES_FILE)
     _consumed_override_keys = set()
 
@@ -818,6 +884,29 @@ def main():
                     },
                     "pinout": pinout_key,
                 }
+                _address_pins = _PINOUTS[pinout_key]["pins"].get("address-bus-pins", [])
+                _width = (mem_size - 1).bit_length()
+                if pm_idx in infoic_maps:
+                    _bonded = bonded_chip_pins(infoic_maps[pm_idx], pin_count)
+                    # A line inside the chip's address width must be bonded
+                    # too: the host drives A0 .. A(width-1).
+                    _unbonded = unbonded_function_pins(pinout_key, _bonded) + [
+                        p for p in _address_pins[:_width] if p not in _bonded
+                    ]
+                    if _unbonded:
+                        _unbonded_failures.append(
+                            f"{mfg_name}/{name}: {pinout_key} uses pins {_unbonded}, "
+                            f"which infoic map {pm_idx} leaves unbonded"
+                        )
+                    _nc_pins = nc_address_pins(pinout_key, _bonded)
+                    if _nc_pins:
+                        chip_entry["nc_pins"] = _nc_pins
+                if _width > len(_address_pins):
+                    print(
+                        f"WARN: {mfg_name}/{name} needs {_width} address lines; "
+                        f"{pinout_key} gives {len(_address_pins)}",
+                        file=sys.stderr,
+                    )
                 if _unsupported_reason:
                     chip_entry["unsupported_reason"] = _unsupported_reason
 
@@ -891,6 +980,12 @@ def main():
                     f"page_size {emitted_page_size!r}, which is not a power "
                     f"of two in [1, 512] — refusing to write {OUTPUT_FILE}"
                 )
+
+    if _unbonded_failures:
+        print("ERROR: pin maps that use unbonded pins:", file=sys.stderr)
+        for failure in _unbonded_failures:
+            print(f"  {failure}", file=sys.stderr)
+        sys.exit(1)
 
     with open(OUTPUT_FILE, "w") as f:
         json.dump(complete_db, f, indent=2, sort_keys=True)

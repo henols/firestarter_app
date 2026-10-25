@@ -190,7 +190,9 @@ class EpromConsolePresenter:
             pin_count = eprom_details.get("pin-count")
             pinout_key = eprom_details.get("pin-map")
             if pin_count and pinout_key:
-                table = self.db.get_adapter_table(pin_count, pinout_key)
+                table = self.db.get_adapter_table(
+                    pin_count, pinout_key, eprom_details.get("nc-pins", [])
+                )
                 if table:
                     combined_data["adapter_table"] = {
                         "pinout_name": pinout_key,

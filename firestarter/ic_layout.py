@@ -362,9 +362,10 @@ class EpromSpecBuilder:
                 pin_names[oe_pin - 1] = "OE"
 
             if "address-bus-pins" in pin_map_details:
+                nc_pins = eprom_data.get("nc-pins", [])
                 for i, pin_num in enumerate(pin_map_details["address-bus-pins"]):
                     if pin_num <= pin_count:
-                        pin_names[pin_num - 1] = f"A{i}"
+                        pin_names[pin_num - 1] = "NC" if pin_num in nc_pins else f"A{i}"
         else:
             logger.warning(
                 f"No specific pin map '{pin_map_id}' found for {pin_count}-pin {eprom_data.get('name', 'EPROM')}. Displaying generic layout."  # noqa: E501

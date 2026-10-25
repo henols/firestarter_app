@@ -170,7 +170,12 @@ Key fields per chip entry:
 - `pinout` — the DIP pinout key. The shipped database uses 18 keys: `DIP24_2532`, `DIP24_2716`,
   `DIP24_2732`, `DIP24_2816`, `DIP24_6116`, `DIP28_27011`, `DIP28_27128`, `DIP28_27256`,
   `DIP28_27512`, `DIP28_2764`, `DIP28_28C64`, `DIP28_28C256`, `DIP28_JEDEC_SRAM_8K`,
-  `DIP32_27C020`, `DIP32_27C801`, `DIP32_28C512_EEPROM`, `DIP32_SST39SF040` and `DIP32_STD`.
+  `DIP32_27C020`, `DIP32_27C801`, `DIP32_28C040`, `DIP32_SST39SF040` and `DIP32_STD`.
+- `nc_pins` — the address pins of `pinout` that the chip's infoic `<maps>` entry leaves unbonded.
+  The generator omits the field when there are none, or when the map carries no connectivity
+  (map 0). `info` labels these pins `NC`. The host gives the firmware only the address lines of the
+  chip's own size (`memory-size`), so these pins are never on the address bus. See
+  `tools/DECODE-NOTES.md` §11.
 
 `part_number` can hold more than one name in one comma-separated string, for example
 `W27C512,W27E512`. An exact-string match on one part number therefore misses rows. Split the field
@@ -210,8 +215,9 @@ regulator output. `configure_eprom` sets `CTRL_VPP_P1_ENABLE` at 12V on each wri
 affected 28C-family 5V EEPROMs, physical pin 1 is the A14 address line, not VPP. 12V on pin 1
 damages the part.
 
-Rows on `DIP32_28C512_EEPROM` have the upstream `protocol_id` `0x0D`. `classify()` keeps that
-value, so these rows need no promotion.
+Rows on `DIP32_28C040` have the upstream `protocol_id` `0x0D`. `classify()` keeps that value, so
+these rows need no promotion. WE is pin 31: infoic `<maps>` 9, 11 and 13 bond pin 31 and leave
+pin 30 unbonded on the 28C512/28C010. The former `DIP32_28C512_EEPROM` put WE on pin 30.
 
 Seven chips stay on `0x07` and `configure_eprom`, and need 12V VPP: W27C512, SST27SF512,
 SST27VF512, W27C257, W27E257, SST27SF256 and SST27VF256. They are electrically-erasable EEPROMs, not
