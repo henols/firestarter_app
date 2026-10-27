@@ -335,8 +335,8 @@ class FirmwareManager:
         """Router: returns (resolved_version, download_url) or (None, None) on failure.
 
         channel='stable'  → delegates to fetch_latest_release_info (back-compat shim).
-        channel='pre'     → paginates /releases, filters prerelease=True, sorts by PEP 440
-                            descending, takes highest; falls back to stable if none.
+        channel='pre'     → paginates /releases, takes the highest non-draft release by
+                            PEP 440, stable or pre-release; falls back to stable if none.
         channel='pinned'  → fetches /releases/tags/{version} directly.
         """  # noqa: E501
         if channel == "stable":
@@ -374,10 +374,12 @@ class FirmwareManager:
                 logger.error(f"Failed to fetch releases for pre-release channel: {e}")
                 return None, None
 
-            # Filter: prerelease=True AND draft=False, skip unparseable tags.
+            # Every non-draft release, stable or pre-release, as `pip --pre`
+            # does: a stable 3.2.2 must win over an older 3.1.1b2. Skip
+            # unparseable tags.
             candidates = []
             for r in all_releases:
-                if not r.get("prerelease") or r.get("draft"):
+                if r.get("draft"):
                     continue
                 tag = r.get("tag_name", "")
                 try:
@@ -387,7 +389,7 @@ class FirmwareManager:
 
             if not candidates:
                 logger.info(
-                    "No pre-release firmware available — falling back to stable "
+                    "No firmware release with a parseable tag — falling back to stable "
                     "(matches pip --pre semantics)."
                 )
                 return self.fetch_latest_release_info(board=board)
@@ -787,7 +789,7 @@ class FirmwareManager:
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
 
         channel='stable'  → uses /releases/latest (default, INST-01 non-regression).
-        channel='pre'     → selects highest pre-release.
+        channel='pre'     → selects the highest release, stable or pre-release.
         channel='pinned'  → uses exact tag from pinned_version.
         """  # noqa: E501
         connected_port, current_version, current_board = self.check_current_firmware(

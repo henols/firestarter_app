@@ -370,38 +370,42 @@ class TestFirmwareInstallPreRelease:
         assert version == "3.1.0rc1"
         assert "uno_rc1.hex" in url
 
-    def test_pre_falls_back_to_stable_when_no_prerelease(self, monkeypatch, caplog):
-        """INST-02 / D-05 — fallback to stable when no pre-release exists.
-
-        If the paginated releases contain no prerelease=True entries, the method
-        must silently fall back to /releases/latest and log INFO about the fallback.
-
-        RED today: FirmwareManager has no fetch_release_info — AttributeError.
-        """
-        stable_only = mock_releases_factory([_STABLE_RELEASE_UNO])
-        stable_latest_mock = mock_releases_factory([])
-        stable_latest_mock.json.return_value = _STABLE_RELEASE_UNO
-
-        call_count = [0]
-
-        def multi_response_get(url, **kw):
-            call_count[0] += 1
-            if "latest" in url:
-                return stable_latest_mock
-            return stable_only
-
-        monkeypatch.setattr(firmware.requests, "get", multi_response_get)
+    def test_pre_takes_stable_when_no_prerelease(self, monkeypatch):
+        """With no pre-release in the list, the pre channel takes the stable one."""
+        monkeypatch.setattr(
+            firmware.requests,
+            "get",
+            lambda url, **kw: mock_releases_factory([_STABLE_RELEASE_UNO]),
+        )
         fm = FirmwareManager(config_manager=MagicMock())
-        with caplog.at_level(logging.INFO):
-            version, url = fm.fetch_release_info(channel="pre", board="uno")
-        # Falls back to stable release
+        version, url = fm.fetch_release_info(channel="pre", board="uno")
         assert version == "3.0.0"
-        assert url is not None
-        # Must log something about falling back to stable
-        lower_records = [r.message.lower() for r in caplog.records]
-        assert any(
-            "fall" in m or "stable" in m or "no pre" in m for m in lower_records
-        ), f"Expected a fallback log record; got: {[r.message for r in caplog.records]}"
+        assert url == "https://example.com/uno_stable.hex"
+
+    def test_pre_takes_a_newer_stable_over_an_older_prerelease(self, monkeypatch):
+        """Like `pip --pre`: stable 3.2.2 wins over pre-release 3.1.1b2."""
+
+        def release(tag, prerelease):
+            return {
+                "tag_name": tag,
+                "prerelease": prerelease,
+                "draft": False,
+                "assets": [
+                    {
+                        "name": "firestarter_uno.hex",
+                        "browser_download_url": f"https://example.com/{tag}.hex",
+                    }
+                ],
+            }
+
+        releases = [release("3.2.2", False), release("3.1.1b2", True)]
+        monkeypatch.setattr(
+            firmware.requests, "get", lambda url, **kw: mock_releases_factory(releases)
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        version, url = fm.fetch_release_info(channel="pre", board="uno")
+        assert version == "3.2.2"
+        assert url == "https://example.com/3.2.2.hex"
 
     def test_pre_filters_draft_releases(self, monkeypatch):
         """INST-02 / D-03 — draft releases are excluded from pre-release candidates.
