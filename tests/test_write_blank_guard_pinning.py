@@ -144,7 +144,10 @@ def test_predicate_matches_real_database_guarded_rows_exactly():
                 continue
             name = db.qualified_chip_name(part_number, chip, manufacturer)
             all_part_numbers.add(name)
-            # resolve_chip refuses a row whose pin map cannot reach its size.
+            # resolve_chip refuses a row that is not supported, and a row
+            # whose pin map cannot reach its size.
+            if chip.get("support_status", "supported") != "supported":
+                continue
             mapped = db.map_chip_record(chip, manufacturer)
             bus = mapped.get("bus-config", {}).get("bus", [])
             if bus and mapped["memory-size"] > 1 << len(bus):

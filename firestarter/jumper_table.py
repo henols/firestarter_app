@@ -401,6 +401,16 @@ JUMPER_TABLE: Mapping[str, JumperEntry] = {
         rev20_jp4=Jp4Rev20.OPEN,
         rev22_jp4=Jp4Rev22.NO_JUMPER,
     ),
+    # Pins 1, 28, 30 and 32 have the DIP32_27C020 functions; only pins 2 and 24 differ.
+    "DIP32_27C301": JumperEntry(
+        vpp_lands=VppLanding.SOCKET_1,
+        pin1_signal="VPP",
+        jp1=Jp1.A13,
+        jp2=Jp2.A17,
+        jp3=Jp3.PIN32,
+        rev20_jp4=Jp4Rev20.OPEN,
+        rev22_jp4=Jp4Rev22.NO_JUMPER,
+    ),
     # VPP shares OE. Chip pin 1 is A19. The JP5 gate (jp5_gate.py) controls write and erase.
     "DIP32_27C801": JumperEntry(
         vpp_lands=VppLanding.OE,

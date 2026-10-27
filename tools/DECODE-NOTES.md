@@ -46,12 +46,13 @@ These are the `variant_lo` values that `resolve_pinout_key` switches on:
 | 23 (24-pin) | else (`0x00`) | `DIP24_2716` | 2KB UV-EPROM |
 | 22 (28-pin) | `0x10` | `DIP28_27512` | **VPP on pin 22** (OE/VPP shared) |
 | 22 (28-pin) | `0x11` | `DIP28_27256` | **VPP on pin 1** |
-| 22 (28-pin) | else, `pin_map` `0x90000c16` | `DIP28_27011` | 27011 page-addressed EPROM. Only the 27011 rows carry this `pin_map` in the cluster. Paging is not implemented (henols/firestarter#136). |
+| 22 (28-pin) | else, `pin_map` `0x90000c16` | `DIP28_27011` | 27011 page-addressed EPROM. Only the 27011 rows carry this `pin_map` in the cluster. Paging is not implemented (henols/firestarter#136), so the generator marks these rows `protocol-not-implemented`: the map has fewer address lines than the size needs. |
 | 22 (28-pin) | else | `DIP28_27128` | 27128 / 27C128 layout. `<maps>` index 22 bonds pin 26 as A13. |
 | 21 (28-pin) | any | `DIP28_2764` | 2764 / 27C64 layout. `<maps>` index 21 leaves pin 26 unbonded. |
 | 12 (32-pin) | `0x03` | `DIP32_27C801` | 1 MB 27C080 / M27C801 class. **A19 on pin 1**, VPP on pin 24 shared with /OE. |
 | 12 (32-pin) | `0x02` | `DIP32_STD` | 512 KB 27C040 class. Pin 1 = VPP, pin 31 = A18. |
-| 12 (32-pin) | else | `DIP32_27C020` through the residual `_PGM_ON_PIN31_MAX_SIZE` size arm | The `0x00`, `0x01` and `0x04` classes. The size threshold still separates them (see below). |
+| 12 (32-pin) | `0x00` | `DIP32_27C301` | Mask-ROM-compatible 27C301 / 27C1000 class: MBM27C1000, MBM27C2000, HN27C301G, HN27C301AG, M27C1000. **OE on pin 2, A16 on pin 24**, the JEDEC pins swapped. The shield drives pin 24 as OE, so the generator marks these rows `adapter-required` (henols/firestarter#70). |
+| 12 (32-pin) | else | `DIP32_27C020` through the residual `_PGM_ON_PIN31_MAX_SIZE` size arm | The `0x01` class, and the `0x00` and `0x04` classes of the other maps. The size threshold still separates them (see below). |
 
 **The 32-pin `proto_id == 0x08` cluster.** An earlier rule ignored `variant_lo` in this cluster and
 used a `mem_size` threshold. That rule put every chip above 256 KB on `DIP32_STD` with
@@ -394,6 +395,11 @@ With the completed table they decode to 1800 mV. A 1.8 V program rail is not cre
 `UNSOURCED` entries in `tools/datasheet_overrides.json` hold that value. Index `0x06` stays in the
 table.
 
+**The VPP byte gives the same kind of value.** `W27E257` has VPP index `0x80`, which decodes to
+13500 mV. Its datasheet (`datasheets/W27E257.pdf`, Revision A3, page 7) gives a program voltage of
+11.75-12.25 V, and 14 V (VPE) only for erase. The `WINBOND/W27E257` entry in
+`tools/datasheet_overrides.json` holds the row at 12000 mV (henols/firestarter#23).
+
 ### 9.4 The evidence
 
 **The positive match.** Five datasheets give a program VCC of 6.0 V ± 0.25 V. Three are Fujitsu:
@@ -621,7 +627,7 @@ The filter is every row with `electrical.vpp_mv` at 18000 mV or more. The map is
 | direct-vpe | 25000 mV | SGS-THOMSON | ETC2716,M2716 | 0x0B | DIP24_2716 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 25000 mV | ST | ETC2716,M2716 | 0x0B | DIP24_2716 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2516 | 0x0B | DIP24_2716 | Hardcoded in the supplement (`tools/extra_chips.json`), `UNVERIFIED`, no write proof. Not from the decode or the override file. |
-| direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2532 | 0x0B | DIP24_2532 | Hardcoded in the supplement (`tools/extra_chips.json`), `UNVERIFIED`, no write proof. Not from the decode or the override file. |
+| direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2532 | 0x0B | DIP24_2532 | Hardcoded in the supplement (`tools/extra_chips.json`), `UNVERIFIED`, no write proof. Not from the decode or the override file. `adapter-required`: the shield drives its pin 18 (A11) as CE. |
 | direct-vpe | 21000 mV | SGS-THOMSON | M2732A | 0x0B | DIP24_2732 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 21000 mV | ST | M2732A | 0x0B | DIP24_2732 | An `UNSOURCED` override entry holds it. No datasheet citation. |
 | direct-vpe | 18000 mV | AMD | AM2716 | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |

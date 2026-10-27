@@ -222,15 +222,23 @@ def test_path_histogram_has_no_unmapped_algorithm() -> None:
     )
 
 
+# The 2532: the shield drives its pin 18 (A11) as CE.
+_EXPECTED_NOT_SUPPORTED = {"adapter-required": 1}
+
+
 def test_every_row_in_the_census_is_supported() -> None:
     """D-01: every row in the census carries support_status ==
-    "supported". Nothing in this phase moves a support_status; this
-    assertion is what would catch it if something did.
+    "supported", except the `_EXPECTED_NOT_SUPPORTED` rows. This assertion
+    is what catches a moved support_status.
     """
     rows, _, _, status_histogram = _census(_load_db())
 
-    assert status_histogram == {"supported": len(rows)}, (
-        f"expected every row 'supported', measured {status_histogram}"
+    expected = {
+        "supported": len(rows) - sum(_EXPECTED_NOT_SUPPORTED.values()),
+        **_EXPECTED_NOT_SUPPORTED,
+    }
+    assert status_histogram == expected, (
+        f"expected the status histogram {expected}, measured {status_histogram}"
     )
 
 
@@ -427,18 +435,20 @@ def test_rewriting_support_status_breaks_the_all_supported_claim() -> None:
     """
     db = _load_db()
     mutated = copy.deepcopy(db)
-    rows, _, _, _ = _census(mutated)
-    some_chip = rows[0][1]
+    rows, _, _, before = _census(mutated)
+    some_chip = next(c for _, c in rows if c["support_status"] == "supported")
     some_chip["support_status"] = "adapter-required"
 
-    mutated_rows, _, _, mutated_status_histogram = _census(mutated)
+    _, _, _, mutated_status_histogram = _census(mutated)
 
-    assert mutated_status_histogram != {"supported": len(mutated_rows)}, (
+    assert mutated_status_histogram != before, (
         f"rewriting one row's support_status, in an in-memory deep copy, "
-        f"must break the all-supported claim, measured "
-        f"{mutated_status_histogram}"
+        f"must move the status histogram, measured {mutated_status_histogram}"
     )
-    assert mutated_status_histogram.get("adapter-required") == 1
+    assert (
+        mutated_status_histogram.get("adapter-required")
+        == before.get("adapter-required", 0) + 1
+    )
 
 
 _REQUIRED_TEST_NAMES = (

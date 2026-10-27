@@ -175,5 +175,12 @@
     "fields": {
       "electrical.vdd_mv": { "was": 1800, "is": 5000 }
     }
+  },
+  "WINBOND/W27E257": {
+    "datasheet": "datasheets/W27E257.pdf",
+    "note": "Winbond W27E257 datasheet, Revision A3, January 1997, page 7, DC PROGRAMMING CHARACTERISTICS: VPP Program Voltage 11.75/12.0/12.25 V and VCC Supply Voltage (Program) 4.5/5.0/5.5 V. The TABLE OF OPERATING MODES on page 3 gives VPP = 12V for Program and Program Verify, and VPE = 14V only for Erase and Erase Verify. The features list on page 1 reads '+14V erase/+12V programming voltage'. The decoded 13500 mV (voltages index 0x80) is above the 12.25 V program maximum. Absolute maximum VPP is 14.5 V (page 4). Reported in henols/firestarter#23.",
+    "fields": {
+      "electrical.vpp_mv": { "was": 13500, "is": 12000 }
+    }
   }
 }

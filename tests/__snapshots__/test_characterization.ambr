@@ -595,6 +595,8 @@
   Eprom Info          
   Name:               MBM27C1000P,MBM27C1000
   Manufacturer:       FUJITSU
+  Support status:      adapter-required
+  Reason:              adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins.
   Number of pins:     32
   Memory size         0x20000
   Type:               UV-EPROM
@@ -610,14 +612,14 @@
          32-DIP package
           -----v-----
     VPP -|  1     32 |- VCC   
-    A16 -|  2     31 |- PGM   
+    OE  -|  2     31 |- PGM   
     A15 -|  3     30 |- A17   
     A12 -|  4     29 |- A14   
     A7  -|  5     28 |- A13   
     A6  -|  6     27 |- A8    
     A5  -|  7     26 |- A9    
     A4  -|  8     25 |- A11   
-    A3  -|  9     24 |- OE    
+    A3  -|  9     24 |- A16   
     A2  -| 10     23 |- A10   
     A1  -| 11     22 |- CE    
     A0  -| 12     21 |- D7    
@@ -1441,6 +1443,7 @@
   | TC54256AF,TC54256AP | TOSHIBA/KIOXIA   |   28 | 0x98C4     | UV-EPROM    | 12.0v|
   | TC57256D            | TOSHIBA/KIOXIA   |   28 | 0x9845     | UV-EPROM    | 13.0v|
   | TC57512AD           | TOSHIBA/KIOXIA   |   28 | 0x9885     | UV-EPROM    | 13.0v|
+  | TMM27128AD,TMM27128…| TOSHIBA/KIOXIA   |   28 | 0x98D3     | UV-EPROM    | 12.5v|
   | WE128K8             | WED              |   32 |            | Flash/EEPROM| -    |
   | WE256K8             | WED              |   32 |            | Flash/EEPROM| -    |
   | WE512K8             | WED              |   32 |            | Flash/EEPROM| -    |
@@ -1450,7 +1453,7 @@
   | W27C04,W27C040,W27E…| WINBOND          |   32 | 0xDA86     | EEPROM      | 12.0v|
   | W27C257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   | W27C512,W27E512     | WINBOND          |   28 | 0xDA08     | EEPROM      | 12.0v|
-  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 13.5v|
+  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   | W29C010,W29C011,W29…| WINBOND          |   32 | 0xDAC1     | Flash/EEPROM| -    |
   | W29C020,W29C020C,W2…| WINBOND          |   32 | 0xDA45     | Flash/EEPROM| -    |
   | W29C040,W29C042     | WINBOND          |   32 | 0xDA46     | Flash/EEPROM| -    |
@@ -1579,7 +1582,7 @@
   | W27C04,W27C040,W27E…| WINBOND          |   32 | 0xDA86     | EEPROM      | 12.0v|
   | W27C257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   | W27C512,W27E512     | WINBOND          |   28 | 0xDA08     | EEPROM      | 12.0v|
-  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 13.5v|
+  | W27E257             | WINBOND          |   28 | 0xDA02     | EEPROM      | 12.0v|
   +---------------------+------------------+------+------------+-------------+------+
   
   '''

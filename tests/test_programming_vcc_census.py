@@ -90,10 +90,13 @@ _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _OVERRIDES_FILE = _FA_DIR / "tools" / "datasheet_overrides.json"
 
-_EXPECTED_DATABASE_ROWS = 748
-_EXPECTED_VDD_HISTOGRAM = {5500: 162, 6000: 12, 6250: 7, 6500: 105}
-_EXPECTED_ALGORITHM_HISTOGRAM = {7: 163, 8: 102, 11: 21}
+_EXPECTED_DATABASE_ROWS = 749
+_EXPECTED_VDD_HISTOGRAM = {5500: 162, 6000: 13, 6250: 7, 6500: 105}
+_EXPECTED_ALGORITHM_HISTOGRAM = {7: 164, 8: 102, 11: 21}
 _EXPECTED_VENDOR_COUNT = 34
+# The 27C301 / 27C1000 rows and the 2532: the shield drives an address pin
+# of theirs as OE or CE. The 27011 rows: their pin map reaches 16 KB of 128 KB.
+_EXPECTED_NOT_SUPPORTED = {"adapter-required": 6, "protocol-not-implemented": 3}
 _VOLT03_VCC_MV = 5500
 _EXPECTED_VOLT03_ROWS = 28
 _EXPECTED_DATASHEET_CITED_KEYS = (
@@ -109,11 +112,15 @@ _EXPECTED_SUPPLEMENT_KEYS = (
     "MITSUBISHI/M5L2764K",
     "TEXAS INSTRUMENTS/2516",
     "TEXAS INSTRUMENTS/2532",
+    "TOSHIBA/KIOXIA/TMM27128AD",
 )
 
 _EXPECTED_TOTAL_ROWS = sum(_EXPECTED_VDD_HISTOGRAM.values())
 _EXPECTED_TYPE_HISTOGRAM = {"UV-EPROM": _EXPECTED_TOTAL_ROWS}
-_EXPECTED_STATUS_HISTOGRAM = {"supported": _EXPECTED_TOTAL_ROWS}
+_EXPECTED_STATUS_HISTOGRAM = {
+    "supported": _EXPECTED_TOTAL_ROWS - sum(_EXPECTED_NOT_SUPPORTED.values()),
+    **_EXPECTED_NOT_SUPPORTED,
+}
 _EXPECTED_PURE_DECODE_ROWS = (
     _EXPECTED_TOTAL_ROWS
     - len(_EXPECTED_DATASHEET_CITED_KEYS)
@@ -194,10 +201,9 @@ def test_row_total_and_vdd_histogram_match_the_live_database() -> None:
 
 
 def test_every_elevated_row_is_a_supported_uv_eprom() -> None:
-    """D-01: every census row is `support_status: supported` and
-    `electrical.type: UV-EPROM`, with zero exceptions. Nothing in this
-    phase moves a `support_status` or a `type`; this is the assertion that
-    would catch it if something did.
+    """D-01: every census row is `electrical.type: UV-EPROM`, and every row is
+    `support_status: supported` except the `_EXPECTED_NOT_SUPPORTED` rows.
+    This is the assertion that catches a moved `support_status` or `type`.
     """
     _, _, _, type_histogram, status_histogram = _census(_load_db())
 
@@ -205,7 +211,8 @@ def test_every_elevated_row_is_a_supported_uv_eprom() -> None:
         f"expected every elevated row 'UV-EPROM', measured {type_histogram}"
     )
     assert status_histogram == _EXPECTED_STATUS_HISTOGRAM, (
-        f"expected every elevated row 'supported', measured {status_histogram}"
+        f"expected the status histogram {_EXPECTED_STATUS_HISTOGRAM}, "
+        f"measured {status_histogram}"
     )
 
 
@@ -455,17 +462,19 @@ def test_rewriting_a_support_status_breaks_the_all_supported_claim() -> None:
     db = _load_db()
     mutated = copy.deepcopy(db)
     rows, _, _, _, _ = _census(mutated)
-    some_chip = rows[0][1]
+    some_chip = next(c for _, c in rows if c["support_status"] == "supported")
     some_chip["support_status"] = "adapter-required"
 
-    mutated_rows, _, _, _, mutated_status_histogram = _census(mutated)
+    _, _, _, _, mutated_status_histogram = _census(mutated)
 
-    assert mutated_status_histogram != {"supported": len(mutated_rows)}, (
+    assert mutated_status_histogram != _EXPECTED_STATUS_HISTOGRAM, (
         f"rewriting one row's support_status, in an in-memory deep copy, "
-        f"must break the all-supported claim, measured "
-        f"{mutated_status_histogram}"
+        f"must move the status histogram, measured {mutated_status_histogram}"
     )
-    assert mutated_status_histogram.get("adapter-required") == 1
+    assert (
+        mutated_status_histogram.get("adapter-required")
+        == _EXPECTED_STATUS_HISTOGRAM.get("adapter-required", 0) + 1
+    )
 
 
 _REQUIRED_TEST_NAMES = (
@@ -483,7 +492,7 @@ _REQUIRED_TEST_NAMES = (
 )
 
 _DEFINITION_GUARD_COUNTS = {
-    "_EXPECTED_DATABASE_ROWS" + " = 748": 1,
+    "_EXPECTED_DATABASE_ROWS" + " = 749": 1,
     "_EXPECTED_VDD_HISTOGRAM" + " = {": 1,
     "_EXPECTED_ALGORITHM_HISTOGRAM" + " = {": 1,
     "_EXPECTED_VENDOR_COUNT" + " = 34": 1,

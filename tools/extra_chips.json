@@ -29,9 +29,10 @@
       "datasheet": "firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf",
       "provenance": "VAR-05 / D-10 — TI 2532 is a physically real 4KB 24-pin UV-EPROM with a NON-JEDEC pinout (2532 != JEDEC 2732); absent from minipro infoic.xml. The 2516_EPROM.pdf is the TI 2500-series UV-EPROM family datasheet covering the 2516/2532 lineage; VPP=pin 21 / A11=pin 18 / !PD-PGM=pin 20 distinguishes the 2532 from the DIP24_2732 layout. Modeled by the new DIP24_2532 pinout entry. Carries the same UNVERIFIED posture as the 2516 row (no on-hand bench proof).",
       "part_number": "2532",
-      "support_status": "supported",
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 18 as CE and pin 20 as OE, but on the 2532 pin 18 is A11 and pin 20 is PD/PGM. The shield cannot drive A11, so only the lower 2 KB can be addressed, and the program pulse would go to A11. An adapter must move those pins.",
       "verification_status": "UNVERIFIED",
-      "verification_note": "SAFE-04 / D-11: resolvable for read/info but NOT write-graduated — no on-hand 2532 silicon was bench-tested. Non-JEDEC 24-pin oddball; the DIP24_2532 pinout is a tentative leaf layout requiring bench validation. VPP lands on pin 21 (DIP24_2532 vpp-pin) per the TI family datasheet — the GATE-03 structural VPP guard is satisfied.",
+      "verification_note": "SAFE-04 / D-11: no on-hand 2532 silicon was bench-tested. Non-JEDEC 24-pin oddball; the DIP24_2532 pinout is a tentative leaf layout requiring bench validation. VPP lands on pin 21 (DIP24_2532 vpp-pin) per the TI family datasheet — the GATE-03 structural VPP guard is satisfied. Socket pin 18 is the shield's CE driver, not an address latch, so host 3.2.4 sent bus line 256 (ROM_CE) for A11; firmware 3.2.1 truncated it to line 0, and later firmware refuses the frame. resolve_chip now refuses the row on its status.",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -105,6 +106,35 @@
         "infoic_page_size_raw": 0
       },
       "pinout": "DIP28_2764"
+    }
+  ],
+  "TOSHIBA/KIOXIA": [
+    {
+      "source": "non-upstream-supplement",
+      "datasheet": "datasheets/TMM27128AD.pdf",
+      "provenance": "Physically real 28-pin NMOS UV-EPROM (Toshiba TMM27128AD, 16384 x 8), absent from minipro infoic.xml, whose TOSHIBA/KIOXIA section has no 27128-class part. Datasheet attached to henols/firestarter#73 by the reporter, vendored as datasheets/TMM27128AD.pdf (Toshiba pages G-27 to G-36). Page G-27: pin 1 VPP, pin 20 CE, pin 22 OE, pin 26 A13, pin 27 PGM, pin compatible with i27128A (DIP28_27128). Page G-30 HIGH SPEED PROGRAM OPERATION: VCC 5.75/6.0/6.25 V, VPP 12.0/12.5/13.0 V, tPW 0.95/1.0/1.05 ms. Page G-33/G-34: 1 ms PGM pulses verified after each, up to 25 times, then an over-program pulse of 3 times the pulses used. Page G-35 ELECTRIC SIGNATURE MODE: manufacturer code 98, device code D3. Read VCC 5 V (page G-28).",
+      "part_number": "TMM27128AD,TMM27128AD-15,TMM27128AD-150,TMM27128AD-20,TMM27128AD-200",
+      "support_status": "supported",
+      "verification_status": "UNVERIFIED",
+      "verification_note": "Resolvable for read/info. No working sample has been tested: the chip reported in henols/firestarter#73 was dead. The datasheet program VCC is 6.0 V, but the shield holds VCC at 5 V, and the firmware does not send the over-program pulse.",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 16384,
+        "pin_count": 28,
+        "vpp_mv": 12500,
+        "vcc_mv": 5000,
+        "vdd_mv": 6000
+      },
+      "programming": {
+        "algorithm": 7,
+        "pulse_duration_us": 1000,
+        "chip_id_check": true,
+        "chip_id_value": "0x000098d3",
+        "protect_off_before": false,
+        "protect_on_after": false,
+        "infoic_page_size_raw": 0
+      },
+      "pinout": "DIP28_27128"
     }
   ]
 }

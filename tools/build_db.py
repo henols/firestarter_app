@@ -148,6 +148,11 @@ VALID_PINOUT_KEYS = set(_PINOUTS)
 # exempt: maps 5/7/9/11 omit pin 1, which 28F256-28F020 use for VPP.
 _BONDED_PIN_FIELDS = ("ce-pin", "oe-pin", "rw-pin", "pgm-pin", "data-bus-pins")
 
+# Chip pins {pin_count: (CE, OE)} that the shield wires to its CE and OE
+# drivers. Must agree with ROM_CE / ROM_OE in firestarter/database.py
+# pin_conversions.
+SHIELD_CE_OE_PINS = {24: (18, 20), 28: (20, 22), 32: (22, 24)}
+
 # 4. PROCESSING FUNCTIONS
 
 
@@ -224,6 +229,23 @@ def unbonded_function_pins(pinout_key, bonded):
             if p not in bonded
         }
     )
+
+
+def shield_misdriven_pins(pinout_key, pin_count, address_lines):
+    """Chip pins of pinout_key that the shield cannot drive with their function.
+
+    The shield wires one socket position per package to its CE driver and one
+    to its OE driver, not to an address latch (ROM_CE / ROM_OE in
+    firestarter/database.py pin_conversions). A layout whose CE or OE is on
+    another pin, or that uses one of those two pins for one of its first
+    address_lines address lines, needs an adapter.
+    """
+    ce, oe = SHIELD_CE_OE_PINS[pin_count]
+    pins = _PINOUTS[pinout_key]["pins"]
+    bad = {p for p in pins.get("address-bus-pins", [])[:address_lines] if p in (ce, oe)}
+    for field, driver in (("ce-pin", ce), ("oe-pin", oe)):
+        bad.update(p for p in _pin_list(pins.get(field, [])) if p != driver)
+    return sorted(bad)
 
 
 def address_width(mem_size):
@@ -344,6 +366,14 @@ def resolve_pinout_key(
                     key = "DIP32_27C801"
                 elif proto_id == 0x08 and variant_lo == 0x02:
                     key = "DIP32_STD"
+                elif proto_id == 0x08 and pm_idx == 12 and variant_lo == 0x00:
+                    # Mask-ROM-compatible 27C301 / 27C1000 layout: OE on pin 2,
+                    # A16 on pin 24. variant_lo 0x01 in the same map is the
+                    # JEDEC 27C020 layout (A16 on pin 2, OE on pin 24).
+                    # [VERIFIED: infoic.xml — pm_idx 12 / proto 0x08 /
+                    #  variant_lo 0x00 is MBM27C1000, MBM27C2000, HN27C301G,
+                    #  HN27C301AG and M27C1000 only]
+                    key = "DIP32_27C301"
                 elif proto_id == 0x08 and address_width(mem_size) <= 18:
                     # Pin 31 is PGM up to 18 address bits and A18 above.
                     key = "DIP32_27C020"
@@ -834,6 +864,35 @@ def main():
                     proto_id = NON_DISPATCHABLE_ALGO
                     _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
 
+                # A layout whose CE, OE or address lines sit on the wrong
+                # socket pins for the shield's CE/OE drivers cannot be driven
+                # in place: resolve_chip refuses it, and the info output says why.
+                _misdriven = shield_misdriven_pins(
+                    pinout_key, pin_count, address_width(mem_size)
+                )
+                if _support_status == "supported" and _misdriven:
+                    _ce_pin, _oe_pin = SHIELD_CE_OE_PINS[pin_count]
+                    _support_status = "adapter-required"
+                    _unsupported_reason = (
+                        f"adapter required: the shield drives chip pin {_ce_pin} "
+                        f"as CE and pin {_oe_pin} as OE, but pin map {pinout_key} "
+                        f"needs other functions on pins {_misdriven}. An adapter "
+                        f"must move those pins."
+                    )
+
+                # A pin map with fewer address lines than the chip's size needs
+                # reaches only part of the chip (the 27011 pages the rest in).
+                # resolve_chip refuses the row; the status says so too.
+                _map_lines = len(_PINOUTS[pinout_key]["pins"].get("address-bus-pins", []))
+                if _support_status == "supported" and address_width(mem_size) > _map_lines:
+                    _support_status = "protocol-not-implemented"
+                    _unsupported_reason = (
+                        f"protocol not implemented: pin map {pinout_key} gives "
+                        f"{_map_lines} address lines, which reach {1 << _map_lines} "
+                        f"of the chip's {mem_size} bytes. The programmer implements "
+                        f"no way to reach the rest."
+                    )
+
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
                     # alias may carry an @PACKAGE suffix (e.g.,
@@ -968,6 +1027,24 @@ def main():
         for mfg_name, extra_chips in extra_db.items():
             if not isinstance(extra_chips, list):
                 continue
+            # A supplement row arrives fully specified, so the generator does
+            # not set its status. It refuses one that says supported on a
+            # pin map the shield cannot drive.
+            for extra in extra_chips:
+                _extra_pins = extra["electrical"]["pin_count"]
+                _misdriven = shield_misdriven_pins(
+                    extra["pinout"],
+                    _extra_pins,
+                    address_width(extra["electrical"]["size_bytes"]),
+                )
+                if _misdriven and extra.get("support_status") == "supported":
+                    raise ValueError(
+                        f"{mfg_name}/{extra['part_number']}: supported in "
+                        f"{EXTRA_CHIPS_FILE}, but pin map {extra['pinout']} needs "
+                        f"other functions on pins {_misdriven}, which the shield "
+                        f"drives as CE/OE {SHIELD_CE_OE_PINS[_extra_pins]} -- "
+                        f"refusing to write {OUTPUT_FILE}"
+                    )
             complete_db.setdefault(mfg_name, []).extend(extra_chips)
             supplement_count += len(extra_chips)
         print(

@@ -213,12 +213,83 @@ class TestDip24_2816Family:
             assert chip["programming"]["page_size"] == expected, chip["part_number"]
             assert chip["programming"]["infoic_page_size_raw"] == expected
 
-    def test_no_row_in_the_database_is_adapter_required(self):
-        assert not [
+    def test_no_row_of_the_family_is_adapter_required(self):
+        assert not [c for _, c in self._rows() if c["support_status"] != "supported"]
+
+
+class TestShieldDrivesCeAndOeInPlace:
+    """The shield wires one socket pin to its CE driver and one to its OE
+    driver. A pin map with CE, OE or an address line elsewhere needs an
+    adapter, so the generator emits adapter-required for it."""
+
+    def test_the_driver_pins_agree_with_the_host_pin_conversions(self):
+        from firestarter.database import ROM_CE, ROM_OE, pin_conversions
+        from tools import build_db
+
+        for pins, (ce, oe) in build_db.SHIELD_CE_OE_PINS.items():
+            assert pin_conversions[pins][ce] == ROM_CE
+            assert pin_conversions[pins][oe] == ROM_OE
+            assert [
+                p for p, line in pin_conversions[pins].items() if line == ROM_CE
+            ] == [ce]
+            assert [
+                p for p, line in pin_conversions[pins].items() if line == ROM_OE
+            ] == [oe]
+
+    def test_only_the_27c301_layout_is_misdriven(self):
+        from tools import build_db
+
+        misdriven = {
+            key: build_db.shield_misdriven_pins(key, int(key[3:5]), 20)
+            for key in build_db.VALID_PINOUT_KEYS
+        }
+        # DIP24_2532 is used only by the extra_chips.json 2532 row, which the
+        # generator does not decode; the merge refuses it unless it says
+        # adapter-required.
+        assert {k: v for k, v in misdriven.items() if v} == {
+            "DIP32_27C301": [2, 24],
+            "DIP24_2532": [18, 20],
+        }
+
+    def test_an_address_line_on_a_driver_pin_counts_only_inside_the_chip_width(self):
+        from tools import build_db
+
+        assert build_db.shield_misdriven_pins("DIP24_2532", 24, 11) == [20]
+
+    def test_the_27c301_rows_are_adapter_required(self):
+        rows = [
             c
             for _, c in _all_chips(_load_db())
             if c["support_status"] == "adapter-required"
         ]
+        assert sorted(c["part_number"] for c in rows) == [
+            "2532",
+            "HN27C301AG,HN27C301AP,HN27C301AFP",
+            "HN27C301G",
+            "M27C1000",
+            "MBM27C1000P,MBM27C1000",
+            "MBM27C2000P,MBM27C2000",
+        ]
+        for chip in rows:
+            assert chip["pinout"] in ("DIP32_27C301", "DIP24_2532")
+            assert chip["unsupported_reason"].startswith("adapter required:")
+
+    def test_no_supported_row_drives_an_address_line_on_a_ce_or_oe_pin(self):
+        """Every bus line of a supported row is a real bus line. ROM_CE /
+        ROM_OE (0x100 / 0x101) in a bus means an address pin sits on the
+        shield's CE or OE driver; the firmware cannot drive it."""
+        from firestarter.database import EpromDatabase
+
+        db = EpromDatabase(skip_local_override=True)
+        bad = []
+        for mfg, chips in db.proms.items():
+            for chip in chips:
+                if chip.get("support_status", "supported") != "supported":
+                    continue
+                bus = db.map_chip_record(chip, mfg).get("bus-config", {}).get("bus", [])
+                if any(line >= 24 for line in bus):
+                    bad.append((mfg, chip["part_number"], bus))
+        assert not bad
 
 
 class TestWeVppHazardGuard:
@@ -696,7 +767,7 @@ class TestThirtyTwoPinVariantLoDispatch:
         [
             (12, 0x03, 0x08, 1048576, "DIP32_27C801"),
             (12, 0x02, 0x08, 524288, "DIP32_STD"),
-            (12, 0x00, 0x08, 131072, "DIP32_27C020"),
+            (12, 0x00, 0x08, 131072, "DIP32_27C301"),
             (12, 0x01, 0x08, 262144, "DIP32_27C020"),
             (12, 0x10, 0x10, 524288, "DIP32_STD"),
             (12, 0x11, 0x10, 524288, "DIP32_STD"),

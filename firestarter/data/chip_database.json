@@ -1710,7 +1710,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: pin map DIP28_27011 gives 14 address lines, which reach 16384 of the chip's 131072 bytes. The programmer implements no way to reach the rest."
     },
     {
       "electrical": {
@@ -5989,7 +5990,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MBM27C1000P,MBM27C1000",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5999,7 +6000,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 500
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -6058,7 +6060,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MBM27C2000P,MBM27C2000",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6068,7 +6070,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -6464,7 +6467,7 @@
         "vpp_mv": 12500
       },
       "part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6474,7 +6477,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -6486,7 +6490,7 @@
         "vpp_mv": 12500
       },
       "part_number": "HN27C301G",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -6496,7 +6500,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -7407,7 +7412,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: pin map DIP28_27011 gives 14 address lines, which reach 16384 of the chip's 131072 bytes. The programmer implements no way to reach the rest."
     },
     {
       "electrical": {
@@ -7429,7 +7435,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: pin map DIP28_27011 gives 14 address lines, which reach 16384 of the chip's 131072 bytes. The programmer implements no way to reach the rest."
     },
     {
       "electrical": {
@@ -11966,7 +11973,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C1000",
-      "pinout": "DIP32_27C020",
+      "pinout": "DIP32_27C301",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11976,7 +11983,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 22 as CE and pin 24 as OE, but pin map DIP32_27C301 needs other functions on pins [2, 24]. An adapter must move those pins."
     },
     {
       "electrical": {
@@ -15655,8 +15663,9 @@
       },
       "provenance": "VAR-05 / D-10 \u2014 TI 2532 is a physically real 4KB 24-pin UV-EPROM with a NON-JEDEC pinout (2532 != JEDEC 2732); absent from minipro infoic.xml. The 2516_EPROM.pdf is the TI 2500-series UV-EPROM family datasheet covering the 2516/2532 lineage; VPP=pin 21 / A11=pin 18 / !PD-PGM=pin 20 distinguishes the 2532 from the DIP24_2732 layout. Modeled by the new DIP24_2532 pinout entry. Carries the same UNVERIFIED posture as the 2516 row (no on-hand bench proof).",
       "source": "non-upstream-supplement",
-      "support_status": "supported",
-      "verification_note": "SAFE-04 / D-11: resolvable for read/info but NOT write-graduated \u2014 no on-hand 2532 silicon was bench-tested. Non-JEDEC 24-pin oddball; the DIP24_2532 pinout is a tentative leaf layout requiring bench validation. VPP lands on pin 21 (DIP24_2532 vpp-pin) per the TI family datasheet \u2014 the GATE-03 structural VPP guard is satisfied.",
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: the shield drives chip pin 18 as CE and pin 20 as OE, but on the 2532 pin 18 is A11 and pin 20 is PD/PGM. The shield cannot drive A11, so only the lower 2 KB can be addressed, and the program pulse would go to A11. An adapter must move those pins.",
+      "verification_note": "SAFE-04 / D-11: no on-hand 2532 silicon was bench-tested. Non-JEDEC 24-pin oddball; the DIP24_2532 pinout is a tentative leaf layout requiring bench validation. VPP lands on pin 21 (DIP24_2532 vpp-pin) per the TI family datasheet \u2014 the GATE-03 structural VPP guard is satisfied. Socket pin 18 is the shield's CE driver, not an address latch, so host 3.2.4 sent bus line 256 (ROM_CE) for A11; firmware 3.2.1 truncated it to line 0, and later firmware refuses the frame. resolve_chip now refuses the row on its status.",
       "verification_status": "UNVERIFIED"
     }
   ],
@@ -16441,6 +16450,33 @@
         "pulse_duration_us": 100
       },
       "support_status": "supported"
+    },
+    {
+      "datasheet": "datasheets/TMM27128AD.pdf",
+      "electrical": {
+        "pin_count": 28,
+        "size_bytes": 16384,
+        "type": "UV-EPROM",
+        "vcc_mv": 5000,
+        "vdd_mv": 6000,
+        "vpp_mv": 12500
+      },
+      "part_number": "TMM27128AD,TMM27128AD-15,TMM27128AD-150,TMM27128AD-20,TMM27128AD-200",
+      "pinout": "DIP28_27128",
+      "programming": {
+        "algorithm": 7,
+        "chip_id_check": true,
+        "chip_id_value": "0x000098d3",
+        "infoic_page_size_raw": 0,
+        "protect_off_before": false,
+        "protect_on_after": false,
+        "pulse_duration_us": 1000
+      },
+      "provenance": "Physically real 28-pin NMOS UV-EPROM (Toshiba TMM27128AD, 16384 x 8), absent from minipro infoic.xml, whose TOSHIBA/KIOXIA section has no 27128-class part. Datasheet attached to henols/firestarter#73 by the reporter, vendored as datasheets/TMM27128AD.pdf (Toshiba pages G-27 to G-36). Page G-27: pin 1 VPP, pin 20 CE, pin 22 OE, pin 26 A13, pin 27 PGM, pin compatible with i27128A (DIP28_27128). Page G-30 HIGH SPEED PROGRAM OPERATION: VCC 5.75/6.0/6.25 V, VPP 12.0/12.5/13.0 V, tPW 0.95/1.0/1.05 ms. Page G-33/G-34: 1 ms PGM pulses verified after each, up to 25 times, then an over-program pulse of 3 times the pulses used. Page G-35 ELECTRIC SIGNATURE MODE: manufacturer code 98, device code D3. Read VCC 5 V (page G-28).",
+      "source": "non-upstream-supplement",
+      "support_status": "supported",
+      "verification_note": "Resolvable for read/info. No working sample has been tested: the chip reported in henols/firestarter#73 was dead. The datasheet program VCC is 6.0 V, but the shield holds VCC at 5 V, and the firmware does not send the over-program pulse.",
+      "verification_status": "UNVERIFIED"
     }
   ],
   "WED": [
@@ -16669,7 +16705,7 @@
         "type": "EEPROM",
         "vcc_mv": 5000,
         "vdd_mv": 5000,
-        "vpp_mv": 13500
+        "vpp_mv": 12000
       },
       "part_number": "W27E257",
       "pinout": "DIP28_27256",
