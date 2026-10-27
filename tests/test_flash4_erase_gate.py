@@ -4,38 +4,25 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Flash4 (protocol 0x05) erase-refusal gate.
+Flash4 (protocol 0x05) erase gate.
+
+Firmware 3.2.2 erases a 0x05 part with a 5 V software chip erase. Older
+firmware either answers "not supported" or, in 3.0.0b8 to 3.0.0b26, erases
+with VPP and VPE on: 12 V on a 5 V part.
 
 Coverage:
-  1. THE PURE PREDICATE -- `is_flash4` parametrized over every `algorithm`
-     value the shipped database actually contains: True for 5, False for
-     every other value present.
-  2. FAIL-OPEN -- a missing, `None`, or empty wire dict, or one with no
-     `algorithm` key, returns False rather than raising or refusing. This
-     polarity is deliberately inverted against `jp5_gate` and
-     `sdp_capability`, which both fail CLOSED on absent evidence.
-  3. COUPLING TO THE REAL DATABASE -- the set of
-     part numbers for which the predicate fires, driven through
-     `resolve_chip` against `EpromDatabase(skip_local_override=True)`, is
-     exactly the set of shipped rows whose `programming.algorithm` is 5.
-  4. NO PART-NUMBER LITERAL IN THE MODULE -- no shipped `part_number` string
-     occurs anywhere in `flash4_erase_gate.py`'s source, docstrings
-     included, proving the predicate is database-derived rather than a
-     hand-kept list.
-  5. THE MESSAGE SHAPE -- the rendered refusal line is exactly one
-     line, names the chip, and carries none of a forbidden-substring list
-     covering the cause, the alternative, and the `--force` workaround.
-  6. NOT A BLANKET REFUSAL -- a part whose algorithm is not 5 still
-     reaches `EpromOperator.erase_eprom`.
-
-End-to-end proof that `firestarter erase` on a flash4 part refuses before
-the serial port opens, printing exactly one line and never reaching
-`EpromOperator.erase_eprom` -- the pre-connect guarantee.
+  1. `erase` on a flash4 part reaches the operator with FLAG_CAN_ERASE set,
+     and the database still leaves the flag clear, so `write` never has it.
+  2. `needs_newer_firmware`: refused below 3.2.2 and for an unparseable
+     version, accepted from 3.2.2 (and its pre-release and dev builds), and
+     never applied to another command or another protocol.
+  3. `setup_command` raises before the operation starts when a flash4 erase
+     meets firmware older than 3.2.2.
+  4. `is_flash4` over every shipped `algorithm` value, its fail-open polarity,
+     and its coupling to the real database.
 """
 
-import inspect
-from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -44,13 +31,26 @@ from firestarter import cli_handlers
 from firestarter.chip_resolver import resolve_chip
 from firestarter.cli_handlers import AppContext, cli
 from firestarter.config import ConfigManager
+from firestarter.constants import COMMAND_ERASE, COMMAND_WRITE, FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
-from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
+from firestarter.exceptions import (
+    ChipNotFoundError,
+    ChipNotImplementedError,
+    FirmwareOutdatedError,
+)
 from firestarter.firmware import FirmwareManager
-from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID, is_flash4, refusal_text
+from firestarter.flash4_erase_gate import (
+    FLASH4_PROTOCOL_ID,
+    firmware_refusal_text,
+    is_flash4,
+    needs_newer_firmware,
+)
 from firestarter.hardware import HardwareManager
+from firestarter.messages import MSG_OK_READY
+
+from .conftest import build_frame
 
 NO_PIN1_BUS_CONFIG = {"bus": [0, 1, 2]}
 
@@ -66,51 +66,88 @@ def _cli_app_context(eprom_operator):
     )
 
 
-def test_cli_erase_on_flash4_part_refuses_pre_connect_with_one_line():
+def test_cli_erase_on_flash4_part_sends_can_erase():
     runner = CliRunner()
     eprom_operator = Mock(spec=EpromOperator)
+    eprom_operator.erase_eprom.return_value = True
     app = _cli_app_context(eprom_operator)
     with patch.object(
         cli_handlers,
         "resolve_chip",
-        return_value={"algorithm": 5, "bus-config": NO_PIN1_BUS_CONFIG},
+        return_value={"algorithm": 5, "flags": 0, "bus-config": NO_PIN1_BUS_CONFIG},
     ):
         result = runner.invoke(cli, ["erase", "AE29F2008"], obj=app)
 
-    assert result.exit_code == 1
-    lines = result.output.splitlines()
-    assert lines == [refusal_text("AE29F2008")]
-    eprom_operator.erase_eprom.assert_not_called()
+    assert result.exit_code == 0, result.output
+    eprom_operator.erase_eprom.assert_called_once()
+    sent = eprom_operator.erase_eprom.call_args.args[1]
+    assert sent["flags"] & FLAG_CAN_ERASE
 
 
-def test_cli_erase_ignore_unsupported_exits_0_with_byte_identical_output():
-    runner = CliRunner()
+def test_database_leaves_can_erase_clear_for_flash4_writes():
+    """`write` must never carry FLAG_CAN_ERASE for a flash4 part."""
+    db = EpromDatabase(skip_local_override=True)
+    data = resolve_chip("AE29F2008", db=db)
+    assert is_flash4(data)
+    assert not data["flags"] & FLAG_CAN_ERASE
 
-    exit1_operator = Mock(spec=EpromOperator)
-    exit1_app = _cli_app_context(exit1_operator)
-    with patch.object(
-        cli_handlers,
-        "resolve_chip",
-        return_value={"algorithm": 5, "bus-config": NO_PIN1_BUS_CONFIG},
-    ):
-        exit1_result = runner.invoke(cli, ["erase", "AE29F2008"], obj=exit1_app)
 
-    exit0_operator = Mock(spec=EpromOperator)
-    exit0_app = _cli_app_context(exit0_operator)
-    with patch.object(
-        cli_handlers,
-        "resolve_chip",
-        return_value={"algorithm": 5, "bus-config": NO_PIN1_BUS_CONFIG},
-    ):
-        exit0_result = runner.invoke(
-            cli, ["erase", "AE29F2008", "--ignore-unsupported"], obj=exit0_app
-        )
+def _erase(flags=FLAG_CAN_ERASE, algorithm=FLASH4_PROTOCOL_ID, cmd=COMMAND_ERASE):
+    return {"cmd": cmd, "algorithm": algorithm, "flags": flags}
 
-    assert exit1_result.exit_code == 1
-    assert exit0_result.exit_code == 0
-    assert exit0_result.output == exit1_result.output
-    exit1_operator.erase_eprom.assert_not_called()
-    exit0_operator.erase_eprom.assert_not_called()
+
+@pytest.mark.parametrize(
+    "version",
+    [None, "", "garbage", "3.0.0", "3.0.0b20", "3.1.1b2", "3.2.0", "3.2.1"],
+)
+def test_flash4_erase_needs_firmware_3_2_2(version):
+    assert needs_newer_firmware(_erase(), version) is True
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["3.2.2", "3.2.2:uno", "3.2.2rc1:leonardo", "3.2.2.dev48", "3.2.10", "3.3.0"],
+)
+def test_flash4_erase_runs_on_firmware_3_2_2_and_later(version):
+    assert needs_newer_firmware(_erase(), version) is False
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        _erase(algorithm=6),
+        _erase(cmd=COMMAND_WRITE),
+        _erase(flags=0),
+        {"state": 13},
+    ],
+)
+def test_firmware_gate_applies_only_to_a_flagged_flash4_erase(command):
+    assert needs_newer_firmware(command, "3.0.0b20") is False
+
+
+def test_firmware_refusal_text_is_one_line_and_names_the_versions():
+    text = firmware_refusal_text("3.2.1")
+    assert "\n" not in text
+    assert "3.2.2" in text and "3.2.1" in text
+
+
+def _ready_frame(version: bytes) -> bytes:
+    # [buffer_size u16][hw_revision u8][ver_len u8][version bytes]
+    params = b"\x02\x00" + bytes([0]) + bytes([len(version)]) + version
+    return build_frame(MSG_OK_READY, params)
+
+
+def test_setup_command_refuses_flash4_erase_on_old_firmware(make_comm, fake_serial):
+    fake_serial.feed(_ready_frame(b"3.2.1:uno"))
+    comm = make_comm()
+    with pytest.raises(FirmwareOutdatedError, match="3.2.2"):
+        comm.setup_command(_erase(), MagicMock())
+
+
+def test_setup_command_accepts_flash4_erase_on_3_2_2(make_comm, fake_serial):
+    fake_serial.feed(_ready_frame(b"3.2.2:uno"))
+    comm = make_comm()
+    assert comm.setup_command(_erase(), MagicMock()) is True
 
 
 def _shipped_algorithm_values(db: EpromDatabase) -> set:
@@ -186,47 +223,6 @@ def test_predicate_matches_real_database_algorithm_5_rows_exactly():
         f"{len(expected)} shipped algorithm-5 row(s); symmetric difference: "
         f"{sorted(actual ^ expected)}"
     )
-
-
-def _module_source(module) -> str:
-    path = inspect.getsourcefile(module)
-    assert path is not None, f"could not resolve a source file for {module!r}"
-    return Path(path).read_text(encoding="utf-8")
-
-
-FORBIDDEN_REFUSAL_SUBSTRINGS = (
-    "force",
-    "firestarter write",
-    "write",
-    "workaround",
-    "route around",
-    "because",
-    "reason",
-    "cause",
-    "alternative",
-    "instead",
-    "try",
-)
-
-
-def test_refusal_text_is_one_line_and_carries_no_forbidden_content():
-    """THE MESSAGE SHAPE: exactly one line, names the chip, and
-    carries none of a forbidden-substring list covering the cause, the
-    alternative, and the `--force` forged-identity workaround. A NEGATIVE
-    assertion on purpose -- it is what stops a later executor quietly
-    re-adding the cause clause and the alternative that were deliberately
-    left out of the tool's output.
-    """
-    text = refusal_text("ae29f2008")
-
-    assert "\n" not in text
-    assert text == "Erase not supported for AE29F2008"
-
-    lowered = text.lower()
-    for forbidden in FORBIDDEN_REFUSAL_SUBSTRINGS:
-        assert forbidden not in lowered, (
-            f"refusal text {text!r} contains forbidden substring {forbidden!r}"
-        )
 
 
 def test_cli_erase_on_non_flash4_part_still_reaches_operator():

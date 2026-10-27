@@ -20,6 +20,7 @@ import serial.serialutil
 import serial.tools.list_ports
 
 import firestarter.codec as codec
+import firestarter.flash4_erase_gate as flash4_erase_gate
 import firestarter.transport_counters as transport_counters
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
 from firestarter.constants import (
@@ -957,9 +958,17 @@ class SerialCommunicator:
             # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
             # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
             SerialCommunicator._validate_firmware_version(
-                version_match.group(0),
+                version_match.group(0).rstrip("."),
                 allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
             )
+            # A flash4 erase on firmware older than 3.2.2 reaches either a
+            # 12 V erase (3.0.0b8-b26) or a "not supported" answer.
+            if flash4_erase_gate.needs_newer_firmware(command_to_send, identity):
+                raise FirmwareOutdatedError(
+                    flash4_erase_gate.firmware_refusal_text(
+                        identity.split(":")[0] if identity else None
+                    )
+                )
 
         # Shield-revision gate — ordered after the version check because
         # firmware old enough to fail that check cannot be trusted to have
