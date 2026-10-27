@@ -40,10 +40,10 @@ class TestFormatMessageRevision:
         assert result == "Rev 0"
 
     def test_msg_ok_rev_with_override(self):
-        """MSG_OK_REV: effective!=0xFF → '{eff_str}, Override HW: {phys_str}'."""
+        """MSG_OK_REV: effective!=0xFF → '{eff_str}, Detected HW: {phys_str}'."""
         entry = CATALOG[MSG_OK_REV]
         result = format_message(MSG_OK_REV, [0x02, 0x04], entry)
-        assert result == "Rev 2.2 (override), Override HW: Rev 2.0-class"
+        assert result == "Rev 2.2 (override), Detected HW: Rev 2.0-class"
 
     def test_msg_ok_cfg_no_override(self):
         """MSG_OK_CFG: override==0xFF → 'R1: {r1}, R2: {r2}'."""

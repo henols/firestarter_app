@@ -74,7 +74,8 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
 
     P-02 MSG_OK_REV  — params[0]=physical u8, params[1]=effective u8
       effective==0xFF → "Rev{physical}" (no override)
-      effective!=0xFF → "Rev{effective}, Override HW: Rev{physical}"
+      effective!=0xFF → "Rev{effective}, Detected HW: Rev{physical}"
+      (the override is in effect; the second field is what the board detected)
 
     P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8,
                        params[3]=bandgap_mv u16 (absent on firmware before 3.1.0b4)
@@ -104,7 +105,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
         if effective == 0xFF:
             return phys_str
         eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
-        return f"{eff_str}, Override HW: {phys_str}"
+        return f"{eff_str}, Detected HW: {phys_str}"
 
     if msg_id == MSG_OK_CFG and len(params) in (3, 4):
         r1, r2, override = params[0], params[1], params[2]

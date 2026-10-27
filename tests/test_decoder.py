@@ -363,8 +363,8 @@ class TestIdFrameDecoder:
 
     def test_ok_rev_p02_with_override_decodes(self, fake_serial, make_comm):
         """P-02: MSG_OK_REV with physical=0x01, effective=0x02 (override active)
-        renders 'Rev 2.0-class, Override HW: Rev 1' per Phase 34 D-05 Path A
-        silkscreen-string mapping (was 'Rev2, Override HW: Rev1' pre-Phase-34)."""
+        renders 'Rev 2.0-class, Detected HW: Rev 1': the override, then the
+        revision the board detected."""
         comm = make_comm()
         # params: u8 physical=0x01, u8 effective=0x02
         params = bytes([0x01, 0x02])
@@ -374,7 +374,7 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "Rev 2.0-class, Override HW: Rev 1"
+        assert response.message == "Rev 2.0-class, Detected HW: Rev 1"
 
     def test_ok_rev_p02_no_override_decodes(self, fake_serial, make_comm):
         """P-02: MSG_OK_REV with physical=0x01, effective=0xFF sentinel renders
