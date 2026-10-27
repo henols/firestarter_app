@@ -517,8 +517,13 @@ class FirmwareManager:
         avrdude_path_override: str | None,
         avrdude_config_override: str | None,
         target_port: str | None,
+        force: bool = False,
     ) -> bool:
-        """Internal method to perform the Avrdude flashing process."""
+        """Internal method to perform the Avrdude flashing process.
+
+        `force` adds avrdude's `-F`, which skips the device-signature check,
+        for example for a 328PB clone bootloader that reports a 328P signature.
+        """
         start_time = time.time()
 
         partno, programmer_id, baud_rate = (
@@ -594,7 +599,9 @@ class FirmwareManager:
                     avrdude_config_path=avrdude_config_path,
                 )
 
-                stderr_output, return_code = avrdude.flash_firmware(hex_file_path)
+                stderr_output, return_code = avrdude.flash_firmware(
+                    hex_file_path, extra_flags=["-F"] if force else None
+                )
                 if return_code == 0:
                     logger.info(
                         f"Firmware successfully updated on {port_to_flash} ({time.time() - start_time:.2f}s)"  # noqa: E501
@@ -741,6 +748,7 @@ class FirmwareManager:
         avrdude_config_override: str | None,
         target_port: str | None,
         usb_id: str | None = None,
+        force: bool = False,
     ) -> bool:
         """Dispatch to the flasher for this board.
 
@@ -755,6 +763,7 @@ class FirmwareManager:
             avrdude_path_override=avrdude_path_override,
             avrdude_config_override=avrdude_config_override,
             target_port=target_port,
+            force=force,
         )
 
     def manage_firmware_update(
@@ -969,6 +978,7 @@ class FirmwareManager:
                 avrdude_config_override=avrdude_config_override,
                 target_port=port_to_use,
                 usb_id=usb_id,
+                force=bool(force_install),
             )
             # Clean up downloaded file
             if os.path.exists(hex_file):

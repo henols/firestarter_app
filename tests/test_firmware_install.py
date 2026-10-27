@@ -84,7 +84,8 @@ class _FakeAvrdude:
         self.command = "/fake/avrdude"  # str — _install_with_avrdude saves this
         self.config = None  # avrdude>=7 path (no -C arg)
 
-    def flash_firmware(self, hex_file_path):
+    def flash_firmware(self, hex_file_path, extra_flags=None):
+        self.extra_flags = extra_flags
         return ("", 0)  # (stderr, returncode) — 0 = success
 
 
@@ -1188,6 +1189,34 @@ class TestUno328pbResolution:
             f"Got {captured.get('programmer_id')!r}."
         )
         assert captured["baud_rate"] == 115200
+
+    @pytest.mark.parametrize("force, expected", [(False, None), (True, ["-F"])])
+    def test_force_passes_dash_f_to_avrdude(
+        self, monkeypatch, tmp_path, force, expected
+    ):
+        """Only a forced install skips avrdude's signature check (gh#95)."""
+        fakes = []
+
+        def _capture_init(*args, **kwargs):
+            fake = _FakeAvrdude(*args, **kwargs)
+            fakes.append(fake)
+            return fake
+
+        monkeypatch.setattr(firmware, "Avrdude", _capture_init)
+        fake_hex = tmp_path / "firestarter_uno.hex"
+        fake_hex.write_text(":00000001FF\n")
+
+        fm = FirmwareManager(config_manager=MagicMock())
+        ok = fm._install_firmware(
+            hex_file_path=str(fake_hex),
+            board="uno",
+            avrdude_path_override=None,
+            avrdude_config_override=None,
+            target_port="/dev/ttyACM0",
+            force=force,
+        )
+        assert ok is True
+        assert fakes[0].extra_flags == expected
 
     # note: `test_argparse_accepts_uno328pb_board_choice`
     # deleted on the entry-point swap. The Click form uses
