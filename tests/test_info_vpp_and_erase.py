@@ -14,6 +14,7 @@ from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.erase_support import erase_accepted
 from firestarter.ic_layout import (
+    CAN_ERASE_FLASH4,
     CAN_ERASE_NOT_SUPPORTED,
     CAN_ERASE_UV_ONLY,
     CAN_ERASE_YES,
@@ -98,7 +99,7 @@ def test_can_erase_line_agrees_with_the_wire_flag_for_every_row(
         ]
 
 
-def test_flash4_rows_say_erase_is_not_supported(
+def test_flash4_rows_say_erase_needs_firmware_3_2_2(
     db: EpromDatabase, rows: list[tuple[dict, dict, dict]]
 ) -> None:
     flash4 = [
@@ -107,7 +108,7 @@ def test_flash4_rows_say_erase_is_not_supported(
         if flash4_erase_gate.is_flash4(db.convert_to_programmer(m))
     ]
     assert len(flash4) == 27
-    assert all(s["can_erase_str"] == CAN_ERASE_NOT_SUPPORTED for s in flash4)
+    assert all(s["can_erase_str"] == CAN_ERASE_FLASH4 for s in flash4)
 
 
 def test_uv_rows_say_uv_erase_only(rows: list[tuple[dict, dict, dict]]) -> None:

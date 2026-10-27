@@ -32,8 +32,8 @@ def test_format_msg_ok_rev_with_override_includes_both() -> None:
         MSG_OK_REV, [REVISION_2_2, REVISION_UNKNOWN], CATALOG[MSG_OK_REV]
     )
     assert out is not None
-    # The format is "{eff}, Override HW: {phys}"
-    assert "Override HW" in out
+    # The format is "{eff}, Detected HW: {phys}"
+    assert "Detected HW" in out
 
 
 def test_format_msg_ok_cfg_no_override() -> None:

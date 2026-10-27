@@ -1443,9 +1443,11 @@ def erase(
 
     eprom_data = resolve_chip(eprom, db=app.db)
 
+    # The database leaves FLAG_CAN_ERASE clear for flash4, so `write` never
+    # carries it. The erase sets it for this command only; setup_command
+    # refuses it on firmware without the 5 V software chip erase.
     if flash4_erase_gate.is_flash4(eprom_data):
-        click.echo(flash4_erase_gate.refusal_text(eprom))
-        sys.exit(0 if ignore_unsupported else 1)
+        eprom_data = flash4_erase_gate.with_erase_flag(eprom_data)
 
     full_record = app.db.get_eprom(eprom) or {}
     if dip24_2816_erase_gate.is_affected(full_record.get("pin-map")):

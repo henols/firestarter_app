@@ -12,6 +12,7 @@ from typing import Dict, List  # noqa: UP035
 from firestarter import jumper_table
 from firestarter.database import EpromDatabase, format_mv
 from firestarter.erase_support import erase_accepted, is_electrically_erasable
+from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 from firestarter.vpp_display import shows_programming_vpp
 
 logger = logging.getLogger("EpromSpecBuilder")
@@ -19,6 +20,7 @@ logger = logging.getLogger("EpromSpecBuilder")
 CAN_ERASE_YES = "yes (electrically erasable)"
 CAN_ERASE_UV_ONLY = "no (UV erase only)"
 CAN_ERASE_NOT_SUPPORTED = "no (erase is not supported for this chip)"
+CAN_ERASE_FLASH4 = "yes (needs firmware 3.2.2 or later)"
 
 
 class EpromSpecBuilder:
@@ -524,6 +526,11 @@ class EpromSpecBuilder:
             etype, eprom_data.get("protocol-id"), eprom_data.get("pin-map")
         ):
             output_data["can_erase_str"] = CAN_ERASE_YES
+        elif is_electrically_erasable(etype) and (
+            eprom_data.get("protocol-id") == FLASH4_PROTOCOL_ID
+        ):
+            # `erase` sets FLAG_CAN_ERASE for flash4 itself (flash4_erase_gate).
+            output_data["can_erase_str"] = CAN_ERASE_FLASH4
         elif is_electrically_erasable(etype):
             output_data["can_erase_str"] = CAN_ERASE_NOT_SUPPORTED
         elif etype == "UV-EPROM":
