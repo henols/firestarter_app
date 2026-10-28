@@ -17,14 +17,17 @@ Phase 44 Plan 03 additions (read_timing block):
     test_consistency_check_default_params_absent_from_command — no extra keys when 0
 """
 
+import contextlib
 import logging
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from firestarter.compare import CompareAccumulator
 from firestarter.config import ConfigManager
-from firestarter.eprom_operations import EpromOperator, _default_read_path
+from firestarter.eprom_operations import EpromOperator, _open_default_read_file
 from firestarter.messages import (
     MSG_DATA_CHUNK,
     MSG_END_DONE,
@@ -2731,14 +2734,64 @@ def test_seen_message_ids_records_decoded_ids_and_stays_bounded(
     assert all(isinstance(i, int) for i in comm.seen_message_ids)
 
 
-def test_default_read_path_adds_lowest_free_suffix(tmp_path, monkeypatch):
+def test_default_read_file_takes_lowest_free_suffix(tmp_path, monkeypatch):
     """`read` with no file name never overwrites an earlier read: the
-    default `<NAME>.bin` gets `-1`, `-2`, ... when that name is taken."""
+    default `<NAME>.bin` gets `-1`, `-2`, ... when that name is taken.
+    Opening the file claims the name, so the next call skips it."""
     monkeypatch.chdir(tmp_path)
-    assert _default_read_path("w27c512") == "W27C512.bin"
+    names = []
+    for _ in range(3):
+        path, fh = _open_default_read_file("w27c512")
+        fh.close()
+        names.append(path)
+    assert names == ["W27C512.bin", "W27C512-1.bin", "W27C512-2.bin"]
 
-    (tmp_path / "W27C512.bin").write_bytes(b"")
-    assert _default_read_path("w27c512") == "W27C512-1.bin"
 
-    (tmp_path / "W27C512-1.bin").write_bytes(b"")
-    assert _default_read_path("w27c512") == "W27C512-2.bin"
+def _operator_reading(monkeypatch, outcome):
+    """An EpromOperator whose read writes 4 bytes, then returns or raises `outcome`."""
+    operator = EpromOperator(MagicMock())
+
+    @contextlib.contextmanager
+    def _context(*_args, **_kwargs):
+        yield {"address": 0, "memory-size": 4}, 512, "Read"
+
+    def _state_machine(_op_name, process_data_chunk_callback, **_kwargs):
+        process_data_chunk_callback(0, b"\x01\x02\x03\x04")
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome, None
+
+    monkeypatch.setattr(operator, "_operation_context", _context)
+    monkeypatch.setattr(operator, "_run_state_machine", _state_machine)
+    return operator
+
+
+def test_read_with_default_name_keeps_the_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert _operator_reading(monkeypatch, True).read_eprom("w27c512", {})
+    assert (tmp_path / "W27C512.bin").read_bytes() == b"\x01\x02\x03\x04"
+
+
+@pytest.mark.parametrize("outcome", [False, KeyboardInterrupt()])
+def test_failed_read_with_default_name_leaves_no_file(tmp_path, monkeypatch, outcome):
+    """A failed or interrupted read frees its name, so the next read takes it."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "W27C512.bin").write_bytes(b"earlier read")
+    operator = _operator_reading(monkeypatch, outcome)
+    if isinstance(outcome, BaseException):
+        with pytest.raises(KeyboardInterrupt):
+            operator.read_eprom("w27c512", {})
+    else:
+        assert operator.read_eprom("w27c512", {}) is False
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["W27C512.bin"]
+    assert (tmp_path / "W27C512.bin").read_bytes() == b"earlier read"
+
+
+def test_failed_read_with_named_file_keeps_it(tmp_path, monkeypatch):
+    """A file the user named is not removed: it is theirs."""
+    out = tmp_path / "mine.bin"
+    assert (
+        _operator_reading(monkeypatch, False).read_eprom("w27c512", {}, str(out))
+        is False
+    )
+    assert out.exists()
