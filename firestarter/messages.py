@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 83
+Total messages: 84
 """
 
 from dataclasses import dataclass
@@ -126,6 +126,7 @@ MSG_ERR_ENERGY_CAP = 0xBE
 MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_ERR_FL4_PAGE_ALIGN = 0xC0
 MSG_ERR_CALIBRATION = 0xC1
+MSG_ERR_RAM_TEST = 0xC2
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -811,6 +812,20 @@ CATALOG: dict[int, MessageDef] = {
         format="Divider calibration unusable: R1 %lu, R2 %lu",
         params=(("u32", "dec"), ("u32", "dec")),
         param_bytes=8,
+        wire_format="id_frame",
+    ),
+    0xC2: MessageDef(
+        id=0xC2,
+        name="MSG_ERR_RAM_TEST",
+        severity=SEVERITY_ERROR,
+        format="RAM test failed in March element %u at 0x%06lx: expected 0x%02x, read 0x%02x",
+        params=(
+            ("u8", "dec"),
+            ("u24", "hex_addr"),
+            ("u8", "hex_byte"),
+            ("u8", "hex_byte"),
+        ),
+        param_bytes=6,
         wire_format="id_frame",
     ),
     0xE0: MessageDef(

@@ -27,6 +27,7 @@ from firestarter import (
     jp5_gate,
     log_capture,
     page_size_gate,
+    ram_test,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
     write_blank_guard,
@@ -1562,6 +1563,59 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
     sys.exit(0 if res else 1)
 
 
+@cli.command(name="ram-test")
+@click.argument("eprom", shell_complete=_complete_eprom)
+@click.pass_obj
+def ram_test_cmd(app: AppContext, eprom: str) -> None:
+    """Tests a volatile SRAM with the March C- algorithm.
+
+    The firmware writes and reads every cell 10 times, in 6 passes up and
+    down the address range. The test finds stuck bits, bits that do not
+    change, address faults and coupling faults between cells. It does not
+    measure access time. No programming voltage reaches the socket.
+
+    The test runs only on volatile SRAM. It refuses non-volatile parts
+    (NVRAM, timekeeper RAM and FRAM), because it overwrites every cell.
+
+    Exits 0 when the RAM passes, 1 when the test finds a bad cell, and 2
+    when the test cannot run to the end: a refused part, outdated firmware,
+    or a communication or setup failure.
+    """
+    # The typed errors are caught here, not by map_typed_errors: its
+    # ClickException exits 1, and 1 must mean a bad cell only.
+    try:
+        eprom_data = resolve_chip(eprom, db=app.db)
+        reason = ram_test.refusal_reason(app.db.get_eprom(eprom) or {}, eprom)
+        if reason:
+            click.echo(reason)
+            sys.exit(2)
+        passed, failure = app.eprom_operator.ram_test(eprom, eprom_data)
+    except FirmwareOutdatedError as e:
+        click.echo(f"Firmware outdated: {e}")
+        raise SystemExit(2) from e
+    except (
+        ChipNotFoundError,
+        SerialError,
+        EpromOperationError,
+        HardwareOperationError,
+    ) as e:
+        click.echo(str(e))
+        raise SystemExit(2) from e
+
+    if passed:
+        click.echo(
+            f"RAM test PASSED: {eprom.upper()} (March C-, "
+            f"{eprom_data['memory-size']} bytes)"
+        )
+        sys.exit(0)
+    if failure is not None:
+        click.echo(ram_test.render_failure(eprom, failure))
+        sys.exit(1)
+    message = app.eprom_operator.last_firmware_error_message
+    click.echo(f"RAM test did not complete: {message or 'no response'}")
+    sys.exit(2)
+
+
 # ---------------------------------------------------------------------------
 # Voltage commands
 # ---------------------------------------------------------------------------
@@ -2504,7 +2558,8 @@ if _DEV_TOOLS_ENABLED:
         frames = app.hardware_manager.read_adc_raw()
         if not frames:
             click.echo(
-                "Could not read the ADC. Check that the firmware is a beta build."
+                "Could not read the ADC. Check that the firmware is a beta "
+                "build. The leonardo firmware does not have this command."
             )
             sys.exit(1)
         mode_names = {0: "rails off", 1: "VPP", 2: "VPE"}
