@@ -1425,12 +1425,12 @@ class TestManageFirmwareUpdate:
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
-            lambda channel="stable", version=None, board="uno": (
+            lambda channel="stable", version=None, board="uno", **_kw: (
                 "3.1.0",
                 "https://example.com/firestarter_uno.hex",
             ),
         )
-        result = fm.manage_firmware_update(install_flag=True)
+        result = fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
         assert result is True
 
     def test_manage_no_current_no_install_intent_returns_false(self, monkeypatch):
@@ -1442,13 +1442,15 @@ class TestManageFirmwareUpdate:
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
-            lambda channel="stable", version=None, board="uno": (
+            lambda channel="stable", version=None, board="uno", **_kw: (
                 "3.1.0",
                 "https://example.com/firestarter_uno.hex",
             ),
         )
         # install_flag=False + no FLAG_FORCE in flags=0 → returns False
-        result = fm.manage_firmware_update(install_flag=False, flags=0)
+        result = fm.manage_firmware_update(
+            install_flag=False, flags=0, app_version="3.1.0"
+        )
         assert result is False
 
 
@@ -1474,7 +1476,7 @@ class TestNewerFirmwareRefusal:
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
-            lambda channel="stable", version=None, board="uno": (
+            lambda channel="stable", version=None, board="uno", **_kw: (
                 latest,
                 "https://example.com/firestarter_uno.hex" if latest else None,
             ),

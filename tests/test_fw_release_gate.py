@@ -28,12 +28,14 @@ from firestarter.exceptions import (
 )
 from firestarter.firmware import FirmwareManager
 from firestarter.fw_release_gate import (
+    _OLDER_LINE_ON_STABLE_FORMAT,
     _PRERELEASE_ON_STABLE_FORMAT,
     _REFUSAL_FORMAT,
     _UNREADABLE_FORMAT,
     feature_version,
     is_prerelease_version,
     is_refused,
+    matches_stable_cli,
     require_installable_release,
 )
 
@@ -353,7 +355,7 @@ def test_pre_channel_on_stable_library_call_refuses_before_download(
     monkeypatch.setattr(
         fm,
         "fetch_release_info",
-        lambda channel="stable", version=None, board="uno": (
+        lambda channel="stable", version=None, board="uno", **_kw: (
             "3.2.7b1",
             "https://example.invalid/uno.hex",
         ),
@@ -371,3 +373,139 @@ def test_pre_channel_on_stable_library_call_refuses_before_download(
             app_version="3.2.6",
             allow_newer_firmware=True,
         )
+
+
+# ---------------------------------------------------------------------------
+# H. A stable CLI runs a stable release on its own feature version
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("app_version", "fw_version", "expected"),
+    [
+        ("3.2.6", "3.2.2", True),
+        ("3.2.6", "3.2.9", True),  # patch ignored
+        ("3.2.6", "3.2.3b1", False),  # pre-release
+        ("3.2.6", "3.1.1", False),  # older line
+        ("3.2.6", "3.3.0", False),  # newer line
+        ("3.2.6", "garbage", False),
+        ("3.2.6", None, False),
+        (None, "3.2.2", False),
+    ],
+)
+def test_matches_stable_cli(app_version, fw_version, expected) -> None:
+    assert matches_stable_cli(app_version, fw_version) is expected
+
+
+@pytest.mark.parametrize("allow_newer", [False, True])
+def test_stable_cli_refuses_an_older_line(allow_newer) -> None:
+    """No waiver: --allow-newer-firmware does not open this refusal."""
+    with pytest.raises(FirmwareReleaseRefusedError) as exc:
+        require_installable_release("3.2.6", "3.1.1", allow_newer=allow_newer)
+    assert str(exc.value) == _OLDER_LINE_ON_STABLE_FORMAT.format(
+        app="3.2.6", release="3.1.1", app_feature="3.2", release_feature="3.1"
+    )
+
+
+def test_prerelease_cli_installs_an_older_line() -> None:
+    require_installable_release("3.2.7b1", "3.1.1")
+
+
+def _release(tag: str, *, draft: bool = False) -> dict:
+    return {
+        "tag_name": tag,
+        "draft": draft,
+        "assets": [
+            {
+                "name": "firestarter_uno.hex",
+                "browser_download_url": f"https://example.invalid/{tag}/uno.hex",
+            }
+        ],
+    }
+
+
+_RELEASES = [
+    _release("3.3.0"),
+    _release("3.2.9", draft=True),
+    _release("3.2.3b1"),
+    _release("3.2.2"),
+    _release("3.2.10rc1"),
+    _release("3.2.1"),
+    _release("3.1.1"),
+]
+
+
+def test_stable_channel_on_stable_cli_picks_the_highest_matching_stable() -> None:
+    fm = FirmwareManager(config_manager=MagicMock())
+    fm._fetch_all_releases = lambda **_kw: _RELEASES
+    fm.fetch_latest_release_info = lambda **_kw: pytest.fail("must not use /latest")
+    version, url = fm.fetch_release_info(
+        channel="stable", board="uno", app_version="3.2.6"
+    )
+    assert version == "3.2.2"
+    assert url == "https://example.invalid/3.2.2/uno.hex"
+
+
+def test_stable_channel_with_no_matching_stable_resolves_nothing() -> None:
+    fm = FirmwareManager(config_manager=MagicMock())
+    fm._fetch_all_releases = lambda **_kw: _RELEASES
+    assert fm.fetch_release_info(
+        channel="stable", board="uno", app_version="3.4.0"
+    ) == (None, None)
+
+
+def test_stable_channel_on_prerelease_cli_keeps_latest() -> None:
+    fm = FirmwareManager(config_manager=MagicMock())
+    fm._fetch_all_releases = lambda **_kw: pytest.fail("must use /latest")
+    fm.fetch_latest_release_info = lambda board="uno": ("3.3.0", "u")
+    assert fm.fetch_release_info(
+        channel="stable", board="uno", app_version="3.2.7b2"
+    ) == ("3.3.0", "u")
+
+
+def _manager_on_board(monkeypatch, current_version: str, latest_version: str):
+    fm = FirmwareManager(config_manager=MagicMock())
+    monkeypatch.setattr(
+        fm,
+        "check_current_firmware",
+        lambda **_kw: ("/dev/ttyACM0", current_version, "uno"),
+    )
+    monkeypatch.setattr(
+        fm,
+        "fetch_release_info",
+        lambda **_kw: (latest_version, "https://example.invalid/uno.hex"),
+    )
+    installed = []
+    monkeypatch.setattr(fm, "_download_firmware_file", lambda url: "/nonexistent.hex")
+    monkeypatch.setattr(
+        fm, "_install_firmware", lambda **kw: installed.append(kw) or True
+    )
+    return fm, installed
+
+
+@pytest.mark.parametrize("current_version", ["3.2.3b1", "3.3.0", "3.1.1"])
+def test_stable_cli_installs_matching_stable_over_a_mismatched_board(
+    monkeypatch, current_version
+) -> None:
+    """A higher version on the board is still not up to date on a stable CLI."""
+    fm, installed = _manager_on_board(monkeypatch, current_version, "3.2.2")
+    assert fm.manage_firmware_update(install_flag=True, app_version="3.2.6")
+    assert len(installed) == 1
+
+
+def test_stable_cli_bare_fw_offers_the_matching_stable(monkeypatch) -> None:
+    fm, installed = _manager_on_board(monkeypatch, "3.2.3b1", "3.2.2")
+    prompts = []
+    monkeypatch.setattr(
+        "firestarter.firmware.Confirm.ask",
+        lambda prompt, **_kw: prompts.append(prompt) or False,
+    )
+    assert fm.manage_firmware_update(app_version="3.2.6")
+    assert prompts == ["Install firmware 3.2.2 for uno (current: 3.2.3b1)?"]
+    assert installed == []
+
+
+def test_prerelease_cli_keeps_a_newer_prerelease_board(monkeypatch) -> None:
+    fm, installed = _manager_on_board(monkeypatch, "3.2.3b1", "3.2.2")
+    assert fm.manage_firmware_update(install_flag=True, app_version="3.2.7b2")
+    assert installed == []

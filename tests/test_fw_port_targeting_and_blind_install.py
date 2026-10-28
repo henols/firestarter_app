@@ -220,7 +220,7 @@ def _manager_that_cannot_identify(monkeypatch):
     monkeypatch.setattr(
         fm,
         "fetch_release_info",
-        lambda channel="stable", version=None, board="uno": (
+        lambda channel="stable", version=None, board="uno", **_kw: (
             "3.0.0b19",
             f"https://example.invalid/{board}.hex",
         ),
@@ -318,7 +318,7 @@ class TestBlindInstallRequiresExplicitBoard:
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
-            lambda channel="stable", version=None, board="uno": (
+            lambda channel="stable", version=None, board="uno", **_kw: (
                 "3.0.0b19",
                 f"https://example.invalid/{board}.hex",
             ),
