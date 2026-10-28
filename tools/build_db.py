@@ -174,6 +174,44 @@ def is_24pin_we_vpp_hazard(
     )
 
 
+# The type=4 (MP_SRAM) rows split into two groups by protocol_id. These three
+# RAM-test protocols carry every plain SRAM, and also the "(TEST)" row of each
+# NVRAM. Every other type=4 protocol (0x07, 0x0B, 0x0E, 0x2F) is a read/write
+# row, and only parts that keep their data have one: battery-backed NVRAM,
+# timekeeper RAM and FRAM. infoic has no flag for this. See DECODE-NOTES.md §12.
+_SRAM_RAM_TEST_PROTOCOLS = frozenset({0x27, 0x28, 0x29})
+
+
+def _base_part_names(name):
+    """The aliases of an infoic name, without their @PACKAGE and (MODE) suffixes."""
+    return {a.split("@")[0].split("(")[0].strip() for a in name.split(",")} - {""}
+
+
+def collect_read_write_sram_parts(root):
+    """Base part names of every type=4 row that is not a RAM-test row."""
+    parts = set()
+    for ic in root.findall(".//database[@type='INFOIC2PLUS']//ic"):
+        try:
+            type_int = int(ic.get("type"), 16)
+            proto_id = int(ic.get("protocol_id"), 16)
+        except (TypeError, ValueError):
+            continue
+        if type_int == 4 and proto_id not in _SRAM_RAM_TEST_PROTOCOLS:
+            parts |= _base_part_names(ic.get("name"))
+    return parts
+
+
+def sram_non_volatile(upstream_proto_id, name, read_write_parts):
+    """True when an SRAM-class part keeps its data without power.
+
+    A read/write row is non-volatile. A RAM-test row is non-volatile only when
+    the same part also has a read/write row, as DS1225(TEST) has DS1225(RW).
+    """
+    if upstream_proto_id not in _SRAM_RAM_TEST_PROTOCOLS:
+        return True
+    return not _base_part_names(name).isdisjoint(read_write_parts)
+
+
 def parse_maps(root):
     """Return {map index: ZIF pins of its mask} from infoic.xml's <maps> section.
 
@@ -669,6 +707,7 @@ def main():
     complete_db = {}
     total_chips = 0
     infoic_maps = parse_maps(root)
+    read_write_sram_parts = collect_read_write_sram_parts(root)
     _unbonded_failures = []
     _datasheet_overrides = load_datasheet_overrides(DATASHEET_OVERRIDES_FILE)
     _consumed_override_keys = set()
@@ -990,6 +1029,9 @@ def main():
                     chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
                         "vdd_mv"
                     ]
+                    chip_entry["electrical"]["non_volatile"] = sram_non_volatile(
+                        _upstream_proto_id, name, read_write_sram_parts
+                    )
 
                 # Same category error as the block above, but keyed on the
                 # decoded VALUE rather than the type: any chip landing on the

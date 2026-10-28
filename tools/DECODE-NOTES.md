@@ -727,3 +727,49 @@ for the 64K CAT28C512. That is why the host bounds the bus by size, not by the m
 bound also removes every unbonded pin from the bus, and it never shifts a line to another address
 bit.
 
+
+---
+
+## 12. SRAM retention: `electrical.non_volatile`
+
+`infoic.xml` has no flag for retention. Every `type="4"` (`MP_SRAM`) row has `flags=0x00000000`,
+`chip_info=0x0000` and `config=NULL`, for a 62256 and for a DS1225 alike.
+
+The `protocol_id` splits the `type="4"` rows into two groups. INFOIC2PLUS and INFOICT76 agree:
+
+| `protocol_id` | Rows | Parts |
+|---|---|---|
+| `0x07`, `0x0B`, `0x0E`, `0x2F` | read/write | Only parts that keep their data: the `(RW)` rows of DS12xx and BQ40xx, all M48T/M48Z, FM1208/16xx/18xx FRAM |
+| `0x27`, `0x28`, `0x29` | RAM test | Plain SRAM (6116, 6264, 62256, 628xxx, W24xxx), and the `(TEST)` row of each NVRAM |
+
+`_SRAM_RAM_TEST_PROTOCOLS` in `build_db.py` holds the RAM-test set. The generator writes
+`non_volatile` on each SRAM-class row, and on no other row:
+
+- A read/write row is `true`.
+- A RAM-test row is `true` only when the same part also has a read/write row. The generator
+  compares the part names without their `@PACKAGE` and `(MODE)` suffixes, so `DS1225(TEST)` matches
+  `DS1225(RW)`. A plain SRAM has no read/write row, so it is `false`.
+
+**This is an observed split, not a documented meaning.** minipro's source does not name it: for
+`MP_SRAM` it runs one generic RAM test (`minipro_test_ram_generic`, `src/minipro.c` @ a8efaedc), and
+it gives no meaning to the protocol.
+
+The shipped database has 76 SRAM-class rows: 13 `false` and 63 `true`. Each value was checked
+against a manufacturer datasheet for the part family (2026-10-28):
+
+- `true`: DS1220/1225/1230/1245/1249/1250 and BQ4010–4015 ("lithium energy source", "data
+  retention in the absence of power"), M48T/M48Z ("non-volatile static RAM"), and
+  FM1208/1608/16W08/1808/18W08/18L08 ("Nonvolatile Ferroelectric RAM").
+- `false`: 6116, 6264, 62256, 61512, 628128, 628512 and the Winbond W24 SRAMs. These datasheets
+  give only a powered data-retention mode, at VCC down to 2 V.
+
+Three limits apply:
+
+- Some aliases were checked through their family only: W2464, W24256, W24020/040/512,
+  DS1245W/1249W/1250W, M48Z512Y/V and M48Z129Y.
+- `628256` has no datasheet. It is a generic "Standard SRAM" row, and no part with that number
+  was found.
+- The field describes the selected row, not the chip in the socket. A DS1249 (256K x 8 NVRAM) used
+  with the `628256` row reads `false`.
+
+A new upstream row is not checked until someone checks it.

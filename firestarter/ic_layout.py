@@ -501,6 +501,11 @@ class EpromSpecBuilder:
             electrical_type,
             eprom_data.get("protocol-id"),
         )
+        # Only the info view gets the suffix. The list table cuts the type
+        # label at 12 characters.
+        if "non-volatile" in eprom_data:
+            retention = "non-volatile" if eprom_data["non-volatile"] else "volatile"
+            chip_type_str = f"{chip_type_str} ({retention})"
 
         # No verified_str marker is shown.
         # The presenter reads chip_data.get("verified_str", "") so omitting the
