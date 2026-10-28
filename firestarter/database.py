@@ -445,6 +445,10 @@ class EpromDatabase:
             "electrical-type": electrical.get("type", ""),
         }
 
+        # SRAM-class rows only. info shows it on the Type line.
+        if "non_volatile" in electrical:
+            data["non-volatile"] = electrical["non_volatile"]
+
         chip_id_val = programming.get("chip_id_value")
         if chip_id_val:
             data["chip-id"] = int(chip_id_val, 16)

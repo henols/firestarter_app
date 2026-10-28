@@ -370,3 +370,30 @@ def test_the_jumper_blocks_are_rev_0_1_rev_2_0_2_1_and_rev_2_2_2_3(
                 _no_jp5_or_22(value)
 
     _no_jp5_or_22(jumpers)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("62256", "SRAM (volatile)"),
+        ("DS1225(RW)", "SRAM (non-volatile)"),
+        ("DS1225(TEST)", "SRAM (non-volatile)"),
+        ("FM1808", "SRAM (non-volatile)"),
+        ("W27C512", "EEPROM"),
+    ],
+)
+def test_info_type_line_tells_sram_retention(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+    name: str,
+    expected: str,
+) -> None:
+    """The info Type line tells a plain SRAM from an NVRAM or FRAM part.
+    A chip without electrical.non_volatile keeps its plain type label."""
+    eprom = db.get_eprom(name)
+    assert eprom is not None
+    result = spec_builder.build_specifications(
+        eprom, electrical_type=eprom.get("electrical-type")
+    )
+    assert result is not None
+    assert result["type_str"] == expected
