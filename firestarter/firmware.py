@@ -39,7 +39,12 @@ from firestarter.exceptions import (
     ProgrammerNotFoundError,
     SerialError,
 )
-from firestarter.fw_release_gate import require_installable_release
+from firestarter.fw_release_gate import (
+    feature_version,
+    is_prerelease_version,
+    matches_stable_cli,
+    require_installable_release,
+)
 from firestarter.serial_comm import SerialCommunicator
 from firestarter.timestamps import iso_text_to_cet
 
@@ -331,15 +336,21 @@ class FirmwareManager:
         channel: Literal["stable", "pre", "pinned"] = "stable",
         version: str | None = None,
         board: str = "uno",
+        app_version: str | None = None,
     ) -> Tuple[str | None, str | None]:  # noqa: UP006
         """Router: returns (resolved_version, download_url) or (None, None) on failure.
 
-        channel='stable'  → delegates to fetch_latest_release_info (back-compat shim).
+        channel='stable'  → for a stable app_version, the highest stable release on
+                            its feature version (a stable CLI 3.2.x runs 3.2.y only);
+                            otherwise delegates to fetch_latest_release_info.
         channel='pre'     → paginates /releases, takes the highest non-draft release by
                             PEP 440, stable or pre-release; falls back to stable if none.
         channel='pinned'  → fetches /releases/tags/{version} directly.
         """  # noqa: E501
         if channel == "stable":
+            app_feature = feature_version(app_version)
+            if is_prerelease_version(app_version) is False and app_feature:
+                return self._fetch_matching_stable_release_info(app_feature, board)
             return self.fetch_latest_release_info(board=board)
 
         elif channel == "pinned":
@@ -412,6 +423,44 @@ class FirmwareManager:
                 f"Unknown firmware channel {channel!r}; expected 'stable', 'pre', or 'pinned'."  # noqa: E501
             )
             return None, None
+
+    def _fetch_matching_stable_release_info(
+        self, app_feature: tuple[int, int], board: str
+    ) -> Tuple[str | None, str | None]:  # noqa: UP006
+        """The highest non-draft stable release whose feature version is app_feature."""
+        line = f"{app_feature[0]}.{app_feature[1]}.x"
+        try:
+            all_releases = self._fetch_all_releases()
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch firmware releases: {e}")
+            return None, None
+
+        candidates = []
+        for r in all_releases:
+            if r.get("draft"):
+                continue
+            try:
+                tag_version = Version(r.get("tag_name", ""))
+            except InvalidVersion:
+                continue
+            if tag_version.is_prerelease:
+                continue
+            if (tag_version.major, tag_version.minor) == app_feature:
+                candidates.append((tag_version, r))
+
+        if not candidates:
+            logger.error(f"No stable firmware release {line} was found.")
+            return None, None
+
+        _, picked = max(candidates, key=lambda t: t[0])
+        download_url = _pick_asset(picked.get("assets", []), board)
+        if not download_url:
+            logger.error(
+                f"Release {picked.get('tag_name')!r} has no asset "
+                f"{_asset_label(board)} for board {board!r}."
+            )
+            return None, None
+        return picked.get("tag_name"), download_url
 
     def list_releases(
         self,
@@ -847,8 +896,17 @@ class FirmwareManager:
             self._hint_dfu_board()
             return False
 
+        if app_version is None:
+            # Dereferenced at call time, not bound at import, so a test can
+            # monkeypatch firestarter.__version__ without reloading this module.
+            import firestarter as _pkg
+
+            app_version = _pkg.__version__
         latest_version, download_url = self.fetch_release_info(
-            channel=channel, version=pinned_version, board=board_to_use
+            channel=channel,
+            version=pinned_version,
+            board=board_to_use,
+            app_version=app_version,
         )
 
         # Guard the release tag where it is BORN, not on each branch that
@@ -869,12 +927,6 @@ class FirmwareManager:
         #
         # The same call refuses a pre-release on a stable CLI. That covers a
         # library caller that asks a stable CLI for channel="pre".
-        if app_version is None:
-            # Dereferenced at call time, not bound at import, so a test can
-            # monkeypatch firestarter.__version__ without reloading this module.
-            import firestarter as _pkg
-
-            app_version = _pkg.__version__
         require_installable_release(
             app_version,
             latest_version,
@@ -920,8 +972,22 @@ class FirmwareManager:
                     "only guard."
                 )
 
+        # A stable CLI runs a stable release on its own feature version only. A
+        # board on anything else is never up to date, even when its version is
+        # higher: a stable 3.2.6 CLI moves a 3.2.3b1 board to 3.2.2.
+        mismatched = bool(
+            current_version
+            and is_prerelease_version(app_version) is False
+            and not matches_stable_cli(app_version, current_version)
+        )
         is_up_to_date = False
-        if current_version and latest_version:
+        if mismatched:
+            logger.warning(
+                f"Firmware {current_version} does not match CLI {app_version}. "
+                "A stable CLI uses a stable firmware release with the same "
+                "major.minor version."
+            )
+        elif current_version and latest_version:
             is_up_to_date = self._compare_versions(current_version, latest_version)
 
         if is_up_to_date and not force_install:
@@ -949,10 +1015,12 @@ class FirmwareManager:
         elif (
             not is_up_to_date and current_version and latest_version
         ):  # No flags, but update available
-            if Confirm.ask(
-                f"New firmware {latest_version} available for {board_to_use} (current: {current_version}). Update now?",  # noqa: E501
-                default=False,
-            ):
+            prompt = (
+                f"Install firmware {latest_version} for {board_to_use} (current: {current_version})?"  # noqa: E501
+                if mismatched
+                else f"New firmware {latest_version} available for {board_to_use} (current: {current_version}). Update now?"  # noqa: E501
+            )
+            if Confirm.ask(prompt, default=False):
                 should_install_now = True
             else:
                 logger.info("Firmware update cancelled by user.")

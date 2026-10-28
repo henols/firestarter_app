@@ -52,7 +52,7 @@ def _identified_manager(monkeypatch, *, latest_version=None, download_url=None):
     monkeypatch.setattr(
         fm,
         "fetch_release_info",
-        lambda channel="stable", version=None, board="uno": (
+        lambda channel="stable", version=None, board="uno", **_kw: (
             latest_version,
             download_url,
         ),
@@ -106,7 +106,7 @@ def test_already_up_to_date_path_still_returns_true_with_no_error(monkeypatch, c
         download_url="https://example.invalid/firestarter_uno.hex",
     )
     with caplog.at_level(logging.ERROR, logger="Firmware"):
-        result = fm.manage_firmware_update()
+        result = fm.manage_firmware_update(app_version="3.1.0")
     assert result is True
     assert _error_records(caplog) == []
 

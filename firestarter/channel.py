@@ -59,23 +59,16 @@ def is_prerelease_build() -> bool:
     """True when this build came off `beta` (its own version is a pre-release).
 
     Fails **closed**: an unparseable version is treated as stable, so a gated
-    feature stays hidden rather than leaking. This matches
-    `_maybe_auto_route_to_pre`, which also treats `InvalidVersion` as
-    not-a-prerelease. In practice `__version__` is a literal in the package and
-    is always valid PEP 440; dev versions (`2.0.7_dev`) parse as pre-releases and
-    therefore keep gated features enabled while working from a checkout.
+    feature stays hidden rather than leaking. `_maybe_auto_route_to_pre` uses
+    this function, so it treats an unparseable version the same way. In
+    practice `__version__` is a literal in the package and is always valid
+    PEP 440; dev versions (`2.0.7_dev`) parse as pre-releases and therefore
+    keep gated features enabled while working from a checkout.
     """
-    try:
-        from packaging.version import InvalidVersion, Version
+    import firestarter as _pkg
+    from firestarter.fw_release_gate import is_prerelease_version
 
-        import firestarter as _pkg
-
-        try:
-            return bool(Version(_pkg.__version__).is_prerelease)
-        except InvalidVersion:
-            return False
-    except ImportError:  # pragma: no cover — packaging is a hard dependency
-        return False
+    return is_prerelease_version(_pkg.__version__) is True
 
 
 def is_board_available(board: str | None) -> bool:

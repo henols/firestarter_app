@@ -343,29 +343,15 @@ def _maybe_auto_route_to_pre(args: object) -> None:
         or getattr(args, "stable", False)
     ):
         return
-    try:
-        from packaging.version import InvalidVersion, Version
-
-        import firestarter as _pkg
-
-        try:
-            if Version(_pkg.__version__).is_prerelease:
-                args.pre = True  # type: ignore[attr-defined]
-                helper_logger.info(
-                    "Beta app detected — defaulting to --pre. "
-                    "Use --firmware-version X.Y.Z to pin a stable version."
-                )
-        except InvalidVersion:
-            # Deliberate fail-OPEN, and deliberately the opposite polarity to
-            # fw_release_gate, which fails CLOSED on the same unreadable input.
-            # The asymmetry is intended: the worst case here is that the wrong
-            # channel is picked, which the gate then judges on its merits; the
-            # worst case there is a board flashed with firmware this host cannot
-            # drive, recoverable only through the bootloader. Do not "align"
-            # these two without re-reading both worst cases.
-            pass
-    except ImportError:
-        pass
+    # An unreadable version is not a pre-release here: the worst case is the
+    # wrong channel, which fw_release_gate then judges and refuses (it fails
+    # CLOSED on the same input). Do not "align" the two polarities.
+    if is_prerelease_build():
+        args.pre = True  # type: ignore[attr-defined]
+        helper_logger.info(
+            "Beta app detected — defaulting to --pre. "
+            "Use --firmware-version X.Y.Z to pin a stable version."
+        )
 
 
 def _build_op_flags(
