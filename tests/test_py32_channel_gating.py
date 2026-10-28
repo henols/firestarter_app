@@ -51,11 +51,16 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import Mock
 
 import click
 import pytest
+from click.testing import CliRunner
 
 from firestarter import cli_handlers
+from firestarter.firmware import FirmwareManager
+
+from .conftest import make_app_context
 
 _APP_DIR = Path(__file__).parent.parent
 _CLI_HANDLERS_PATH = _APP_DIR / "firestarter" / "cli_handlers.py"
@@ -189,6 +194,23 @@ def test_simulated_stable_board_choice_rejects_py32f071() -> None:
     assert result.exit_code == 2
 
 
+def test_simulated_stable_help_omits_pre() -> None:
+    result = _run_cli(_STABLE_VERSION, ("fw", "--help"))
+    assert "--pre" not in result.output
+    assert "3.1.0b2" not in result.output
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [("fw", "--pre"), ("fw", "--list", "--pre"), ("fw", "--pre", "--stable")],
+)
+def test_simulated_stable_pre_rejected(argv) -> None:
+    """Refused before the --list exit and before the channel mutex."""
+    result = _run_cli(_STABLE_VERSION, argv)
+    assert result.exit_code == 2
+    assert "no such option: --pre" in result.output
+
+
 # Simulated pre-release (`__version__ = "3.0.0b1"`)
 
 
@@ -203,6 +225,11 @@ def test_simulated_prerelease_help_includes_py32_surface() -> None:
     assert "py32f071" in result.output
     assert "--usb-id" in result.output
     assert "--dfu-probe" in result.output
+
+
+def test_simulated_prerelease_help_includes_pre() -> None:
+    result = _run_cli(_PRERELEASE_VERSION, ("fw", "--help"))
+    assert "--pre" in result.output
 
 
 def test_simulated_prerelease_dfu_probe_and_usb_id_not_refused() -> None:
@@ -313,3 +340,27 @@ def test_reject_py32_only_option_enabled_and_not_given_returns(
     # See test_reject_py32_only_option_disabled_and_not_given_returns above
     # for why this is a bare call rather than `assert ... is None`.
     cli_handlers._reject_py32_only_option("--usb-id", False)
+
+
+# In-process: what `fw --list` asks the firmware manager for, per channel
+
+
+@pytest.mark.parametrize(
+    ("pre_enabled", "expected_filter"), [(False, "stable"), (True, "all")]
+)
+def test_list_channel_filter_follows_the_build_channel(
+    monkeypatch: pytest.MonkeyPatch, pre_enabled: bool, expected_filter: str
+) -> None:
+    """A stable build lists stable releases only; a pre-release build lists all."""
+    monkeypatch.setattr(cli_handlers, "_PRE_CHANNEL_ENABLED", pre_enabled)
+    fw_manager = Mock(spec=FirmwareManager)
+    fw_manager.list_releases.return_value = []
+    result = CliRunner().invoke(
+        cli_handlers.cli,
+        ["fw", "--list"],
+        obj=make_app_context(firmware_manager=fw_manager),
+    )
+    assert result.exit_code == 0
+    assert fw_manager.list_releases.call_args.kwargs["channel_filter"] == (
+        expected_filter
+    )

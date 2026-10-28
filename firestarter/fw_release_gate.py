@@ -16,6 +16,11 @@ The rule is the FEATURE version, (major, minor). The patch number is ignored,
 and so is the pre-release suffix: 3.1.0b2 and 3.1.0b5 are one feature version.
 A release is refused when its feature version is ABOVE this CLI's.
 
+A stable CLI also refuses every pre-release firmware. A stable CLI is a final
+PEP 440 release; a pre-release firmware is a b/rc/dev tag. This rule ignores the
+feature version, and nothing waives it: a stable user gets stable firmware only.
+A pre-release CLI (a b/rc tag, or a dev checkout) installs either.
+
 The reverse pairing -- a CLI newer than the firmware -- is NOT gated here.
 `_maybe_auto_route_to_pre` in cli_handlers.py steers channel selection away from
 it. The two checks cover opposite directions and neither replaces the other.
@@ -23,7 +28,7 @@ it. The two checks cover opposite directions and neither replaces the other.
 Polarity: fail closed. A false pass flashes a board this host cannot drive, and
 the board must then be recovered through the bootloader. A false refusal only
 makes the install unavailable, and `firestarter fw --list` still enumerates
-every release. A version that cannot be read on either side is refused exactly
+the releases. A version that cannot be read on either side is refused exactly
 like a version that is too new.
 
 One deliberate exception: a release version of None is NOT a refusal. With no
@@ -31,7 +36,8 @@ release there is nothing to flash, and `manage_firmware_update` already reports
 the failed fetch. Turning a GitHub outage into a version-mismatch refusal would
 be a lie. This is the one place the gate looks fail-open and is not.
 
-Escape: `--allow-newer-firmware`. Never an environment variable.
+Escape for the feature-version refusal: `--allow-newer-firmware`. Never an
+environment variable. The pre-release refusal has no escape.
 
 Unlike the pre-serial gates, the authoritative call runs AFTER the release
 metadata fetch, because the release tag is only known then. It still runs before
@@ -75,6 +81,15 @@ _UNREADABLE_FORMAT = (
     "--allow-newer-firmware. This pairing is not tested."
 )
 
+_PRERELEASE_ON_STABLE_FORMAT = (
+    "Firmware {release} is a pre-release. This CLI is {app}, a stable release. "
+    "A stable CLI installs stable firmware only. "
+    "Refusing to install firmware {release}.\n"
+    "Run 'firestarter fw --install' to install the latest stable firmware.\n"
+    "To use pre-release firmware, install a pre-release CLI. "
+    "Run 'pip install --upgrade --pre firestarter'."
+)
+
 _UNREADABLE_TEXT = "an unreadable version"
 
 
@@ -92,6 +107,20 @@ def feature_version(raw: str | None) -> tuple[int, int] | None:
     except InvalidVersion:
         return None
     return (parsed.major, parsed.minor)
+
+
+def is_prerelease_version(raw: str | None) -> bool | None:
+    """True for a PEP 440 pre-release (b, rc or dev), False for a final release.
+
+    None when the version cannot be read. The caller decides what that means;
+    the feature-version check already refuses an unreadable version.
+    """
+    if not raw:
+        return None
+    try:
+        return Version(raw).is_prerelease
+    except InvalidVersion:
+        return None
 
 
 def is_refused(app_version: str | None, release_version: str | None) -> bool:
@@ -117,9 +146,22 @@ def require_installable_release(
 ) -> None:
     """Raise FirmwareReleaseRefusedError when this CLI must not flash this release.
 
-    Returns None on pass. `allow_newer` waives the refusal; it defaults to False
-    so a library caller that does not ask for the waiver does not get it.
+    Returns None on pass. `allow_newer` waives the feature-version refusal; it
+    defaults to False so a library caller that does not ask for the waiver does
+    not get it. Nothing waives the pre-release refusal on a stable CLI.
+
+    An unreadable version on either side is not judged by the pre-release rule.
+    The feature-version check refuses it.
     """
+    if (
+        is_prerelease_version(app_version) is False
+        and is_prerelease_version(release_version) is True
+    ):
+        raise FirmwareReleaseRefusedError(
+            _PRERELEASE_ON_STABLE_FORMAT.format(
+                app=app_version, release=release_version
+            )
+        )
     if allow_newer or not is_refused(app_version, release_version):
         return
     app = feature_version(app_version)

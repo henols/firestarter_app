@@ -830,6 +830,13 @@ class TestInstallWithDfuVerifyLogging:
 class TestPortlessInstall:
     """A board in DFU mode exposes no serial port — the install must not need one."""
 
+    @pytest.fixture(autouse=True)
+    def _prerelease_cli(self, monkeypatch):
+        """A pre-release CLI: a stable CLI refuses the pre-release tags below."""
+        import firestarter as _pkg
+
+        monkeypatch.setattr(_pkg, "__version__", "3.0.0b12")
+
     def _manager(self, monkeypatch, board):
         fm = FirmwareManager(config_manager=MagicMock())
         # No identity read is possible: the bootloader speaks DFU, not CDC.

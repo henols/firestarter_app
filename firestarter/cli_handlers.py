@@ -37,6 +37,7 @@ from firestarter.channel import (
     available_boards,
     dev_command_gate_message,
     is_dev_tools_enabled,
+    is_prerelease_build,
 )
 from firestarter.chip_resolver import (
     describe_ambiguity,
@@ -186,6 +187,27 @@ def _complete_eprom(
 _ALL_BOARDS: tuple[str, ...] = ("uno", "uno328pb", "leonardo", "py32f071")
 _BOARD_CHOICES: list[str] = available_boards(_ALL_BOARDS)
 _PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
+# A stable build never offers pre-release firmware: `fw --pre` is refused and
+# `fw --list` shows stable releases only. fw_release_gate refuses the install.
+_PRE_CHANNEL_ENABLED: bool = is_prerelease_build()
+
+
+def _reject_gated_option(name: str, given: bool, enabled: bool) -> None:
+    """The one refusal for a CLI option that this build's channel does not offer.
+
+    It reads like Click's own unknown-option error, because on this build the
+    option does not exist.
+    """
+    if given and not enabled:
+        raise click.UsageError(f"no such option: {name}")
+
+
+def _reject_pre_only_option(name: str, given: bool) -> None:
+    """Refuse a pre-release-only CLI option on a stable build.
+
+    Reads `_PRE_CHANNEL_ENABLED` at CALL time, like `_reject_py32_only_option`.
+    """
+    _reject_gated_option(name, given, _PRE_CHANNEL_ENABLED)
 
 
 def _reject_py32_only_option(name: str, given: bool) -> None:
@@ -204,8 +226,7 @@ def _reject_py32_only_option(name: str, given: bool) -> None:
     default -- which is what makes it monkeypatchable while the Click surface
     stays frozen at import time.
     """
-    if given and not _PY32_ENABLED:
-        raise click.UsageError(f"no such option: {name}")
+    _reject_gated_option(name, given, _PY32_ENABLED)
 
 
 def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -1764,6 +1785,7 @@ def _maybe_auto_route_to_pre_click(
 @click.option(
     "--pre",
     is_flag=True,
+    hidden=not _PRE_CHANNEL_ENABLED,
     help="Fetch latest pre-release firmware (mirrors pip install --pre).",
 )
 @click.option(
@@ -1772,7 +1794,11 @@ def _maybe_auto_route_to_pre_click(
     type=_FirmwareVersionType(),
     default=None,
     metavar="VERSION",
-    help="Pin exact firmware version (e.g. 3.1.0, 3.1.0b2, 3.1.0rc1).",
+    help=(
+        "Pin exact firmware version (e.g. 3.1.0, 3.1.0b2, 3.1.0rc1)."
+        if _PRE_CHANNEL_ENABLED
+        else "Pin exact firmware version (e.g. 3.1.0)."
+    ),
 )
 @click.option(
     "--stable",
@@ -1861,10 +1887,14 @@ def fw(
 ) -> None:
     """Firmware version.
 
-    ``--pre``, ``--firmware-version`` and ``--stable`` are mutually exclusive;
-    passing more than one is refused before anything is installed.
+    The release channel options are mutually exclusive; passing more than one
+    is refused before anything is installed.
     """
     app: AppContext = ctx.obj
+
+    # Before the mutex check, so a stable build never names --pre in an error
+    # other than this one.
+    _reject_pre_only_option("--pre", pre)
 
     # 3-way --pre / --firmware-version / --stable mutex enforced once,
     # post-parse, with a deterministic error message that doesn't depend on
@@ -1914,7 +1944,7 @@ def fw(
         channel_filter: Literal["all", "pre", "stable"]
         if pre:
             channel_filter = "pre"
-        elif stable:
+        elif stable or not _PRE_CHANNEL_ENABLED:
             channel_filter = "stable"
         else:
             channel_filter = "all"

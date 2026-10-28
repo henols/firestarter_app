@@ -1296,6 +1296,13 @@ def test_fw_install_returns_false(runner: CliRunner) -> None:
     assert result.exit_code == 1
 
 
+@pytest.fixture
+def _pre_channel_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pre-release build: a stable build refuses --pre before the mutex check."""
+    monkeypatch.setattr(cli_handlers_mod, "_PRE_CHANNEL_ENABLED", True)
+
+
+@pytest.mark.usefixtures("_pre_channel_enabled")
 def test_fw_mutex_pre_and_firmware_version(runner: CliRunner) -> None:
     """TRAP #4 / D-13.4: --pre + --firmware-version exits 2 (mutually exclusive).
 
@@ -1312,6 +1319,7 @@ def test_fw_mutex_pre_and_firmware_version(runner: CliRunner) -> None:
     assert "mutually exclusive" in result.output.lower()
 
 
+@pytest.mark.usefixtures("_pre_channel_enabled")
 def test_fw_mutex_stable_and_pre(runner: CliRunner) -> None:
     """TRAP #4 / D-13.4: --stable + --pre exits 2 (mutually exclusive)."""
     fw_mgr = Mock(spec=FirmwareManager)

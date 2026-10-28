@@ -217,8 +217,8 @@
   
     Firmware version.
   
-    ``--pre``, ``--firmware-version`` and ``--stable`` are mutually exclusive;
-    passing more than one is refused before anything is installed.
+    The release channel options are mutually exclusive; passing more than one is
+    refused before anything is installed.
   
   Options:
     -i, --install                   Try to install the latest firmware.
@@ -257,15 +257,12 @@
   
     Firmware version.
   
-    ``--pre``, ``--firmware-version`` and ``--stable`` are mutually exclusive;
-    passing more than one is refused before anything is installed.
+    The release channel options are mutually exclusive; passing more than one is
+    refused before anything is installed.
   
   Options:
     -i, --install                   Try to install the latest firmware.
-    --pre                           Fetch latest pre-release firmware (mirrors
-                                    pip install --pre).
-    --firmware-version VERSION      Pin exact firmware version (e.g. 3.1.0,
-                                    3.1.0b2, 3.1.0rc1).
+    --firmware-version VERSION      Pin exact firmware version (e.g. 3.1.0).
     --stable                        Explicitly select stable channel. With
                                     --list, filters to stable releases only.
     --list                          List available firmware releases for the

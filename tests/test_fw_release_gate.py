@@ -15,7 +15,7 @@ version explicitly or monkeypatches the package attribute, so a release bump
 cannot redden this file.
 """
 
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from click.testing import CliRunner
@@ -28,9 +28,11 @@ from firestarter.exceptions import (
 )
 from firestarter.firmware import FirmwareManager
 from firestarter.fw_release_gate import (
+    _PRERELEASE_ON_STABLE_FORMAT,
     _REFUSAL_FORMAT,
     _UNREADABLE_FORMAT,
     feature_version,
+    is_prerelease_version,
     is_refused,
     require_installable_release,
 )
@@ -261,3 +263,111 @@ def test_list_still_enumerates_a_too_new_release(
     )
     assert result.exit_code == 0
     assert "3.2.0" in result.output
+
+
+# ---------------------------------------------------------------------------
+# G. A stable CLI refuses every pre-release firmware
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("3.2.6", False),
+        ("v3.2.6", False),
+        ("3.2.7b1", True),
+        ("3.2.0rc1", True),
+        ("3.2.7.dev3+gabc1234", True),
+        ("not-a-version", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_is_prerelease_version(raw, expected) -> None:
+    assert is_prerelease_version(raw) is expected
+
+
+@pytest.mark.parametrize("release_version", ["3.2.7b1", "3.2.0rc1", "3.3.0.dev1"])
+@pytest.mark.parametrize("allow_newer", [False, True])
+def test_stable_cli_refuses_a_prerelease(release_version, allow_newer) -> None:
+    """No waiver: --allow-newer-firmware does not open this refusal."""
+    with pytest.raises(FirmwareReleaseRefusedError) as exc:
+        require_installable_release("3.2.6", release_version, allow_newer=allow_newer)
+    assert str(exc.value) == _PRERELEASE_ON_STABLE_FORMAT.format(
+        app="3.2.6", release=release_version
+    )
+
+
+def test_stable_cli_refuses_an_older_prerelease() -> None:
+    """The rule ignores the feature version: an older pre-release is refused too."""
+    with pytest.raises(FirmwareReleaseRefusedError):
+        require_installable_release("3.2.6", "3.1.0b2")
+
+
+@pytest.mark.parametrize(
+    ("app_version", "release_version"),
+    [
+        ("3.2.6", "3.2.6"),  # stable on stable
+        ("3.2.6", None),  # nothing to flash
+        ("3.2.7b1", "3.2.7b2"),  # pre-release CLI
+        ("3.2.7.dev3+gabc1234", "3.2.7b1"),  # dev checkout
+        ("3.2.7b1", "3.2.6"),  # pre-release CLI, stable firmware
+    ],
+)
+def test_prerelease_rule_passes(app_version, release_version) -> None:
+    require_installable_release(app_version, release_version)
+
+
+def test_stable_cli_unreadable_release_keeps_the_unreadable_refusal() -> None:
+    with pytest.raises(FirmwareReleaseRefusedError) as exc:
+        require_installable_release("3.2.6", "garbage")
+    assert "is a pre-release" not in str(exc.value)
+    assert "not readable" in str(exc.value)
+
+
+def test_pinned_prerelease_on_stable_cli_refuses_before_any_port_or_request(
+    runner, fw_manager, monkeypatch
+) -> None:
+    monkeypatch.setattr(_pkg, "__version__", "3.2.6")
+    result = runner.invoke(
+        cli,
+        ["fw", "--install", "--firmware-version", "3.2.7b1"],
+        obj=make_app_context(firmware_manager=fw_manager),
+    )
+    assert result.exit_code == 1
+    assert "is a pre-release" in result.output
+    fw_manager.check_current_firmware.assert_not_called()
+    fw_manager.manage_firmware_update.assert_not_called()
+
+
+def test_pre_channel_on_stable_library_call_refuses_before_download(
+    monkeypatch,
+) -> None:
+    """A library caller that asks a stable CLI for channel='pre' is refused."""
+    fm = FirmwareManager(config_manager=MagicMock())
+    monkeypatch.setattr(
+        fm,
+        "check_current_firmware",
+        lambda **_kw: ("/dev/ttyACM0", "3.2.6", "uno"),
+    )
+    monkeypatch.setattr(
+        fm,
+        "fetch_release_info",
+        lambda channel="stable", version=None, board="uno": (
+            "3.2.7b1",
+            "https://example.invalid/uno.hex",
+        ),
+    )
+    monkeypatch.setattr(
+        fm, "_download_firmware_file", lambda url: pytest.fail("must not download")
+    )
+    monkeypatch.setattr(
+        fm, "_install_firmware", lambda **kw: pytest.fail("must not flash")
+    )
+    with pytest.raises(FirmwareReleaseRefusedError):
+        fm.manage_firmware_update(
+            install_flag=True,
+            channel="pre",
+            app_version="3.2.6",
+            allow_newer_firmware=True,
+        )

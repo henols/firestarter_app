@@ -229,6 +229,13 @@ def _manager_that_cannot_identify(monkeypatch):
 
 
 class TestBlindInstallRequiresExplicitBoard:
+    @pytest.fixture(autouse=True)
+    def _prerelease_cli(self, monkeypatch):
+        """A pre-release CLI: a stable CLI refuses the pre-release tags below."""
+        import firestarter as _pkg
+
+        monkeypatch.setattr(_pkg, "__version__", "3.0.0b19")
+
     @pytest.mark.parametrize(
         ("install_flag", "flags", "label"),
         [(True, 0, "--install"), (False, FLAG_FORCE, "--force")],
