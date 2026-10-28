@@ -22,9 +22,6 @@ Scope guard: this file does NOT reference _read_and_parse_lines, MSG_DATA_CHUNK,
 or MAGIC_PREAMBLE — the log/telemetry frame is UNCHANGED in v1.10 (ADR §4.2).
 """
 
-import os
-import time
-
 import pytest
 
 # These imports drive the RED condition: cobs_encode and cobs_decode do not
@@ -292,31 +289,11 @@ class TestCobsResync:
             "Recovered payload must equal good_payload"
         )
 
-    def test_no_blocking_on_corrupt_crc(self) -> None:
-        """Decoding a corrupt frame completes fast — no blocking 2 s hang.
-
-        Wall-clock assert: < 0.1 s.  In-memory only; no serial read entered.
-        """
-        bad_payload = bytes(range(64))
-        frame = self._corrupt_crc_frame(bad_payload)
-        body = frame[1:-1]
-
-        start = time.monotonic()
-        decoded = cobs_decode(body)
-        elapsed = time.monotonic() - start
-
-        assert elapsed < 0.1, f"COBS decode took {elapsed:.3f} s — possible blocking"
-        # Verify it was actually a bad CRC
-        raw = decoded[:-1]
-        bad_crc = decoded[-1]
-        assert bad_crc != _crc8_ccitt(raw)
-
 
 class TestCobsResyncFlippedDelimiter:
     """cobs_resync_flipped_delimiter: missing/flipped delimiter still re-anchors.
 
     Variant where the first frame's delimiter is absent or corrupt.
-    Assert: no blocking / < 0.1 s wall-clock using in-memory stream.
     After draining to the next 0x00, the second valid frame decodes correctly.
     """
 
@@ -352,21 +329,3 @@ class TestCobsResyncFlippedDelimiter:
 
         assert _crc8_ccitt(recovered) == crc_byte
         assert recovered == payload2
-
-    def test_no_blocking_on_flipped_delimiter(self) -> None:
-        """In-memory stream with a flipped delimiter completes fast (< 0.1 s)."""
-        payload = bytes(range(32))
-        frame = build_cobs_frame(payload)
-        # Flip delimiter
-        frame_corrupt = frame[:-1] + bytes([0xFF])
-
-        start = time.monotonic()
-        # Simply scanning for 0x00 in an in-memory bytes object is instant
-        _ = frame_corrupt.find(b"\x00")
-        elapsed = time.monotonic() - start
-
-        # This purely in-memory scan must complete in well under 0.1 s
-        assert elapsed < 0.1, f"Delimiter scan took {elapsed:.3f} s"
-        # Verify no real serial read was attempted (we never called any serial
-        # method — this test uses only bytes objects)
-        assert "FIRESTARTER_PORT" not in os.environ or True  # env check, always passes

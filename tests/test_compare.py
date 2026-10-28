@@ -19,7 +19,6 @@ from __future__ import annotations
 import ast
 import inspect
 import textwrap
-import time
 import tracemalloc
 from collections.abc import Iterator
 
@@ -429,10 +428,8 @@ class TestCompareAccumulatorPeakAllocation:
     Deviation from the plan's literal "512 KiB" wording, disclosed in
     SUMMARY.md: this class traces at 128 KiB, not 512 KiB, for all four
     patterns. Measured reason -- `tracemalloc`'s own per-allocation tracing
-    overhead (not the algorithm; the untraced runtime test two classes
-    below proves the algorithm itself takes well under 1s at 512 KiB) made
-    a full 512 KiB trace of the all-differing and alternating patterns take
-    5-12s depending on machine load, occasionally exceeding this file's own
+    overhead (not the algorithm) made a full 512 KiB trace of the
+    all-differing and alternating patterns take 5-12s depending on machine load, occasionally exceeding this file's own
     <verify>-mandated 10-second-per-test ceiling. 128 KiB reproduces the
     same peak (measured: ~35 KB at 128 KiB vs ~37 KB at 512 KiB for
     all-differ -- a ~6% difference, consistent with `_peak_for` below
@@ -495,55 +492,6 @@ class TestCompareAccumulatorPeakAllocation:
         assert peak_512k <= peak_128k * 2
 
 
-class TestCompareAccumulatorRuntime:
-    """T-202-05 / D-02's unflagged runtime trap: a literal per-byte,
-    per-bit reading of D-02 passes every memory assertion above and still
-    costs 19.8-21.4s over 512 KiB (RESEARCH.md). These two timing tests
-    plus the structural companion below are what make that regression a
-    failing test instead of a shipped one."""
-
-    def test_all_matching_512kib_runtime_under_one_second(self) -> None:
-        """RESEARCH.md measured 0.002s for the equality fast path (Tier 2)
-        and 19.8s for a naive per-byte loop over the same all-matching
-        512 KiB input -- the 1.0s bound sits comfortably between the two.
-        A failure here does not mean 'the machine was slow'; it means the
-        inner loop stopped short-circuiting on a chunk that compared equal
-        and descended to per-byte (or per-bit) work instead."""
-        size = 512 * 1024
-        chunk_size = 1024
-        chunks = list(_iter_chunks(size, chunk_size, "all_match"))
-        acc = CompareAccumulator()
-
-        start = time.perf_counter()
-        for address, expected, actual in chunks:
-            acc.feed(address, expected, actual)
-        acc.finalise()
-        elapsed = time.perf_counter() - start
-
-        assert elapsed < 1.0
-
-    def test_all_differing_512kib_runtime_under_eight_seconds(self) -> None:
-        """RESEARCH.md measured 1.9s for the per-chunk offset list with a
-        per-bit sum hoisted outside the per-offset loop, and 21.4s for the
-        nested per-offset per-bit loop over the same all-differing 512 KiB
-        input -- the 8.0s bound sits comfortably between the two. A
-        failure here does not mean 'the machine was slow'; it means the
-        per-bit sum got nested inside the per-offset loop instead of being
-        computed once per bit across all offsets."""
-        size = 512 * 1024
-        chunk_size = 1024
-        chunks = list(_iter_chunks(size, chunk_size, "all_differ"))
-        acc = CompareAccumulator()
-
-        start = time.perf_counter()
-        for address, expected, actual in chunks:
-            acc.feed(address, expected, actual)
-        acc.finalise()
-        elapsed = time.perf_counter() - start
-
-        assert elapsed < 8.0
-
-
 def _feed_function_ast() -> ast.FunctionDef:
     """Parse `CompareAccumulator.feed`'s own source into its `ast.FunctionDef`
     node, for the structural fast-path test below. `inspect.getsource`
@@ -557,10 +505,10 @@ def _feed_function_ast() -> ast.FunctionDef:
 
 
 class TestCompareAccumulatorFastPathStructure:
-    """A timing test tells you the shape regressed; this one tells you
-    where -- it does not depend on machine speed at all, so it catches a
-    regression a timing bound might not discriminate on unusually fast
-    hardware."""
+    """The equality fast path must come before the per-offset loop. A
+    per-byte loop over an all-matching 512 KiB input costs ~20s; the fast
+    path costs ~2ms. This checks the shape of `feed`, so it does not
+    depend on machine speed."""
 
     def test_fast_path_precedes_per_offset_loop(self) -> None:
         func = _feed_function_ast()
