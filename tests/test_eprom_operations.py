@@ -24,7 +24,7 @@ from unittest.mock import patch
 
 from firestarter.compare import CompareAccumulator
 from firestarter.config import ConfigManager
-from firestarter.eprom_operations import EpromOperator
+from firestarter.eprom_operations import EpromOperator, _default_read_path
 from firestarter.messages import (
     MSG_DATA_CHUNK,
     MSG_END_DONE,
@@ -2729,3 +2729,16 @@ def test_seen_message_ids_records_decoded_ids_and_stays_bounded(
     assert unknown_id not in comm.seen_message_ids
     assert isinstance(comm.seen_message_ids, set)
     assert all(isinstance(i, int) for i in comm.seen_message_ids)
+
+
+def test_default_read_path_adds_lowest_free_suffix(tmp_path, monkeypatch):
+    """`read` with no file name never overwrites an earlier read: the
+    default `<NAME>.bin` gets `-1`, `-2`, ... when that name is taken."""
+    monkeypatch.chdir(tmp_path)
+    assert _default_read_path("w27c512") == "W27C512.bin"
+
+    (tmp_path / "W27C512.bin").write_bytes(b"")
+    assert _default_read_path("w27c512") == "W27C512-1.bin"
+
+    (tmp_path / "W27C512-1.bin").write_bytes(b"")
+    assert _default_read_path("w27c512") == "W27C512-2.bin"

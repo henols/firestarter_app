@@ -362,6 +362,20 @@ def _blank_expected_bytes(_offset: int, length: int) -> bytes:
     return b"\xff" * length
 
 
+def _default_read_path(eprom_name: str) -> str:
+    """The output file name `read` uses when the user gives none:
+    `<NAME>.bin`, or `<NAME>-<n>.bin` with the lowest free `n` when that
+    file exists, so a second read never overwrites the first.
+    """
+    base = eprom_name.upper()
+    path = f"{base}.bin"
+    n = 1
+    while os.path.exists(path):
+        path = f"{base}-{n}.bin"
+        n += 1
+    return path
+
+
 def _write_blank_guard_refusal_message(
     eprom_name: str, region_start: int, result: CompareResult
 ) -> str:
@@ -1298,7 +1312,7 @@ class EpromOperator:
             if not cmd_data:
                 return False
 
-            actual_output_file = output_file or f"{eprom_name.upper()}.bin"
+            actual_output_file = output_file or _default_read_path(eprom_name)
             logger.info(
                 f"Reading EPROM {eprom_name.upper()}, saving to {actual_output_file}"
             )
