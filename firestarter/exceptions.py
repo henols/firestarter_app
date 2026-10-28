@@ -181,6 +181,9 @@ class FirmwareReleaseRefusedError(FirmwareOperationError):
     waives it; `--force` does not, because `--force` means "reinstall the same
     version" and is also a wire flag (FLAG_FORCE).
 
+    Also raised when this CLI is a stable release and the firmware release is a
+    pre-release. Nothing waives that refusal.
+
     A FirmwareOperationError, so cli_handlers.map_typed_errors renders it
     verbatim through the existing FirmwareOperationError arm. No new arm.
     """

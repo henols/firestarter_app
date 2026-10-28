@@ -239,29 +239,36 @@ def _run_fw_help_at_version(version: str) -> str:
     firestarter fw [OPTIONS]` header `run_firestarter()`'s real subprocess
     produces, rather than Click's own default derived from `sys.argv[0]`.
     """
+    stdout, stderr, rc = _run_firestarter_at_version(version, "fw", "--help")
+    assert rc == 0, stderr
+    return stdout
+
+
+def _run_firestarter_at_version(version: str, *args: str) -> tuple[str, str, int]:
+    """Run `firestarter <args>` in a subprocess simulating `version`.
+
+    The mechanism of `_run_fw_help_at_version`, for any arguments. Returns
+    (normalized_stdout, normalized_stderr, exit_code).
+    """
     program = (
-        "import sys, io, contextlib\n"
+        "import sys\n"
         "import firestarter\n"
         f"firestarter.__version__ = {version!r}\n"
         "from firestarter import cli_handlers\n"
-        "buf = io.StringIO()\n"
-        "with contextlib.redirect_stdout(buf):\n"
-        "    try:\n"
-        "        cli_handlers.cli.main(\n"
-        "            args=['fw', '--help'], prog_name='firestarter'\n"
-        "        )\n"
-        "    except SystemExit:\n"
-        "        pass\n"
-        "sys.stdout.write(buf.getvalue())\n"
+        f"cli_handlers.cli.main(args={list(args)!r}, prog_name='firestarter')\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", program],
         capture_output=True,
         text=True,
         timeout=15,
+        env={**os.environ, "FIRESTARTER_CONFIG_DIR": _CLEAN_CONFIG_DIR},
     )
-    assert result.returncode == 0, result.stderr
-    return normalize_output(result.stdout)
+    return (
+        normalize_output(result.stdout),
+        normalize_output(result.stderr),
+        result.returncode,
+    )
 
 
 def test_help_fw(snapshot):
@@ -434,15 +441,25 @@ def test_error_write_missing_args(snapshot):
 
 
 def test_error_fw_pre_stable_mutex(snapshot):
-    """fw --pre --stable → mutually exclusive, exit 2."""
-    stdout, stderr, rc = run_firestarter("fw", "--pre", "--stable")
+    """fw --pre --stable → mutually exclusive, exit 2.
+
+    On a pre-release CLI: a stable CLI refuses --pre itself.
+    """
+    stdout, stderr, rc = _run_firestarter_at_version(
+        "3.0.0b1", "fw", "--pre", "--stable"
+    )
     assert rc == 2
     assert stderr == snapshot
 
 
 def test_error_fw_pre_firmware_version_mutex(snapshot):
-    """fw --pre --firmware-version → mutually exclusive, exit 2."""
-    stdout, stderr, rc = run_firestarter("fw", "--pre", "--firmware-version", "3.0.0")
+    """fw --pre --firmware-version → mutually exclusive, exit 2.
+
+    On a pre-release CLI: a stable CLI refuses --pre itself.
+    """
+    stdout, stderr, rc = _run_firestarter_at_version(
+        "3.0.0b1", "fw", "--pre", "--firmware-version", "3.0.0"
+    )
     assert rc == 2
     assert stderr == snapshot
 

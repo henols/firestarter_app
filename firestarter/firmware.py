@@ -866,6 +866,9 @@ class FirmwareManager:
         # onto the pre channel, which is the channel most likely to be ahead of
         # it. That raises how often this refusal fires. Do not "fix" the auto
         # route to avoid the refusal -- the refusal is the point.
+        #
+        # The same call refuses a pre-release on a stable CLI. That covers a
+        # library caller that asks a stable CLI for channel="pre".
         if app_version is None:
             # Dereferenced at call time, not bound at import, so a test can
             # monkeypatch firestarter.__version__ without reloading this module.

@@ -203,6 +203,13 @@ class TestWaiverPlumbing:
 class TestUpdateDecisionReachedOnPreCap02Firmware:
     """The end-to-end regression: the update decision must be REACHED."""
 
+    @pytest.fixture(autouse=True)
+    def _prerelease_cli(self, monkeypatch):
+        """A pre-release CLI: a stable CLI refuses the pre-release tags below."""
+        import firestarter as _pkg
+
+        monkeypatch.setattr(_pkg, "__version__", "3.0.0b19")
+
     def test_manage_firmware_update_reaches_the_download_boundary(self, monkeypatch):
         """No identity in the ack, version from the legacy text ack, then install.
 
