@@ -24,7 +24,6 @@ from firestarter.compare import CompareAccumulator
 from firestarter.config import ConfigManager
 from firestarter.eprom_operations import EpromOperator
 from firestarter.messages import (
-    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_ERR_NOT_BLANK,
     MSG_ERR_TIMEOUT,
@@ -32,7 +31,7 @@ from firestarter.messages import (
     MSG_MAIN_DONE,
 )
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import _FakeSerial, build_chunk_frame, build_frame, build_request_frame
 from .fake_chip import WriteInitPreflightChip
 
 
@@ -463,7 +462,7 @@ class TestVerifyEpromHostSideRead:
             return make_comm()
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_chunk_frame(0, payload))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
         written = _capture_written_frames(fake_serial)
@@ -497,7 +496,7 @@ class TestVerifyEpromHostSideRead:
             return make_comm()
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_chunk_frame(0, payload))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -525,7 +524,7 @@ class TestVerifyEpromHostSideRead:
             return make_comm()
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_chunk_frame(0, bytes(corrupted)))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -558,7 +557,7 @@ class TestVerifyEpromHostSideRead:
             return make_comm()
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, short_chunk))
+        fake_serial.feed(build_chunk_frame(0, short_chunk))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -638,8 +637,8 @@ class TestVerifyEpromReadAbort:
         feed_calls = self._install_feed_counter(monkeypatch)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload[0:2]))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk2))
+        fake_serial.feed(build_chunk_frame(0, payload[0:2]))
+        fake_serial.feed(build_chunk_frame(2, corrupted_chunk2))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
         written = _capture_written_frames(fake_serial)
 
@@ -676,7 +675,7 @@ class TestVerifyEpromReadAbort:
         # has an equivalent step.
         fake_serial.is_open = True
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_chunk_frame(0, payload))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
         with patch(
@@ -702,7 +701,7 @@ class TestVerifyEpromReadAbort:
         input_file.write_bytes(payload)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_chunk_frame(0, bytes(corrupted)))
         fake_serial.feed(
             build_frame(MSG_ERR_NOT_BLANK, bytes([0x00, 0x00, 0x00, 0xAB]))
         )
@@ -733,7 +732,7 @@ class TestVerifyEpromReadAbort:
         input_file.write_bytes(payload)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_chunk_frame(0, payload))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -790,7 +789,7 @@ class TestVerifyEpromReadAbort:
         monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_chunk_frame(0, bytes(corrupted)))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -846,7 +845,7 @@ class TestVerifyEpromReadAbort:
         monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_chunk_frame(0, bytes(corrupted)))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -902,7 +901,7 @@ class TestVerifyEpromReadAbort:
         monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_chunk_frame(0, bytes(corrupted)))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -932,7 +931,7 @@ class TestVerifyEpromReadAbort:
         input_file.write_bytes(payload)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk1))
+        fake_serial.feed(build_chunk_frame(0, corrupted_chunk1))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -968,8 +967,8 @@ class TestVerifyEpromReadAbort:
         input_file.write_bytes(payload)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload[0:2]))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk2))
+        fake_serial.feed(build_chunk_frame(0, payload[0:2]))
+        fake_serial.feed(build_chunk_frame(2, corrupted_chunk2))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -1006,7 +1005,7 @@ class TestVerifyEpromReadAbort:
         input_file.write_bytes(payload)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted))
+        fake_serial.feed(build_chunk_frame(0, corrupted))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -1076,7 +1075,7 @@ class TestVerifyEpromReadAbort:
         input_file.write_bytes(payload)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_chunk_frame(0, bytes(corrupted)))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -1125,8 +1124,8 @@ class TestVerifyEpromReadAbort:
         monkeypatch.setattr(CompareAccumulator, "finalise", _capturing_finalise)
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload[0:2]))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk2))
+        fake_serial.feed(build_chunk_frame(0, payload[0:2]))
+        fake_serial.feed(build_chunk_frame(2, corrupted_chunk2))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -1173,7 +1172,7 @@ class TestVerifyEpromReadAbort:
         must see the mismatch summary and the failed verdict only, never
         `ERROR: Timeout` / `Programmer error during READ`."""
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, b"\x12\x34"))
+        fake_serial.feed(build_chunk_frame(0, b"\x12\x34"))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -1202,7 +1201,7 @@ class TestVerifyEpromReadAbort:
         input_file.write_bytes(b"\x01\x02\x03\x04")
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, b"\xfe\x02"))
+        fake_serial.feed(build_chunk_frame(0, b"\xfe\x02"))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -1251,7 +1250,7 @@ class TestVerifyEpromReadAbort:
         monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, b"\xfe\x02"))
+        fake_serial.feed(build_chunk_frame(0, b"\xfe\x02"))
         fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -1538,130 +1537,175 @@ class _MockComm:
         self._fault_inject_outgoing = None
 
 
-def _make_fake_ctx_for_fault_inject(memory_size: int = 65536):
-    """@contextmanager fake _operation_context for fault_inject_cycle tests."""
+def _make_fake_ctx_for_fault_inject(memory_size: int = 65536, resend: bool = True):
+    """@contextmanager fake _operation_context for fault_inject_cycle tests.
+
+    With an armed outgoing hook it fires the hook on a sample frame and, when
+    `resend` is set, counts the command resend that setup_command makes.
+    """
     from contextlib import contextmanager
 
+    from firestarter import transport_counters
+
     @contextmanager
-    def fake_ctx(self, eprom_name, eprom_data_dict, cmd, *a, **kw):
+    def fake_ctx(
+        self, eprom_name, eprom_data_dict, cmd, *a, fault_inject_outgoing=None, **kw
+    ):
+        if fault_inject_outgoing is not None:
+            fault_inject_outgoing(b"\x03ABC\x55\x00")
+            if resend:
+                transport_counters.record_resend("command")
         yield {"address": 0, "memory-size": memory_size}, 512, "READ"
 
     return fake_ctx
 
 
-def _make_fault_inject_state_machine(corrupted_fails: bool = True):
-    """Fake _run_state_machine for fault_inject_cycle:
+def _make_fault_inject_state_machine(
+    corrupted_ok: bool = True,
+    corrupted_data: bytes = b"\xaa" * 16,
+    resend_read: bool = False,
+):
+    """Fake _run_state_machine for fault_inject_cycle.
 
-    First call (corrupted transfer): returns (not corrupted_fails, None) — i.e.
-    if corrupted_fails=True, returns (False, "error") to simulate failure.
-    Second call (clean transfer): always returns (True, None).
+    First call (corrupted read): delivers `corrupted_data`, counts a read
+    resend when `resend_read` is set, and returns `corrupted_ok`.
+    Later calls (clean read): deliver 16 x 0xAA and succeed.
     """
+    from firestarter import transport_counters
+
     counter = {"n": 0}
 
     def fake_sm(self, op_name, **kwargs):
         cb = kwargs.get("process_data_chunk_callback")
-        if cb is not None:
-            cb(0, b"\xaa" * 16)
         counter["n"] += 1
         if counter["n"] == 1:
-            return (not corrupted_fails, None)  # first call
-        return (True, None)  # subsequent calls
+            if cb is not None:
+                cb(0, corrupted_data)
+            if resend_read:
+                transport_counters.record_resend("read")
+            return (corrupted_ok, None)
+        if cb is not None:
+            cb(0, b"\xaa" * 16)
+        return (True, None)
 
     return fake_sm
 
 
 class TestFaultInjectCycle:
-    """Phase-53 Plan 02 unit tests for fault_inject_cycle (coverage gate)."""
+    """fault_inject_cycle: one corrupted frame, a resend, and a byte-exact read."""
 
     _MEMORY_SIZE = 65536
 
-    def test_fault_inject_cycle_outgoing_pass(self, tmp_path, monkeypatch):
-        """Outgoing path: corrupted transfer fails, clean follow-on succeeds -> True."""
-        monkeypatch.setattr(
-            EpromOperator,
-            "_operation_context",
-            _make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
-        )
-        monkeypatch.setattr(
-            EpromOperator,
-            "_run_state_machine",
-            _make_fault_inject_state_machine(corrupted_fails=True),
-        )
-
+    def _run(self, tmp_path, monkeypatch, *, ctx, sm, direction="outgoing", **kw):
+        monkeypatch.setattr(EpromOperator, "_operation_context", ctx)
+        monkeypatch.setattr(EpromOperator, "_run_state_machine", sm)
         op = EpromOperator(ConfigManager())
         op.comm = _MockComm()  # type: ignore[assignment]
+        out = tmp_path / "fi_out"
         result = op.fault_inject_cycle(
             "TEST_CHIP",
             {"memory-size": self._MEMORY_SIZE},
-            direction="outgoing",
-            fault_form="corrupt-crc8",
-            output_dir=str(tmp_path / "fi_out"),
+            direction=direction,
+            fault_form=kw.get("fault_form", "corrupt-crc8"),
+            output_dir=str(out),
         )
-        assert result is True, "Corrupted-then-clean cycle must return True."
+        return result, out
+
+    def test_fault_inject_cycle_outgoing_pass(self, tmp_path, monkeypatch):
+        """Outgoing: the setup frame is sent again and the read recovers -> True."""
+        result, out = self._run(
+            tmp_path,
+            monkeypatch,
+            ctx=_make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+            sm=_make_fault_inject_state_machine(),
+        )
+        assert result is True
+        log = (out / "fault-inject-outgoing-log.txt").read_text()
+        assert "corrupted_transfer_recovered: True" in log
+        assert "resends: 1" in log
+        assert "transfer_time:" in log
+        assert "recovered data equals the clean read (byte-exact)" in log
 
     def test_fault_inject_cycle_outgoing_drop_delimiter(self, tmp_path, monkeypatch):
-        """Outgoing path with drop-delimiter form -> True (same verdict logic)."""
-        monkeypatch.setattr(
-            EpromOperator,
-            "_operation_context",
-            _make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
-        )
-        monkeypatch.setattr(
-            EpromOperator,
-            "_run_state_machine",
-            _make_fault_inject_state_machine(corrupted_fails=True),
-        )
-
-        op = EpromOperator(ConfigManager())
-        op.comm = _MockComm()  # type: ignore[assignment]
-        result = op.fault_inject_cycle(
-            "TEST_CHIP",
-            {"memory-size": self._MEMORY_SIZE},
-            direction="outgoing",
+        """Outgoing with the drop-delimiter form -> same verdict."""
+        result, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ctx=_make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+            sm=_make_fault_inject_state_machine(),
             fault_form="drop-delimiter",
-            output_dir=str(tmp_path / "fi_out"),
         )
-        assert result is True, "Drop-delimiter cycle must return True."
+        assert result is True
 
-    def test_fault_inject_cycle_corrupted_succeeds_returns_false(
+    def test_fault_inject_cycle_incoming_pass(self, tmp_path, monkeypatch):
+        """Incoming: the host asks for the chunk again and the read recovers."""
+        result, out = self._run(
+            tmp_path,
+            monkeypatch,
+            ctx=_make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+            sm=_make_fault_inject_state_machine(resend_read=True),
+            direction="incoming",
+        )
+        assert result is True
+        log = (out / "fault-inject-incoming-log.txt").read_text()
+        assert "resends: 1" in log
+
+    def test_corrupted_read_that_fails_returns_false(self, tmp_path, monkeypatch):
+        result, out = self._run(
+            tmp_path,
+            monkeypatch,
+            ctx=_make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+            sm=_make_fault_inject_state_machine(corrupted_ok=False),
+        )
+        assert result is False
+        log = (out / "fault-inject-outgoing-log.txt").read_text()
+        assert "corrupted_transfer_recovered: False" in log
+
+    def test_no_resend_means_the_fault_did_not_fire_returns_false(
         self, tmp_path, monkeypatch
     ):
-        """If the corrupted transfer unexpectedly succeeds -> returns False."""
-        monkeypatch.setattr(
-            EpromOperator,
-            "_operation_context",
-            _make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+        """A read that completes with no resend did not test anything."""
+        result, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ctx=_make_fake_ctx_for_fault_inject(self._MEMORY_SIZE, resend=False),
+            sm=_make_fault_inject_state_machine(),
         )
-        monkeypatch.setattr(
-            EpromOperator,
-            "_run_state_machine",
-            # corrupted_fails=False means first call returns (True, None) -> unexpected success
-            _make_fault_inject_state_machine(corrupted_fails=False),
-        )
+        assert result is False
 
-        op = EpromOperator(ConfigManager())
-        op.comm = _MockComm()  # type: ignore[assignment]
-        result = op.fault_inject_cycle(
-            "TEST_CHIP",
-            {"memory-size": self._MEMORY_SIZE},
-            direction="outgoing",
-            fault_form="corrupt-crc8",
-            output_dir=str(tmp_path / "fi_out"),
+    def test_recovered_data_that_differs_returns_false(self, tmp_path, monkeypatch):
+        result, out = self._run(
+            tmp_path,
+            monkeypatch,
+            ctx=_make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+            sm=_make_fault_inject_state_machine(corrupted_data=b"\xab" * 16),
         )
-        assert result is False, (
-            "Unexpectedly successful corrupted transfer must return False."
-        )
+        assert result is False
+        log = (out / "fault-inject-outgoing-log.txt").read_text()
+        assert "recovered data DIFFERS from the clean read" in log
 
-    # ----- 53-04 harness-fix regression tests (the false-negative fix) ---------
+    def test_connection_that_does_not_establish_returns_false(
+        self, tmp_path, monkeypatch
+    ):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def ctx(self, *a, **kw):
+            yield None, None, None
+
+        result, _ = self._run(
+            tmp_path, monkeypatch, ctx=ctx, sm=_make_fault_inject_state_machine()
+        )
+        assert result is False
 
     def test_outgoing_threads_hook_to_operation_context(self, tmp_path, monkeypatch):
-        """The outgoing fault MUST be threaded into _operation_context (i.e. armed at
-        connection time) for the corrupted leg, and NOT for the clean follow-on leg.
-
-        This is the core 53-04 fix: the old code set the hook AFTER setup, so a READ
-        (whose MAIN phase sends only plaintext acks) never fired it -> false negative.
-        """
+        """The outgoing fault MUST be threaded into _operation_context (armed at
+        connection time) for the corrupted leg, and NOT for the clean leg. A
+        READ's MAIN phase sends only plaintext acks, so a hook set after setup
+        never fires."""
         from contextlib import contextmanager
+
+        from firestarter import transport_counters
 
         seen_hooks: list = []
         mem = self._MEMORY_SIZE
@@ -1671,110 +1715,40 @@ class TestFaultInjectCycle:
             self, eprom_name, eprom_data_dict, cmd, *a, fault_inject_outgoing=None, **kw
         ):
             seen_hooks.append(fault_inject_outgoing)
-            # First call = corrupted leg: simulate firmware rejecting the corrupt
-            # setup frame -> connection did not establish (cmd_data is None).
-            if len(seen_hooks) == 1:
-                yield None, None, None
-            else:
-                yield {"address": 0, "memory-size": mem}, 512, "READ"
+            if fault_inject_outgoing is not None:
+                transport_counters.record_resend("command")
+            yield {"address": 0, "memory-size": mem}, 512, "READ"
 
-        monkeypatch.setattr(EpromOperator, "_operation_context", capturing_ctx)
-        monkeypatch.setattr(
-            EpromOperator,
-            "_run_state_machine",
-            _make_fault_inject_state_machine(corrupted_fails=False),  # clean leg PASSES
-        )
-
-        op = EpromOperator(ConfigManager())
-        op.comm = _MockComm()  # type: ignore[assignment]
-        result = op.fault_inject_cycle(
-            "TEST_CHIP",
-            {"memory-size": self._MEMORY_SIZE},
-            direction="outgoing",
-            fault_form="corrupt-crc8",
-            output_dir=str(tmp_path / "fi_thread"),
-        )
-
-        assert result is True, "Bounded connect failure + clean recovery -> True."
-        assert len(seen_hooks) == 2, "Expected a corrupted leg and a clean leg."
-        assert seen_hooks[0] is not None, (
-            "Corrupted leg MUST arm the outgoing hook at connection time (53-04 fix)."
-        )
-        assert seen_hooks[1] is None, "Clean follow-on leg MUST NOT arm the hook."
-
-    def test_outgoing_connect_failure_writes_latency_log(self, tmp_path, monkeypatch):
-        """A rejected setup frame (connect fails) is the expected outcome and writes a
-        fault-inject log carrying the measured error latency + sub-2s cascade verdict."""
-        from contextlib import contextmanager
-
-        calls = {"n": 0}
-        mem = self._MEMORY_SIZE
-
-        @contextmanager
-        def ctx(self, eprom_name, eprom_data_dict, cmd, *a, **kw):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                yield None, None, None  # corrupted setup -> connect failed
-            else:
-                yield {"address": 0, "memory-size": mem}, 512, "READ"
-
-        monkeypatch.setattr(EpromOperator, "_operation_context", ctx)
-        monkeypatch.setattr(
-            EpromOperator,
-            "_run_state_machine",
-            _make_fault_inject_state_machine(corrupted_fails=False),
-        )
-
-        out = tmp_path / "fi_log"
-        op = EpromOperator(ConfigManager())
-        op.comm = _MockComm()  # type: ignore[assignment]
-        result = op.fault_inject_cycle(
-            "TEST_CHIP",
-            {"memory-size": self._MEMORY_SIZE},
-            direction="outgoing",
-            fault_form="corrupt-crc8",
-            output_dir=str(out),
+        result, _ = self._run(
+            tmp_path,
+            monkeypatch,
+            ctx=capturing_ctx,
+            sm=_make_fault_inject_state_machine(),
         )
 
         assert result is True
-        log = (out / "fault-inject-outgoing-log.txt").read_text()
-        assert "corrupted_transfer_surfaced_clean_error: True" in log
-        assert "error_latency:" in log
-        assert "sub_second_clean_error_no_2s_cascade:" in log
-        assert "clean follow-on transfer PASSED" in log
+        assert len(seen_hooks) == 2, "Expected a corrupted leg and a clean leg."
+        assert seen_hooks[0] is not None, "The corrupted leg MUST arm the hook."
+        assert seen_hooks[1] is None, "The clean follow-on leg MUST NOT arm the hook."
 
-    def test_corrupt_crc8_and_drop_delimiter_hooks_mutate_frame(self):
-        """The fault hooks must produce a frame that differs from the original (so the
-        injection is real, not a no-op). Guards against a silent identity hook."""
-        op = EpromOperator(ConfigManager())
-        op.comm = _MockComm()  # type: ignore[assignment]
-        captured: dict = {}
-
-        # Capture the hooks by intercepting _operation_context and reading the armed
-        # hook off a throwaway comm via send_command behavior is covered in
-        # test_serial_comm; here we assert the hook transforms a sample frame.
+    def test_outgoing_hook_corrupts_only_the_first_frame(self, tmp_path, monkeypatch):
+        """The resend of the setup frame must go out intact."""
         from contextlib import contextmanager
+
+        captured: dict = {}
 
         @contextmanager
         def ctx(self, *a, fault_inject_outgoing=None, **kw):
             if fault_inject_outgoing is not None:
                 captured["hook"] = fault_inject_outgoing
-            yield None, None, None  # force the bounded-failure path
+            yield None, None, None
 
-        # The ctx yields None for every leg (clean leg then returns False), but this
-        # test only needs to capture the armed hook to assert it mutates a frame.
-        with patch.object(EpromOperator, "_operation_context", ctx):
-            op.fault_inject_cycle(
-                "TEST_CHIP",
-                {"memory-size": self._MEMORY_SIZE},
-                direction="outgoing",
-                fault_form="corrupt-crc8",
-                output_dir="/tmp/fi_hook_crc8",
-            )
+        self._run(tmp_path, monkeypatch, ctx=ctx, sm=_make_fault_inject_state_machine())
         sample = b"\x03ABC\x55\x00"  # body + crc + delimiter
-        mutated = captured["hook"](sample)
-        assert mutated != sample, "corrupt-crc8 hook must change the frame."
-        assert mutated[-1:] == b"\x00", "corrupt-crc8 keeps the 0x00 delimiter."
+        first = captured["hook"](sample)
+        assert first != sample, "corrupt-crc8 hook must change the first frame."
+        assert first[-1:] == b"\x00", "corrupt-crc8 keeps the 0x00 delimiter."
+        assert captured["hook"](sample) == sample, "the resend must be intact."
 
 
 # harness refinement: measure_command_nak_latency
@@ -1980,7 +1954,7 @@ class TestCheckEpromBlankHostSideRead:
             return make_comm()
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_chunk_frame(0, payload))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
         written = _capture_written_frames(fake_serial)
@@ -2006,7 +1980,7 @@ class TestCheckEpromBlankHostSideRead:
             return make_comm()
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_chunk_frame(0, payload))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -2027,7 +2001,7 @@ class TestCheckEpromBlankHostSideRead:
             return make_comm()
 
         fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(payload)))
+        fake_serial.feed(build_chunk_frame(0, bytes(payload)))
         fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
         fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -2165,7 +2139,7 @@ def _run_and_capture(
         return comm_factory()
 
     serial.feed(build_frame(MSG_INIT_DONE, b""))
-    serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    serial.feed(build_chunk_frame(0, payload))
     serial.feed(build_frame(MSG_MAIN_DONE, b""))
     serial.feed(build_frame(MSG_END_DONE, b""))
     written = _capture_written_frames(serial)
@@ -2543,7 +2517,7 @@ def _drive_write_eprom_for_ack_check(
     as it does not desync the MAIN phase's flow control.
     """
     from firestarter.eprom_operations import EpromOperator, build_flags
-    from firestarter.messages import MSG_OK_REQ_DATA, MSG_WARN_SDP_UNLOCK_SKIPPED
+    from firestarter.messages import MSG_WARN_SDP_UNLOCK_SKIPPED
 
     input_file = tmp_path / "at28c256.bin"
     input_file.write_bytes(b"\x01\x02\x03\x04")
@@ -2551,7 +2525,7 @@ def _drive_write_eprom_for_ack_check(
     if ack_present:
         fake_serial.feed(build_frame(MSG_WARN_SDP_UNLOCK_SKIPPED, b""))
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_request_frame(0))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 

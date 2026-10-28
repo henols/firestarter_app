@@ -40,15 +40,13 @@ from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator, build_flags
 from firestarter.exceptions import ProgrammerNotFoundError
 from firestarter.messages import (
-    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_ERR_SETUP,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
 )
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import _FakeSerial, build_chunk_frame, build_frame, build_request_frame
 from .conftest import make_app_context as _make_app_context
 from .test_write_blank_guard import _m27c512_data
 
@@ -123,7 +121,7 @@ def _write_success_frames() -> list[bytes]:
     """One complete, otherwise-successful COMMAND_WRITE main phase."""
     return [
         build_frame(MSG_INIT_DONE, b""),
-        build_frame(MSG_OK_REQ_DATA, b""),
+        build_request_frame(0),
         build_frame(MSG_MAIN_DONE, b""),
         build_frame(MSG_END_DONE, b""),
     ]
@@ -250,7 +248,7 @@ def test_verify_eprom_suppress_verdict_line_true_on_match_no_line_returns_zero(
         return make_comm()
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    fake_serial.feed(build_chunk_frame(0, payload))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -290,7 +288,7 @@ def test_verify_eprom_suppress_verdict_line_true_on_mismatch_keeps_range_line(
         return make_comm()
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+    fake_serial.feed(build_chunk_frame(0, bytes(corrupted)))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -334,7 +332,7 @@ def test_verify_eprom_size_str_none_resolves_region_to_input_file_length(
         return make_comm()
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, short_chunk))
+    fake_serial.feed(build_chunk_frame(0, short_chunk))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -399,7 +397,7 @@ def test_last_write_attempt_verdict_none_when_write_never_attempted_guard_refusa
     region_payload[10] = 0xAB
     guard_read_frames = [
         build_frame(MSG_INIT_DONE, b""),
-        build_frame(MSG_DATA_CHUNK, bytes(region_payload)),
+        build_chunk_frame(0, bytes(region_payload)),
         build_frame(MSG_MAIN_DONE, b""),
         build_frame(MSG_END_DONE, b""),
     ]
@@ -522,7 +520,7 @@ def test_last_write_attempt_verdict_zero_when_skip_sdp_unlock_ack_check_fails(
 
     # No MSG_WARN_SDP_UNLOCK_SKIPPED fed -- the ack is absent.
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_request_frame(0))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 

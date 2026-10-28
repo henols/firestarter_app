@@ -165,6 +165,16 @@ def build_frame(msg_id: int, params: bytes) -> bytes:
     return MAGIC_PREAMBLE_REF + struct.pack(">H", length) + body + bytes([crc, 0x0A])
 
 
+def build_chunk_frame(address: int, data: bytes) -> bytes:
+    """MSG_DATA_CHUNK (0xE6): the chip address of data[0] as u32 BE, then data."""
+    return build_frame(0xE6, struct.pack(">I", address) + data)
+
+
+def build_request_frame(address: int) -> bytes:
+    """MSG_OK_REQ_DATA (0x02): the chip address of the chunk asked for, u32 BE."""
+    return build_frame(0x02, struct.pack(">I", address))
+
+
 class _FakeSerial:
     """BytesIO-backed stand-in for a `serial.Serial` instance.
 

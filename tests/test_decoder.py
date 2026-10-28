@@ -29,7 +29,6 @@ import pytest  # noqa: F401
 from firestarter.messages import (
     CATALOG,
     DBG_CMD,
-    MSG_DATA_CHUNK,
     MSG_DATA_PROGRESS,
     MSG_DATA_SENDING,  # noqa: F401
     MSG_DEBUG,
@@ -54,7 +53,7 @@ from firestarter.serial_comm import (
     _crc8_ccitt,
 )
 
-from .conftest import build_frame
+from .conftest import build_chunk_frame, build_frame
 
 
 def _drive_one_response(comm, timeout: float = 1.0):
@@ -254,7 +253,7 @@ class TestIdFrameDecoder:
         # 512-byte deterministic payload: two full 0..255 sequences.
         payload = bytes(range(256)) + bytes(range(256))
         assert len(payload) == 512
-        frame = build_frame(MSG_DATA_CHUNK, payload)
+        frame = build_chunk_frame(0, payload)
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
@@ -272,7 +271,7 @@ class TestIdFrameDecoder:
         # 252-byte payload: body = 1 id + 252 params + 1 crc = 254 bytes.
         payload = bytes(range(252))
         assert len(payload) == 252
-        frame = build_frame(MSG_DATA_CHUNK, payload)
+        frame = build_chunk_frame(0, payload)
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
@@ -579,7 +578,7 @@ class TestIdFrameDecoder:
         comm = make_comm()
         # 256-byte deterministic payload.
         payload_bytes = bytes(range(256))
-        frame = build_frame(MSG_DATA_CHUNK, payload_bytes)
+        frame = build_chunk_frame(0, payload_bytes)
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
@@ -616,9 +615,9 @@ class TestIdFrameDecoder:
 
         stream = (
             build_frame(MSG_DATA_SENDING, b"")  # zero-param batch-start ack
-            + build_frame(MSG_DATA_CHUNK, chunk0)
-            + build_frame(MSG_DATA_CHUNK, chunk1)
-            + build_frame(MSG_DATA_CHUNK, chunk2)
+            + build_chunk_frame(0, chunk0)
+            + build_chunk_frame(256, chunk1)
+            + build_chunk_frame(512, chunk2)
             + build_frame(MSG_MAIN_DONE, b"")
         )
         fake_serial.feed(stream)

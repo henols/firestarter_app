@@ -563,7 +563,14 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
     It goes RED if ANY change is made to the generator body (per GATE-1.8d:
     any change must be flagged and deferred to v1.9 alongside binary re-validation).
 
-    Pinned SHA-256 (2026-09-14): 4aa34549780b0ea204dd4f538b15eff090ae675308a93886e8af02078a1f4763
+    Pinned SHA-256 (2026-10-27): d6edc812a8de73c72b518ffe68d0878729358b45acce07fdb521bccba45a5c1e
+    (Updated from 4aa34549780b0ea204dd4f538b15eff090ae675308a93886e8af02078a1f4763
+     by the CRC resend change: a `report_corrupt` parameter, default False.
+     With it set, the three places that drop a binary frame (length missing,
+     body truncated, failed decode) also yield Response(type="CORRUPT"); the
+     Response construction carries address=decoded.address. With the default
+     the generator yields exactly what it did before: no new read() call, no
+     new branch on a wire byte, and no write to start_time.)
     (Updated from 8b77800003a44fb21f2054fe8d0584e804648a76e52c3f23f55f06df74127b41
      by the planning-citation cleanup, debug session
      planning-refs-in-src-comments: COMMENT TEXT ONLY. This pin hashes the
@@ -593,7 +600,7 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
 
     from firestarter.serial_comm import SerialCommunicator
 
-    _PINNED_SHA256 = "4aa34549780b0ea204dd4f538b15eff090ae675308a93886e8af02078a1f4763"
+    _PINNED_SHA256 = "d6edc812a8de73c72b518ffe68d0878729358b45acce07fdb521bccba45a5c1e"
 
     src = inspect.getsource(SerialCommunicator._read_and_parse_lines)
     actual_digest = hashlib.sha256(src.encode("utf-8")).hexdigest()

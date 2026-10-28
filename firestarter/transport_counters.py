@@ -51,6 +51,9 @@ from contextlib import contextmanager
 _counters: dict[str, int] = {
     "decode_failures": 0,
     "probe_timeouts": 0,
+    "resends_command": 0,
+    "resends_read": 0,
+    "resends_write": 0,
     "resync_body_truncated": 0,
     "resync_length_missing": 0,
     "timeouts": 0,
@@ -87,6 +90,16 @@ def record_resync_body_truncated() -> None:
     Unconditional -- see the module docstring.
     """
     _counters["resync_body_truncated"] += 1
+
+
+def record_resend(direction: str) -> None:
+    """Increment `resends_<direction>` by one.
+
+    `direction` is "command", "read" or "write": a frame that failed its
+    COBS or CRC8 check and was sent again. Called from `setup_command` and
+    the two transfer loops in `eprom_operations`.
+    """
+    _counters[f"resends_{direction}"] += 1
 
 
 def record_response_timeout() -> None:

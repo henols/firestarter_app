@@ -32,11 +32,10 @@ from firestarter.messages import (
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
     MSG_WARN_SDP_UNLOCK_SKIPPED,
 )
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import _FakeSerial, build_frame, build_request_frame
 from .conftest import make_app_context as _make_app_context
 
 # --- Concrete chip names, drawn from 120-SDP-PARTITION.md section 3, mirroring
@@ -175,7 +174,7 @@ def _drive_write(
     if is_protocol_0x0d:
         fake_serial.feed(build_frame(MSG_WARN_SDP_UNLOCK_SKIPPED, b""))
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_request_frame(0))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 

@@ -35,11 +35,9 @@ from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import ProgrammerNotFoundError
 from firestarter.messages import (
-    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
 )
 from firestarter.write_blank_guard import (
     GUARDED_PROTOCOL_IDS,
@@ -53,7 +51,7 @@ from firestarter.write_blank_guard import (
     requires_blank_check,
 )
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import _FakeSerial, build_chunk_frame, build_frame, build_request_frame
 
 # The Uno-floor default `_calculate_buffer_size()` returns when
 # `firmware_max_chunk` is unset (`make_comm`'s default) -- used here only to
@@ -337,7 +335,7 @@ def test_first_actual_carries_the_byte_value_at_first_offset() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _read_phase_frames(payload: bytes) -> list[bytes]:
+def _read_phase_frames(payload: bytes, start: int = 0) -> list[bytes]:
     """Wire frames for one complete COMMAND_READ main phase whose delivered
     payload is `payload`, in the order `_main_phase_read_data` expects:
     INIT_DONE, N x DATA_CHUNK (chunked at the Uno-floor buffer size so a
@@ -358,19 +356,22 @@ def _read_phase_frames(payload: bytes) -> list[bytes]:
         f"floor, but chunking produced {len(chunks)}"
     )
     frames = [build_frame(MSG_INIT_DONE, b"")]
-    frames += [build_frame(MSG_DATA_CHUNK, chunk) for chunk in chunks]
+    frames += [
+        build_chunk_frame(start + i * _BUFFER_SIZE, chunk)
+        for i, chunk in enumerate(chunks)
+    ]
     frames.append(build_frame(MSG_MAIN_DONE, b""))
     frames.append(build_frame(MSG_END_DONE, b""))
     return frames
 
 
-def _write_phase_frames() -> list[bytes]:
+def _write_phase_frames(start: int = 0) -> list[bytes]:
     """Wire frames for one complete, otherwise-successful COMMAND_WRITE
     main phase -- mirrors `_drive_write_eprom_for_ack_check`'s script shape
     (`tests/test_eprom_operations.py`)."""
     return [
         build_frame(MSG_INIT_DONE, b""),
-        build_frame(MSG_OK_REQ_DATA, b""),
+        build_request_frame(start),
         build_frame(MSG_MAIN_DONE, b""),
         build_frame(MSG_END_DONE, b""),
     ]
@@ -536,7 +537,10 @@ def test_write_into_blank_region_of_non_blank_part_succeeds_via_host_path(
         eprom_name="m27c512",
         eprom_data=_m27c512_data(),
         payload=payload,
-        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+        frame_scripts=[
+            _read_phase_frames(region_payload, 0x008000),
+            _write_phase_frames(0x008000),
+        ],
         address_str="0x008000",
     )
 
@@ -586,7 +590,10 @@ def test_write_at_a_non_zero_address_on_an_erase_capable_nor_unlock_part_pays_a_
         eprom_name="sst39sf020",
         eprom_data=chip_data,
         payload=payload,
-        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+        frame_scripts=[
+            _read_phase_frames(region_payload, 0x010000),
+            _write_phase_frames(0x010000),
+        ],
         address_str="0x010000",
     )
 
@@ -955,7 +962,7 @@ def test_blank_run_on_non_blank_chip_still_emits_mismatch_line(
         return make_comm()
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    fake_serial.feed(build_chunk_frame(0, payload))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -1096,7 +1103,7 @@ def test_write_at_a_non_zero_address_on_a_non_blank_nor_unlock_region_is_refused
             eprom_name="sst39sf020",
             eprom_data=_sst39sf020_data(),
             payload=payload,
-            frame_scripts=[_read_phase_frames(region_payload)],
+            frame_scripts=[_read_phase_frames(region_payload, 0x010000)],
             address_str="0x010000",
         )
 

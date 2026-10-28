@@ -89,10 +89,10 @@ class TestFormatMessageDebugChunk:
         assert result == "Cmd: 0x02 (WRITE)"
 
     def test_msg_data_chunk(self):
-        """MSG_DATA_CHUNK → '<chunk: N bytes>' summary (not raw dump)."""
+        """MSG_DATA_CHUNK → '<chunk at A: N bytes>' summary (not raw dump)."""
         entry = CATALOG[MSG_DATA_CHUNK]
-        result = format_message(MSG_DATA_CHUNK, [b"\x00" * 512], entry)
-        assert result == "<chunk: 512 bytes>"
+        result = format_message(MSG_DATA_CHUNK, [0x200, b"\x00" * 512], entry)
+        assert result == "<chunk at 0x000200: 512 bytes>"
 
 
 class TestFormatMessageNoneSentinel:

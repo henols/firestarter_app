@@ -56,15 +56,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from firestarter.messages import (
-    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
     MSG_OK_READY,  # noqa: F401
-    MSG_OK_REQ_DATA,
 )
 
-from .conftest import build_frame
+from .conftest import build_chunk_frame, build_frame, build_request_frame
 
 # Entry-point resolution
 
@@ -610,9 +608,9 @@ def test_read_happy_path(make_comm, fake_serial, tmp_path):
     # Feed INIT done
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
     # Feed a data chunk frame: MSG_DATA_CHUNK carries raw bytes as 'bytes' param.
-    # build_frame(MSG_DATA_CHUNK, payload_bytes) encodes them as the frame body.
+    # build_chunk_frame(0, payload_bytes) encodes them as the frame body.
     chunk_data = b"\xde\xad\xbe\xef"
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, chunk_data))
+    fake_serial.feed(build_chunk_frame(0, chunk_data))
     # Feed MAIN done (signals end of data transfer)
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     # Feed END done
@@ -658,7 +656,7 @@ def test_write_happy_path(make_comm, fake_serial, tmp_path):
     # Feed INIT done
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
     # Feed one OK (firmware requests data block)
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_request_frame(0))
     # Feed MAIN done (firmware signals write complete after receiving data)
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     # Feed END done
@@ -689,7 +687,7 @@ def test_verify_happy_path(make_comm, fake_serial, tmp_path):
     input_file.write_bytes(file_data)
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_request_frame(0))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 

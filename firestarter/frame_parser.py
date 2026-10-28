@@ -14,16 +14,24 @@ from typing import Any, Tuple  # noqa: UP035
 
 # Define a structured object for responses to improve clarity over tuples.
 # `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
+# `address` is the chip address of MSG_DATA_CHUNK and MSG_OK_REQ_DATA; None
+# otherwise. Type "CORRUPT" is a frame that failed its check (see
+# SerialCommunicator.get_response, report_corrupt).
 Response = namedtuple(
-    "Response", ["type", "message", "payload", "id"], defaults=[None, None]
+    "Response",
+    ["type", "message", "payload", "id", "address"],
+    defaults=[None, None, None],
 )
 
 # ID-encoded wire frame primitives. MAGIC_PREAMBLE is fixed by the wire
 # protocol; LogMessage is the decoded-frame value type.
 # `payload` carries raw bytes for MSG_DATA_CHUNK and the parameter bytes of
-# MSG_ERR_FRAME_VERSION; None for all others.
+# MSG_ERR_FRAME_VERSION; None for all others. `address` is the chip address
+# of MSG_DATA_CHUNK and MSG_OK_REQ_DATA; None for all others.
 LogMessage = namedtuple(
-    "LogMessage", ["severity", "text", "id", "payload"], defaults=[None]
+    "LogMessage",
+    ["severity", "text", "id", "payload", "address"],
+    defaults=[None, None],
 )
 MAGIC_PREAMBLE: bytes = b"\xaa\x55\xaa\x55"
 

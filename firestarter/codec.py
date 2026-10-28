@@ -36,6 +36,7 @@ from firestarter.messages import (
     MSG_INFO_HW,
     MSG_INFO_PHYSICAL_HW,
     MSG_OK_CFG,
+    MSG_OK_REQ_DATA,
     MSG_OK_REV,
     SEVERITY_LABEL,
     MessageDef,
@@ -183,11 +184,11 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
 
     if (
         msg_id == MSG_DATA_CHUNK
-        and len(params) == 1
-        and isinstance(params[0], (bytes, bytearray))
+        and len(params) == 2
+        and isinstance(params[1], (bytes, bytearray))
     ):
         # W-04: return a short summary so log lines don't dump 512 raw bytes.
-        return f"<chunk: {len(params[0])} bytes>"
+        return f"<chunk at 0x{params[0]:06x}: {len(params[1])} bytes>"
 
     return None  # fall through to generic catalog format-string rendering
 
@@ -303,15 +304,23 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
     # loop can obtain the chip data without a second read call.
     # MSG_ERR_FRAME_VERSION also carries its parameter bytes, so setup can
     # compare the firmware's frame version with this host's.
+    # MSG_DATA_CHUNK and MSG_OK_REQ_DATA carry a chip address, so the
+    # transfer loops can tell a frame sent again from the next one.
     payload = None
+    address = None
     if (
         msg_id == MSG_DATA_CHUNK
-        and values
-        and isinstance(values[0], (bytes, bytearray))
+        and len(values) == 2
+        and isinstance(values[1], (bytes, bytearray))
     ):
-        payload = bytes(values[0])
+        address = values[0]
+        payload = bytes(values[1])
+    elif msg_id == MSG_OK_REQ_DATA and values:
+        address = values[0]
     elif msg_id == MSG_ERR_FRAME_VERSION:
         payload = params_bytes
 
     severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-    return LogMessage(severity=severity_label, text=text, id=msg_id, payload=payload)
+    return LogMessage(
+        severity=severity_label, text=text, id=msg_id, payload=payload, address=address
+    )

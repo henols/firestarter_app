@@ -84,15 +84,13 @@ from unittest.mock import patch
 
 from firestarter.config import ConfigManager
 from firestarter.messages import (
-    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
 )
 from firestarter.serial_comm import DEFAULT_RESPONSE_TIMEOUT, SerialCommunicator
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import _FakeSerial, build_chunk_frame, build_frame, build_request_frame
 
 # Real 27C part used throughout this module -- see the module docstring.
 _REAL_27C_CHIP = "w27c512"
@@ -236,9 +234,9 @@ def _drive_data_operation_and_record_timeouts(
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
     if method_name == "verify_eprom":
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, file_bytes))
+        fake_serial.feed(build_chunk_frame(0, file_bytes))
     else:
-        fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+        fake_serial.feed(build_request_frame(0))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -352,7 +350,7 @@ def _drive_blank_check_and_record_timeouts(make_comm, fake_serial):
 
     blank_bytes = b"\xff\xff\xff\xff"
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, blank_bytes))
+    fake_serial.feed(build_chunk_frame(0, blank_bytes))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 

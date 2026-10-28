@@ -87,11 +87,10 @@ from firestarter.messages import (
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
 )
 from firestarter.serial_comm import SerialCommunicator
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import _FakeSerial, build_frame, build_request_frame
 
 # Real 27C part used throughout this module -- see the module docstring.
 _REAL_27C_CHIP = "w27c512"
@@ -205,8 +204,9 @@ def _drive_write_with_progress_frames(
     input_file.write_bytes(bytes(i % 256 for i in range(file_size)))
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    for frames in chunk_progress_frames:
-        fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    start = int(address_str, 0) if address_str else 0
+    for i, frames in enumerate(chunk_progress_frames):
+        fake_serial.feed(build_request_frame(start + i * _BUFFER_SIZE))
         for current, total in frames:
             fake_serial.feed(_progress_frame(current, total))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
