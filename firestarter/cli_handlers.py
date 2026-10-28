@@ -2410,10 +2410,10 @@ if _DEV_TOOLS_ENABLED:
         output_dir: str | None,
         samples: int,
     ) -> None:
-        """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
+        """Inject a corrupted frame and assert that the transfer recovers by a resend.
 
-        cycle mode runs one corrupted transfer, then asserts the same connection
-        recovers on a clean follow-on transfer.
+        cycle mode corrupts one frame of a read. The read must complete with at
+        least one resend, and its data must equal a clean follow-on read.
 
         latency mode opens one pinned port and times the firmware's per-frame NAK on a
         corrupt CMD_FW_VERSION frame. Use it with ``-p <port>``; an already-established

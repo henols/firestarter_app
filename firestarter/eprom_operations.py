@@ -60,6 +60,7 @@ from firestarter.exceptions import (
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.jp5_gate import require_acknowledged
 from firestarter.messages import (
+    MSG_DATA_CHUNK,
     MSG_DATA_PROTECTION_STATUS,
     MSG_ERR_TIMEOUT,
     MSG_WARN_SDP_UNLOCK_SKIPPED,
@@ -1152,6 +1153,27 @@ class EpromOperator:
                         f"Programmer did not request data chunk, got {response.type}: {response.message}"  # noqa: E501
                     )
 
+                # The request names the chip address it wants. The same
+                # address again means the last chunk failed its check in the
+                # firmware, so it is sent again and not counted again.
+                is_resend = False
+                if response.address is not None:
+                    offset = response.address - start_addr
+                    if not 0 <= offset <= file_handle.tell():
+                        raise EpromOperationError(
+                            f"Programmer requested data at 0x{response.address:06x}, "
+                            f"outside the data sent so far (0x{start_addr:06x}-"
+                            f"0x{start_addr + file_handle.tell():06x})."
+                        )
+                    if offset < file_handle.tell():
+                        is_resend = True
+                        logger.warning(
+                            f"The programmer did not receive the data at "
+                            f"0x{response.address:06x} intact. Sending it again."
+                        )
+                        transport_counters.record_resend("write")
+                        file_handle.seek(offset)
+
                 if file_handle.tell() < file_size:
                     data_chunk = file_handle.read(buffer_size)
                     crc = _crc8_ccitt(data_chunk)
@@ -1165,7 +1187,7 @@ class EpromOperator:
                     # Assembled as ONE bytes object and sent in a single send_bytes call
                     # (atomic-write mandate; timing guard).
                     self.comm.send_bytes(frame)
-                    if not firmware_drives_bar:
+                    if not firmware_drives_bar and not is_resend:
                         # The two progress sources measure
                         # different things -- bytes SENT (this handoff) versus
                         # bytes PROGRAMMED (the firmware's own 0xE0 frames) --
@@ -1228,10 +1250,23 @@ class EpromOperator:
 
         stopped = False
         while True:
-            response = self.comm.get_response()
+            response = self.comm.get_response(report_corrupt=True)
             if response.type == "MAIN":
                 logger.info("EPROM read complete.")
                 break
+            if response.type == "CORRUPT":
+                # A frame failed its check. If it was the chunk, the firmware
+                # waits for this reply and sends the chunk again. If it was
+                # another frame, the chunk that follows is acked, and the copy
+                # sent for this "NK" arrives as a duplicate below.
+                if not stopped:
+                    logger.warning(
+                        f"A frame from the programmer failed its check "
+                        f"({response.message}). Asking for it again."
+                    )
+                    transport_counters.record_resend("read")
+                    self.comm.send_nak()
+                continue
             if response.type == "ERROR":
                 _raise_for_error_response(
                     response, f"Programmer error during read: {response.message}"
@@ -1249,6 +1284,20 @@ class EpromOperator:
                         # read) without touching the callback, the ack, or the
                         # progress bar again. See docstring above.
                         continue
+                    if response.address is not None and response.address != start_addr:
+                        if response.address < start_addr:
+                            # A copy sent for an "NK" after the chunk was
+                            # already received. The firmware waits for one
+                            # reply per chunk it sends, and the "NK" was that
+                            # reply, so this copy gets none.
+                            logger.debug(
+                                f"Dropped a duplicate chunk at 0x{response.address:06x}."
+                            )
+                            continue
+                        raise EpromOperationError(
+                            f"Programmer sent data at 0x{response.address:06x}, "
+                            f"expected 0x{start_addr:06x}."
+                        )
                     process_data_chunk_callback(start_addr, payload)
                     start_addr += len(payload)
                     progress.update(len(payload))
@@ -1650,28 +1699,27 @@ class EpromOperator:
         fault_form: str = "corrupt-crc8",
         output_dir: str | None = None,
     ) -> bool:
-        """Demonstrate COBS resync by injecting a corrupted frame and asserting a
-        bounded clean error followed by a byte-exact clean transfer.
+        """Inject one corrupted frame into a read and assert that the read
+        recovers by a resend, byte-exact against a clean read.
 
         Returns:
-            True  -- corrupted transfer surfaced a clean (bounded) error AND the
-                     subsequent clean transfer succeeded byte-exact.
-            False -- unexpected success on the corrupted transfer, or the
-                     clean follow-on transfer failed.
+            True  -- the corrupted read completed, the frame was sent again at
+                     least once, and its data equals a clean follow-on read.
+            False -- the corrupted read failed, no resend was counted (the
+                     fault did not fire), the clean read failed, or the two
+                     reads differ.
 
-        direction="outgoing": corrupt the host→fw SETUP command frame via the
-            _fault_inject_outgoing hook, threaded into find_and_connect so it fires at
-            connection time. This is the ONLY corruptible host→fw command frame — a
-            READ's MAIN phase sends only plaintext acks (send_string). The firmware
-            rejects the corrupt frame and the connection fails with a bounded error;
-            a fresh clean transfer then succeeds. The hook must be threaded in BEFORE
-            setup -- wiring it after means it never fires, a silent false negative.
-        direction="incoming": corrupt fw→host frame via FaultInjectingSerialCommunicator
-            on an established connection; the host decoder catches it and the same
-            connection recovers on the clean follow-on (Pitfall 2).
+        direction="outgoing": corrupt the host→fw SETUP command frame once via
+            the _fault_inject_outgoing hook, threaded into find_and_connect so it
+            fires at connection time. The firmware refuses the frame and stays
+            idle, and setup_command sends the command again. The hook must be
+            threaded in BEFORE setup -- wiring it after means it never fires.
+        direction="incoming": corrupt one fw→host frame via
+            FaultInjectingSerialCommunicator on an established connection. The
+            host answers "NK" and the firmware sends the chunk again.
 
-        Writes fault-inject-<direction>-log.txt with the measured error latency so the
-        sub-second clean error can be confirmed.
+        Writes fault-inject-<direction>-log.txt with the resend count and the
+        time the corrupted read took.
         """
         from firestarter.serial_comm import FaultInjectingSerialCommunicator
 
@@ -1694,23 +1742,39 @@ class EpromOperator:
             "corrupt-crc8": _corrupt_crc8,
             "drop-delimiter": _drop_delimiter,
         }
-        hook = fault_hooks.get(fault_form, _corrupt_crc8)
+        fault = fault_hooks.get(fault_form, _corrupt_crc8)
+        fired = {"done": False}
+
+        def hook(frame: bytes) -> bytes:
+            """Corrupt the first frame only, so the resend goes through intact."""
+            if fired["done"]:
+                return frame
+            fired["done"] = True
+            return fault(frame)
+
+        def _read_into(path: Path, cmd_data: dict, op_name: str) -> bool:
+            start = cmd_data.get("address", 0)
+            with open(path, "wb") as fh:
+
+                def _writer(address, data_chunk):
+                    fh.seek(address - start)
+                    fh.write(data_chunk)
+
+                is_ok, _ = self._run_state_machine(
+                    op_name,
+                    main_phase_handler=self._main_phase_read_data,
+                    start_addr=start,
+                    end_addr=cmd_data.get("memory-size", 0),
+                    process_data_chunk_callback=_writer,
+                )
+            return bool(is_ok)
+
+        resend_key = "resends_command" if direction == "outgoing" else "resends_read"
+        resends_before = transport_counters.snapshot()[resend_key]
 
         # --- Corrupted transfer ---
-        # Outgoing: the hook is threaded into _operation_context so it corrupts the
-        #   SETUP command frame at connection time. This is the ONLY corruptible
-        #   host->fw command frame — a READ's MAIN phase emits plaintext acks
-        #   (send_string), never send_command, so the previous "set the hook
-        #   after setup" wiring never fired -- a false negative. The firmware rejects the
-        #   corrupt frame (CRC8-before-parse / inter-byte timeout) -> connection setup
-        #   fails with a bounded error == the expected outcome.
-        # Incoming: connect cleanly, swap to FaultInjectingSerialCommunicator, run the
-        #   read; the host decoder catches the mutated fw->host frame.
-        # error_latency_s captures wall-clock from corrupted-attempt start to the
-        #   surfaced error so the "sub-second clean error, no 2 s cascade" bar can be
-        #   measured (the harness reports it; the firmware's actual latency decides it).
+        corrupted_path = output_path / "corrupted_transfer.bin"
         corrupted_ok = False
-        error_latency_s: float | None = None
         corrupted_detail = ""
         _t0 = time.monotonic()
         try:
@@ -1721,23 +1785,12 @@ class EpromOperator:
                 0,
                 fault_inject_outgoing=(hook if direction == "outgoing" else None),
             ) as (cmd_data, _, op_name):
-                if direction == "outgoing" and not cmd_data:
-                    # Setup command frame corrupted -> firmware rejected -> bounded
-                    # connection failure. This IS the expected outgoing-fault outcome.
-                    error_latency_s = time.monotonic() - _t0
-                    corrupted_ok = True
+                if not cmd_data:
                     corrupted_detail = (
-                        "outgoing: setup command frame rejected; connection did not "
-                        "establish (firmware did not ack a corrupt host->fw frame)"
+                        f"{direction}: the connection did not establish after the "
+                        "corrupted frame"
                     )
-                elif not cmd_data:
-                    # Incoming requires a clean connection before the fw->host swap.
-                    return False
                 else:
-                    # We are connected. Incoming: swap comm to the fault subclass.
-                    # Outgoing: reaching here means the corrupt setup frame did NOT
-                    # prevent connection (fault never fired, or firmware accepted a
-                    # corrupt frame) — run the read so an unexpected success is caught.
                     if direction == "incoming":
                         assert self.comm is not None  # noqa: S101
                         fault_comm = FaultInjectingSerialCommunicator.__new__(
@@ -1745,39 +1798,22 @@ class EpromOperator:
                         )
                         fault_comm.__dict__.update(self.comm.__dict__)
                         fault_comm._corrupt_incoming_once = True  # type: ignore[attr-defined]
+                        # Corrupt the first data chunk. A resend covers the
+                        # data phase only: a corrupt INIT/MAIN/END frame still
+                        # ends in a timeout.
+                        fault_comm._corrupt_incoming_id = MSG_DATA_CHUNK  # type: ignore[attr-defined]
                         fault_comm._fault_fired = False  # type: ignore[attr-defined]
                         self.comm = fault_comm  # type: ignore[assignment]
-
-                    corrupted_path = output_path / "corrupted_transfer.bin"
-                    try:
-                        with open(corrupted_path, "wb") as fh:
-
-                            def _writer_corrupt(
-                                address,
-                                data_chunk,
-                                _fh=fh,
-                                _start=cmd_data.get("address", 0),
-                            ):
-                                _fh.seek(address - _start)
-                                _fh.write(data_chunk)
-
-                            is_ok_corrupt, _ = self._run_state_machine(
-                                op_name,
-                                main_phase_handler=self._main_phase_read_data,
-                                start_addr=cmd_data.get("address", 0),
-                                end_addr=cmd_data.get("memory-size", 0),
-                                process_data_chunk_callback=_writer_corrupt,
-                            )
-                    except IOError as e:  # noqa: UP024
-                        logger.error(f"fault_inject_cycle: file I/O error: {e}")
-                        return False
-                    error_latency_s = time.monotonic() - _t0
-                    # The corrupted transfer should have failed (is_ok_corrupt == False)
-                    corrupted_ok = not is_ok_corrupt
+                    is_ok_corrupt = _read_into(corrupted_path, cmd_data, op_name)
+                    resends = transport_counters.snapshot()[resend_key] - resends_before
+                    corrupted_ok = is_ok_corrupt and resends >= 1
                     corrupted_detail = (
-                        f"{direction}: connected; corrupted read verdict ok="
-                        f"{is_ok_corrupt} (expected False)"
+                        f"{direction}: read ok={is_ok_corrupt}, resends={resends} "
+                        "(expected ok=True, resends>=1)"
                     )
+        except IOError as e:  # noqa: UP024
+            logger.error(f"fault_inject_cycle: file I/O error: {e}")
+            return False
         except (
             EpromOperationError,
             ProgrammerNotFoundError,
@@ -1785,30 +1821,30 @@ class EpromOperator:
             SerialTimeoutError,
             FirmwareOutdatedError,
         ) as e:
-            # A bounded transport/connection error on the corrupted transfer is the
-            # expected resync signal (not a silent accept, not an unbounded hang).
-            error_latency_s = time.monotonic() - _t0
-            corrupted_ok = True
-            corrupted_detail = f"{direction}: {type(e).__name__} (expected): {e}"
+            corrupted_detail = (
+                f"{direction}: {type(e).__name__}: {e} (expected a recovered read)"
+            )
+        transfer_s = time.monotonic() - _t0
+        resends = transport_counters.snapshot()[resend_key] - resends_before
 
-        # Persist the latency + verdict so the operator can confirm the sub-second
-        # clean error (no 2 s cascade) the fast-fail bar requires.
         self._write_fault_inject_log(
             output_path,
             direction,
             fault_form,
             corrupted_ok,
-            error_latency_s,
+            resends,
+            transfer_s,
             corrupted_detail,
         )
 
         if not corrupted_ok:
             logger.error(
-                "fault_inject_cycle: corrupted transfer unexpectedly succeeded."
+                f"fault_inject_cycle: the corrupted read did not recover: "
+                f"{corrupted_detail}"
             )
             return False
 
-        # --- Clean follow-on transfer on the same connection ---
+        # --- Clean follow-on transfer, the reference for the recovered data ---
         clean_path = output_path / "clean_transfer.bin"
         try:
             with self._operation_context(
@@ -1820,24 +1856,7 @@ class EpromOperator:
                 if not cmd_data_clean:
                     return False
                 try:
-                    with open(clean_path, "wb") as fh2:
-
-                        def _writer_clean(
-                            address,
-                            data_chunk,
-                            _fh=fh2,
-                            _start=cmd_data_clean.get("address", 0),
-                        ):
-                            _fh.seek(address - _start)
-                            _fh.write(data_chunk)
-
-                        is_ok_clean, _ = self._run_state_machine(
-                            op_name_clean,
-                            main_phase_handler=self._main_phase_read_data,
-                            start_addr=cmd_data_clean.get("address", 0),
-                            end_addr=cmd_data_clean.get("memory-size", 0),
-                            process_data_chunk_callback=_writer_clean,
-                        )
+                    is_ok_clean = _read_into(clean_path, cmd_data_clean, op_name_clean)
                 except IOError as e:  # noqa: UP024
                     logger.error(
                         f"fault_inject_cycle: clean-transfer file I/O error: {e}"
@@ -1857,8 +1876,17 @@ class EpromOperator:
             )
             return False
 
+        if corrupted_path.read_bytes() != clean_path.read_bytes():
+            logger.error(
+                "fault_inject_cycle: the recovered read differs from the clean read."
+            )
+            self._append_fault_inject_log(
+                output_path, "recovered data DIFFERS from the clean read"
+            )
+            return False
+
         self._append_fault_inject_log(
-            output_path, "clean follow-on transfer PASSED (recovery byte-exact)"
+            output_path, "recovered data equals the clean read (byte-exact)"
         )
         return True
 
@@ -1867,32 +1895,20 @@ class EpromOperator:
         output_path: Path,
         direction: str,
         fault_form: str,
-        corrupted_ok: bool,
-        error_latency_s: float | None,
+        recovered: bool,
+        resends: int,
+        transfer_s: float,
         detail: str,
     ) -> None:
-        """Write the fault-injection log (one per cycle).
-
-        Records the measured error latency so the operator can confirm the
-        sub-second clean error (no 2 s timeout cascade) the acceptance requires.
-        """
+        """Write the fault-injection log (one per cycle)."""
         log_path = output_path / f"fault-inject-{direction}-log.txt"
-        latency_str = (
-            f"{error_latency_s:.3f}s" if error_latency_s is not None else "unmeasured"
-        )
-        # 2.0 s is the historical timeout-cascade threshold the hardening removes.
-        cascade = (
-            "UNKNOWN"
-            if error_latency_s is None
-            else ("NO (sub-2s)" if error_latency_s < 2.0 else "YES (>=2s cascade)")
-        )
         try:
             with open(log_path, "w") as fh:
                 fh.write(
                     f"# fault-injection log ({direction}, {fault_form})\n"
-                    f"corrupted_transfer_surfaced_clean_error: {corrupted_ok}\n"
-                    f"error_latency: {latency_str}\n"
-                    f"sub_second_clean_error_no_2s_cascade: {cascade}\n"
+                    f"corrupted_transfer_recovered: {recovered}\n"
+                    f"resends: {resends}\n"
+                    f"transfer_time: {transfer_s:.3f}s\n"
                     f"detail: {detail}\n"
                 )
         except IOError as e:  # noqa: UP024

@@ -80,10 +80,9 @@ def test_format_msg_info_cmd_with_known_cmd() -> None:
 
 
 def test_format_msg_data_chunk_summary() -> None:
-    """MSG_DATA_CHUNK returns a '<chunk: N bytes>' summary instead of dumping bytes."""
-    out = format_message(MSG_DATA_CHUNK, [b"hello"], CATALOG[MSG_DATA_CHUNK])
-    assert out is not None
-    assert "5" in out
+    """MSG_DATA_CHUNK returns a '<chunk at A: N bytes>' summary instead of dumping bytes."""
+    out = format_message(MSG_DATA_CHUNK, [0x1234, b"hello"], CATALOG[MSG_DATA_CHUNK])
+    assert out == "<chunk at 0x001234: 5 bytes>"
 
 
 def test_format_message_unmatched_id_returns_none() -> None:

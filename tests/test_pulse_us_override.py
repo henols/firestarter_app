@@ -68,11 +68,10 @@ from firestarter.messages import (
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
 )
 from firestarter.serial_comm import SerialCommunicator
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import _FakeSerial, build_frame, build_request_frame
 from .conftest import make_app_context as _make_app_context
 
 # Real 27C part used throughout this module -- see the module docstring.
@@ -141,7 +140,7 @@ def _drive_write_for_pulse_override(
     input_file.write_bytes(b"\x01\x02\x03\x04")
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_request_frame(0))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -333,7 +332,7 @@ def _drive_write_via_cli(
     input_file.write_bytes(b"\x01\x02\x03\x04")
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_request_frame(0))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 

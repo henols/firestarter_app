@@ -32,7 +32,6 @@ from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.messages import (
-    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
@@ -42,6 +41,7 @@ from .conftest import (
     ADAPTER_REQUIRED_TEST_CHIP,
     ADAPTER_REQUIRED_TEST_REASON,
     adapter_required_db,
+    build_chunk_frame,
     build_frame,
 )
 
@@ -550,7 +550,7 @@ def test_verify_cli_prints_range_line_and_bucket_summary_line(
     actual_bytes[5] = 0x01  # one mismatch: a range line + a bucket line
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(actual_bytes)))
+    fake_serial.feed(build_chunk_frame(0, bytes(actual_bytes)))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
@@ -789,7 +789,7 @@ def test_region_scoped_verify_composes_a_command_dict_bounding_exact_region(
         return make_comm()
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    fake_serial.feed(build_chunk_frame(0x100, payload))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 

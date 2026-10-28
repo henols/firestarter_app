@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 85
+Total messages: 86
 """
 
 from dataclasses import dataclass
@@ -128,6 +128,7 @@ MSG_ERR_FL4_PAGE_ALIGN = 0xC0
 MSG_ERR_CALIBRATION = 0xC1
 MSG_ERR_BAD_COMMAND = 0xC2
 MSG_ERR_FRAME_VERSION = 0xC3
+MSG_ERR_RESEND_LIMIT = 0xC4
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -162,9 +163,9 @@ CATALOG: dict[int, MessageDef] = {
         id=0x02,
         name="MSG_OK_REQ_DATA",
         severity=SEVERITY_OK,
-        format="Request data",
-        params=(),
-        param_bytes=0,
+        format="Request data at 0x%06x",
+        params=(("u32", "hex"),),
+        param_bytes=4,
         wire_format="id_frame",
     ),
     0x03: MessageDef(
@@ -833,6 +834,15 @@ CATALOG: dict[int, MessageDef] = {
         param_bytes=1,
         wire_format="id_frame",
     ),
+    0xC4: MessageDef(
+        id=0xC4,
+        name="MSG_ERR_RESEND_LIMIT",
+        severity=SEVERITY_ERROR,
+        format="A data frame failed its check %d times in a row",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
     0xE0: MessageDef(
         id=0xE0,
         name="MSG_DATA_PROGRESS",
@@ -882,8 +892,8 @@ CATALOG: dict[int, MessageDef] = {
         id=0xE6,
         name="MSG_DATA_CHUNK",
         severity=SEVERITY_DATA,
-        format="<data chunk>",
-        params=(("bytes", "hex"),),
+        format="<data chunk at 0x%06x>",
+        params=(("u32", "hex"), ("bytes", "hex")),
         param_bytes=-1,
         wire_format="id_frame",
     ),

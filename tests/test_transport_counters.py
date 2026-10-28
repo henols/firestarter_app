@@ -107,6 +107,9 @@ def test_snapshot_after_reset_returns_wired_keys_sorted_zeroed() -> None:
     assert list(result) == [
         "decode_failures",
         "probe_timeouts",
+        "resends_command",
+        "resends_read",
+        "resends_write",
         "resync_body_truncated",
         "resync_length_missing",
         "timeouts",

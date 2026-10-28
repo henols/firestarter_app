@@ -173,6 +173,25 @@ The firmware sends INIT, MAIN, END and status messages as catalog message ID fra
 The host reads the firmware buffer size from the `MSG_OK_READY` ack, and sizes its data chunks from
 that value. If the ack has no size, the host uses 512.
 
+**Resend of a bad frame.** The receiver of a frame that fails its COBS or CRC8 check asks for it
+again, at most 3 times for one chunk. Then the firmware sends `MSG_ERR_RESEND_LIMIT` (`0xC4`).
+
+- **Command.** The firmware answers `MSG_ERR_EMPTY_INPUT` (`0xA4`) and stays idle. If no ack
+  follows inside `SETUP_ACK_RECOVERY_TIMEOUT_S`, `setup_command` sends the command once more. An
+  ack inside that window means that the command arrived (the Uno DTR-reset case), so no resend.
+- **Write chunk.** `MSG_OK_REQ_DATA` carries the address that the firmware asks for
+  (`Response.address`). `_main_phase_send_data` seeks the input file to that address. The same
+  address again is a resend, and the progress bar does not count it again.
+- **Read chunk.** `MSG_DATA_CHUNK` carries the address of its first byte. `_main_phase_read_data`
+  calls `get_response(report_corrupt=True)`, which returns a frame that it drops as type
+  `CORRUPT`. The host answers `NK` (`send_nak`), and the firmware sends the chunk again. A chunk
+  below the expected address is a copy and gets no reply. The `NK` was already the reply to it.
+
+`transport_counters` counts each resend as `resends_command`, `resends_read` or `resends_write`.
+`firestarter dev fault-inject` corrupts the command frame (`outgoing`) or the first data chunk of a read
+(`incoming`) and checks that the read recovers. A corrupt INIT, MAIN or END frame still ends in a
+timeout: the resend covers the data phase only.
+
 ### Database Pipeline
 
 `tools/build_db.py` **downloads** `infoic.xml`, the minipro chip database XML. `MINIPRO_XML_URL`

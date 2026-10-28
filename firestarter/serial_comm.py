@@ -453,7 +453,9 @@ class SerialCommunicator:
     # frame-length read, or the timeout reset semantics MUST be
     # flagged and deferred to v1.9 alongside binary re-validation.
     # =================================================================
-    def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
+    def _read_and_parse_lines(
+        self, timeout: float, report_corrupt: bool = False
+    ) -> Generator[Response, None, None]:
         """
         [ring-fenced — v1.9 RCA territory; see header comment] Always-on byte-stream reader (Phase 6 D-05). A single generator
         handles BOTH legacy text lines (terminated by 0x0A) AND binary
@@ -474,6 +476,11 @@ class SerialCommunicator:
         require zero modification. LHOST-03 routing surface preserved.
 
         Resets the timeout on any successfully parsed yield.
+
+        With `report_corrupt`, a binary frame that this loop drops (no length,
+        a truncated body, or a failed decode such as a CRC8 mismatch) also
+        yields `Response(type="CORRUPT")`, so a transfer loop can ask for the
+        frame again. The timeout is not reset for it.
         """
         if not self.is_connected():
             raise SerialError("Not connected.")
@@ -526,6 +533,8 @@ class SerialCommunicator:
                         "before timeout — re-syncing."
                     )
                     transport_counters.record_resync_length_missing()
+                    if report_corrupt:
+                        yield Response(type="CORRUPT", message="frame length missing")
                     continue
                 frame_len = struct.unpack_from(">H", len_bytes)[0]
 
@@ -542,6 +551,8 @@ class SerialCommunicator:
                         f"got {len(body)} — re-syncing."
                     )
                     transport_counters.record_resync_body_truncated()
+                    if report_corrupt:
+                        yield Response(type="CORRUPT", message="frame body truncated")
                     continue
 
                 # Consume the trailing terminator: an anchor, not a
@@ -564,10 +575,13 @@ class SerialCommunicator:
                         message=decoded.text,
                         payload=decoded.payload,
                         id=decoded.id,
+                        address=decoded.address,
                     )
                     self._log_rurp_feedback(response)
                     yield response
                     start_time = time.time()
+                elif report_corrupt:
+                    yield Response(type="CORRUPT", message="frame failed its check")
                 continue
 
             # Newline → flush accumulator as a text line.
@@ -583,12 +597,17 @@ class SerialCommunicator:
 
             # Otherwise: keep accumulating; the byte is already appended.
 
-    def get_response(self, timeout: float = DEFAULT_RESPONSE_TIMEOUT) -> Response:
+    def get_response(
+        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT, report_corrupt: bool = False
+    ) -> Response:
         """
         Waits for and returns the next significant (i.e., not INFO or DEBUG)
         response from the programmer.
+
+        With `report_corrupt`, a dropped binary frame returns as a response of
+        type "CORRUPT". Only a transfer loop that answers it asks for this.
         """
-        for response in self._read_and_parse_lines(timeout):
+        for response in self._read_and_parse_lines(timeout, report_corrupt):
             if response.type and response.type not in NON_RESPONSE_PREFIXES:
                 return response
 
@@ -622,6 +641,10 @@ class SerialCommunicator:
     def send_ack(self) -> None:
         """Send the 'OK' acknowledgement string to the programmer."""
         self.send_string("OK")
+
+    def send_nak(self) -> None:
+        """Send 'NK': the last data chunk failed its check, send it again."""
+        self.send_string("NK")
 
     def send_done(self) -> None:
         """Send the 'DONE' completion string to the programmer."""
@@ -915,11 +938,28 @@ class SerialCommunicator:
                 f"for up to {SETUP_ACK_RECOVERY_TIMEOUT_S}s for the real ack."
             )
             setup_ack_deadline = time.time() + SETUP_ACK_RECOVERY_TIMEOUT_S
+            got_ack = False
             while msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
                 remaining = setup_ack_deadline - time.time()
                 if remaining <= 0:
                     break
-                is_ok, msg = self.expect_ack(timeout=remaining)
+                try:
+                    is_ok, msg = self.expect_ack(timeout=remaining)
+                except SerialTimeoutError:
+                    break
+                got_ack = msg != GENERIC_FRAME_DECODE_ERROR_TEXT
+            if not got_ack:
+                # The window ended with no ack for the command, so the
+                # firmware refused the command frame itself (a COBS or CRC8
+                # error) and is still idle. An accepted command would have
+                # sent MSG_OK_READY inside the window. Send it once more.
+                logger.warning(
+                    f"Port {self.port_name}: the programmer did not receive the "
+                    "command intact. Sending it again."
+                )
+                transport_counters.record_resend("command")
+                self.send_command(command_to_send)
+                is_ok, msg = self.expect_ack()
 
         if not is_ok and self.last_ack_error_id == MSG_ERR_FRAME_VERSION:
             self._refuse_frame_version()
@@ -1305,17 +1345,24 @@ class FaultInjectingSerialCommunicator(SerialCommunicator):
     ) -> None:
         super().__init__(*args, **kwargs)
         self._corrupt_incoming_once = corrupt_incoming_once
+        self._corrupt_incoming_id: int | None = None
         self._fault_fired = False
 
     def _decode_id_frame(self, frame_len: int, body: bytes) -> LogMessage | None:
         """One-shot incoming-frame fault injection: flip last body byte exactly once.
 
         After the first call, _fault_fired is set and subsequent calls pass
-        through unmodified (one-shot guard). This causes codec.decode_id_frame's
+        through unmodified (one-shot guard). With _corrupt_incoming_id set, only
+        the first frame with that message ID is corrupted. This causes codec.decode_id_frame's
         CRC8 check to fail on the first call, which surfaces as None →
         _read_and_parse_lines re-syncs without touching its body.
         """
-        if self._corrupt_incoming_once and not self._fault_fired:
+        target_id = getattr(self, "_corrupt_incoming_id", None)
+        if (
+            self._corrupt_incoming_once
+            and not self._fault_fired
+            and (target_id is None or (body and body[0] == target_id))
+        ):
             self._fault_fired = True
             # Flip last byte (CRC8 position) before decode — causes CRC8 mismatch.
             body = body[:-1] + bytes([body[-1] ^ 0x01])
