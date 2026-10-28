@@ -54,7 +54,8 @@
       "type": 749,
       "vcc_mv": 749,
       "vdd_mv": 749,
-      "vpp_mv": 749
+      "vpp_mv": 749,
+      "non_volatile": 76
     }
   },
   "protocol_chip_counts": {
@@ -70,6 +71,7 @@
     "electrical",
     "infoic_page_size_raw",
     "nc_pins",
+    "non_volatile",
     "page_size",
     "part_number",
     "pin_count",

@@ -171,6 +171,9 @@ Key fields per chip entry:
   `DIP24_2732`, `DIP24_2816`, `DIP24_6116`, `DIP28_27011`, `DIP28_27128`, `DIP28_27256`,
   `DIP28_27512`, `DIP28_2764`, `DIP28_28C64`, `DIP28_28C256`, `DIP28_6264`,
   `DIP32_27C020`, `DIP32_27C801`, `DIP32_28C040`, `DIP32_SST39SF040` and `DIP32_STD`.
+- `non_volatile` — SRAM-class rows only (`electrical`). `true` when the part keeps its data
+  without power: battery-backed NVRAM, timekeeper RAM or FRAM. The infoic protocol of the row
+  decides it, not a flag. See `tools/DECODE-NOTES.md` §12.
 - `nc_pins` — the address pins of `pinout` that the chip's infoic `<maps>` entry leaves unbonded.
   The generator omits the field when there are none, or when the map carries no connectivity
   (map 0). `info` labels these pins `NC`. The host gives the firmware only the address lines of the

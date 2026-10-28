@@ -4623,6 +4623,7 @@
   "DALLAS": [
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
@@ -4645,6 +4646,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
@@ -4667,6 +4669,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -4689,6 +4692,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -4711,6 +4715,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -4733,6 +4738,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -4755,6 +4761,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -4777,6 +4784,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -4799,6 +4807,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -4821,6 +4830,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -4843,6 +4853,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -4865,6 +4876,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -4887,6 +4899,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -4909,6 +4922,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -4931,6 +4945,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -4953,6 +4968,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -4975,6 +4991,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -4997,6 +5014,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -5019,6 +5037,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -5041,6 +5060,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -11584,6 +11604,7 @@
   "RAMTRON": [
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
@@ -11606,6 +11627,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -11628,6 +11650,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -11650,6 +11673,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -11672,6 +11696,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -12639,6 +12664,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
@@ -12661,6 +12687,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -12683,6 +12710,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -12705,6 +12733,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -12727,6 +12756,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -12749,6 +12779,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -12771,6 +12802,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -12793,6 +12825,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -12815,6 +12848,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -12837,6 +12871,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -14871,6 +14906,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
@@ -14893,6 +14929,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -14915,6 +14952,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -14937,6 +14975,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -14959,6 +14998,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -14981,6 +15021,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -15003,6 +15044,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -15025,6 +15067,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -15047,6 +15090,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -15069,6 +15113,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -15465,6 +15510,7 @@
   "Standard SRAM": [
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
@@ -15487,6 +15533,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -15509,6 +15556,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -15531,6 +15579,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 65536,
         "type": "SRAM",
@@ -15553,6 +15602,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -15575,6 +15625,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -15597,6 +15648,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -15989,6 +16041,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -16011,6 +16064,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
@@ -16033,6 +16087,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -16055,6 +16110,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -16077,6 +16133,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -16099,6 +16156,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -16121,6 +16179,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -16143,6 +16202,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -16165,6 +16225,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -16187,6 +16248,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -16209,6 +16271,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -16231,6 +16294,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -16253,6 +16317,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -16275,6 +16340,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -16297,6 +16363,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -16319,6 +16386,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -16341,6 +16409,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -16363,6 +16432,7 @@
     },
     {
       "electrical": {
+        "non_volatile": true,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -16948,6 +17018,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
@@ -16970,6 +17041,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
@@ -16992,6 +17064,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
@@ -17014,6 +17087,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
@@ -17036,6 +17110,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 32,
         "size_bytes": 65536,
         "type": "SRAM",
@@ -17058,6 +17133,7 @@
     },
     {
       "electrical": {
+        "non_volatile": false,
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
