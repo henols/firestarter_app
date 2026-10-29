@@ -29,7 +29,8 @@ BUS_CONFIG_KEY = "bus-config"
 _FORMAT_MAX = {"B": 0xFF, "H": 0xFFFF, "I": 0xFFFFFFFF}
 _MEMORY_KEYS = frozenset(key for _, key, _, _, bus in cf.MEMORY_FIELDS if not bus)
 _BUS_KEYS = frozenset(key for _, key, _, _, bus in cf.MEMORY_FIELDS if bus)
-_CONFIG_KEYS = frozenset(key for _, key, _, _ in cf.CONFIG_FIELDS)
+# A retired config field has no key: it keeps its offset and is never sent.
+_CONFIG_KEYS = frozenset(key for _, key, _, _ in cf.CONFIG_FIELDS if key)
 _HEADER_KEYS = frozenset(COMMAND_KEYS + ("flags",))
 
 
@@ -107,10 +108,6 @@ def _memory_field(
 
 def _config_value(name: str, key: str, fmt: str, raw: Any) -> int:
     value = _int(key, raw, fmt)
-    if name == "vcc" and value > cf.CALIBRATION_VCC_MAX_MV:
-        raise CommandEncodeError(
-            f"'{key}' must be at most {cf.CALIBRATION_VCC_MAX_MV} mV, got {value}"
-        )
     if name == "rev" and value != 0xFF and value > cf.REVISION_MAX:
         raise CommandEncodeError(
             f"'{key}' must be 0..{cf.REVISION_MAX}, or 255 to clear it, got {value}"
@@ -138,7 +135,7 @@ def _encode_config(command: dict) -> bytes:
     fields = b""
     for name, key, fmt, bit in cf.CONFIG_FIELDS:
         value = 0
-        if key in command:
+        if key and key in command:
             present |= bit
             value = _config_value(name, key, fmt, command[key])
         fields += struct.pack(">" + fmt, value)

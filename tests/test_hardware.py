@@ -624,18 +624,40 @@ def _cfg_ack(params: bytes) -> bytes:
     return build_frame(MSG_OK_CFG, params)
 
 
-def test_read_calibration_reads_bandgap_from_current_ack(
-    hw_config, make_comm, fake_serial
-) -> None:
-    fake_serial.feed(_cfg_ack(struct.pack(">IIBH", 270000, 44000, 0xFF, 1083)))
+def _read_calibration(hw_config, make_comm, fake_serial, params: bytes):
+    fake_serial.feed(_cfg_ack(params))
     comm = make_comm()
     hw = HardwareManager(hw_config)
     with patch(
         "firestarter.serial_comm.SerialCommunicator.find_and_connect",
         return_value=comm,
     ):
-        cal = hw.read_calibration()
-    assert cal == {"r1": 270000, "r2": 44000, "bandgap_mv": 1083}
+        return hw.read_calibration()
+
+
+def test_read_calibration_reads_bandgap_and_count_from_current_ack(
+    hw_config, make_comm, fake_serial
+) -> None:
+    params = struct.pack(">IIBHH", 270000, 44000, 0xFF, 1083, 206)
+    cal = _read_calibration(hw_config, make_comm, fake_serial, params)
+    assert cal == {"r1": 270000, "r2": 44000, "bandgap_mv": 1083, "bandgap_adc": 206}
+
+
+def test_read_calibration_reads_a_zero_count_from_a_board_without_calibration(
+    hw_config, make_comm, fake_serial
+) -> None:
+    params = struct.pack(">IIBHH", 270000, 44000, 0xFF, 1100, 0)
+    cal = _read_calibration(hw_config, make_comm, fake_serial, params)
+    assert cal is not None and cal["bandgap_adc"] == 0
+
+
+def test_read_calibration_has_no_count_from_the_11_byte_ack(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """Firmware before 3.3 sends no count: the bandgap still reads."""
+    params = struct.pack(">IIBH", 270000, 44000, 0xFF, 1083)
+    cal = _read_calibration(hw_config, make_comm, fake_serial, params)
+    assert cal == {"r1": 270000, "r2": 44000, "bandgap_mv": 1083, "bandgap_adc": None}
 
 
 def test_read_calibration_returns_none_for_legacy_9_byte_ack(

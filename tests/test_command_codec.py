@@ -110,7 +110,7 @@ def test_bool_is_not_an_integer(command):
 
 def test_every_frame_field_has_one_key_constant():
     field_keys = {name: key for name, key, _, _, _ in cf.MEMORY_FIELDS}
-    field_keys.update({name: key for name, key, _, _ in cf.CONFIG_FIELDS})
+    field_keys.update({name: key for name, key, _, _ in cf.CONFIG_FIELDS if key})
     constants = {
         name[len("KEY_") :].lower(): value
         for name, value in vars(cf).items()
@@ -260,10 +260,19 @@ def test_vpp_above_the_database_maximum_is_refused():
         encode_command({**_READ_27C512, "vpp_mv": cf.VPP_MAX_MV + 1})
 
 
-def test_a_calibration_frame_with_an_implausible_vcc_is_refused():
-    encode_command({"state": COMMAND_CONFIG, "vcc": cf.CALIBRATION_VCC_MAX_MV})
-    with pytest.raises(CommandEncodeError, match="at most"):
-        encode_command({"state": COMMAND_CONFIG, "vcc": cf.CALIBRATION_VCC_MAX_MV + 1})
+def test_the_retired_vcc_key_is_refused():
+    """The host back-solves the bandgap and sends it as `bg`. The frame keeps
+    the `vcc` offset, but no command dict can set it."""
+    with pytest.raises(CommandEncodeError, match="vcc"):
+        encode_command({"state": COMMAND_CONFIG, "vcc": 5012})
+
+
+def test_a_retired_config_field_keeps_its_offset_and_is_never_present():
+    frame = encode_command({"state": COMMAND_CONFIG, "bg": 1100})
+    payload = frame[cf.HEADER_SIZE :]
+    assert len(payload) == cf.CONFIG_SIZE
+    assert payload[0] == 0x10  # only the bg bit
+    assert payload[-2:] == (1100).to_bytes(2, "big")
 
 
 @pytest.mark.parametrize("rev", [0, cf.REVISION_MAX, 0xFF])

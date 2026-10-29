@@ -10,10 +10,11 @@ import logging
 import re
 import statistics
 import time
-from typing import NamedTuple, Tuple  # noqa: UP035
+from typing import NamedTuple, Tuple, TypedDict  # noqa: UP035
 
 from firestarter.config import ConfigManager
 from firestarter.constants import (
+    BANDGAP_ADC_FULL_SCALE,
     COMMAND_CONFIG,
     COMMAND_DEV_ADC,
     COMMAND_HW_VERSION,
@@ -40,6 +41,38 @@ logger = logging.getLogger("Hardware")
 # Revision codes the firmware accepts in a config command; -1 is the CLI's
 # spelling of 0xFF, "no override".
 _CONFIG_REVISIONS = frozenset({-1, 0, 1, 2, 3, 4, 5, 0xFF})
+
+
+class Calibration(TypedDict):
+    """The stored calibration that MSG_OK_CFG reports."""
+
+    r1: int
+    r2: int
+    bandgap_mv: int
+    # None from firmware before 3.3; 0 on a board without calibration.
+    bandgap_adc: int | None
+
+
+def bandgap_from_measured_vcc(vcc_mv: int, bandgap_adc: int) -> int | None:
+    """Back-solve this MCU's bandgap from a meter reading of the supply pin.
+
+    The ADC is ratiometric: bandgap_adc = Vbg / VCC * 1024, so
+    Vbg = VCC_meter * bandgap_adc / 1024, rounded to the nearest mV. One meter
+    reading on the supply pin is the whole measurement.
+
+    Returns None for a result outside 1000-1200 mV (the ATmega datasheet
+    window), or for a count of 0 or above full scale. The firmware trusts a
+    stored bandgap to judge programming voltages, so an implausible one is
+    refused, never clamped.
+    """
+    if vcc_mv <= 0 or not 0 < bandgap_adc <= BANDGAP_ADC_FULL_SCALE:
+        return None
+    bandgap_mv = (vcc_mv * bandgap_adc + BANDGAP_ADC_FULL_SCALE // 2) // (
+        BANDGAP_ADC_FULL_SCALE
+    )
+    if not CONFIG_BANDGAP_MIN_MV <= bandgap_mv <= CONFIG_BANDGAP_MAX_MV:
+        return None
+    return bandgap_mv
 
 
 def _config_value_refusal(
@@ -325,9 +358,14 @@ class HardwareManager:
     _CFG_R1_RE = re.compile(r"R1:\s*(\d+)")
     _CFG_R2_RE = re.compile(r"R2:\s*(\d+)")
     _CFG_BANDGAP_RE = re.compile(r"Bandgap:\s*(\d+)")
+    _CFG_BANDGAP_ADC_RE = re.compile(r"Bandgap count:\s*(\d+)")
 
-    def read_calibration(self, flags: int = 0) -> dict[str, int] | None:
-        """Read r1, r2 and the calibrated bandgap.
+    def read_calibration(self, flags: int = 0) -> Calibration | None:
+        """Read r1, r2, the calibrated bandgap and the raw bandgap count.
+
+        `bandgap_adc` is the count that `bandgap_from_measured_vcc` needs. It
+        is None when the firmware does not send it (before 3.3), and 0 on a
+        board that takes no calibration (py32f071).
 
         The revision override is deliberately not returned: codec.py renders it
         as a silkscreen name rather than the raw byte, so it cannot be read back
@@ -349,12 +387,14 @@ class HardwareManager:
             r1_m = self._CFG_R1_RE.search(text)
             r2_m = self._CFG_R2_RE.search(text)
             bg_m = self._CFG_BANDGAP_RE.search(text)
+            adc_m = self._CFG_BANDGAP_ADC_RE.search(text)
             if r1_m is None or r2_m is None or bg_m is None:
                 return None
             return {
                 "r1": int(r1_m.group(1)),
                 "r2": int(r2_m.group(1)),
                 "bandgap_mv": int(bg_m.group(1)),
+                "bandgap_adc": int(adc_m.group(1)) if adc_m else None,
             }
         except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
             logger.debug(f"Failed to read calibration: {e}")
@@ -363,37 +403,23 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def calibrate_bandgap(self, measured_vcc_mv: int, flags: int = 0) -> bool:
-        """Calibrate this board against a measured supply voltage.
-
-        The firmware reads its own bandgap count and back-solves
-        ``bandgap_mv = measured_vcc_mv * bandgap_adc / 1024``. It refuses a
-        result outside the ATmega datasheet's 1.0-1.2 V window rather than
-        clamping it, so a mistyped reading fails loudly instead of storing a
-        wrong value the firmware would then trust.
-        """
-        command: dict[str, int] = {"state": COMMAND_CONFIG, "vcc": measured_vcc_mv}
-        if flags:
-            command["flags"] = flags
-        success, _ = self._execute_simple_command(command, "Calibration")
-        return success
-
     def set_bandgap_mv(self, bandgap_mv: int, flags: int = 0) -> bool:
-        """Write the bandgap directly, for --reset back to the nominal.
+        """Store the bandgap: a calibration from bandgap_from_measured_vcc,
+        or the nominal for --reset.
 
         A value outside the firmware's accepted band is refused here, before
         the port opens: the firmware refuses it too.
         """
         if not CONFIG_BANDGAP_MIN_MV <= bandgap_mv <= CONFIG_BANDGAP_MAX_MV:
             logger.error(
-                f"Calibration reset refused: the bandgap {bandgap_mv} mV is "
+                f"Calibration refused: the bandgap {bandgap_mv} mV is "
                 f"outside {CONFIG_BANDGAP_MIN_MV}-{CONFIG_BANDGAP_MAX_MV} mV."
             )
             return False
         command: dict[str, int] = {"state": COMMAND_CONFIG, "bg": bandgap_mv}
         if flags:
             command["flags"] = flags
-        success, _ = self._execute_simple_command(command, "Calibration reset")
+        success, _ = self._execute_simple_command(command, "Calibration")
         return success
 
     def _read_voltage_loop(

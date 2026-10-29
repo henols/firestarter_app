@@ -217,3 +217,6 @@ CONFIG_R2_MIN = 33000
 CONFIG_R2_MAX = 55000
 CONFIG_BANDGAP_MIN_MV = 1000
 CONFIG_BANDGAP_MAX_MV = 1200
+# The AVR ADC is 10-bit. The bandgap count in MSG_OK_CFG is against this full
+# scale (rurp_voltage_math.h RURP_ADC_FULL_SCALE).
+BANDGAP_ADC_FULL_SCALE = 1024
