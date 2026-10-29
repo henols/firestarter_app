@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Release this repository: tag origin/main with a version and push the tag.
+# Release this repository: tag origin/main, or origin/release/X.Y for a patch
+# to an older line X.Y, with a version and push the tag.
 # .github/workflows/release.yml then builds and publishes it.
 #
 #   tools/release.sh 3.2.0b1   # pre-release
-#   tools/release.sh 3.2.0     # stable release, marked Latest
+#   tools/release.sh 3.2.0     # stable release, Latest if it is the highest
 #
 # A plain `git tag X && git push origin X` works too. This script only adds
-# checks first: the shape of the version, a clean and current main, and a
-# version higher than every earlier release tag.
+# checks first: the shape of the version, a clean and current branch, and a
+# version higher than every earlier release tag (of its line, on release/X.Y).
 set -euo pipefail
 
 VERSION="${1:-}"
@@ -17,7 +18,17 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?$ ]]; then
 fi
 
 cd "$(git rev-parse --show-toplevel)"
-git fetch --quiet --tags origin main
+git fetch --quiet --tags origin
+
+# release/X.Y exists only for a line that main has left behind.
+LINE="${VERSION%.*}"
+if git rev-parse -q --verify "refs/remotes/origin/release/$LINE" >/dev/null; then
+    BRANCH="release/$LINE"
+    PATTERN="$LINE.*"
+else
+    BRANCH=main
+    PATTERN='[0-9]*'
+fi
 
 if [ -n "$(git status --porcelain)" ]; then
     echo "error: the working tree is not clean" >&2
@@ -30,7 +41,7 @@ fi
 
 # PEP 440 order: 3.1.0b8 < 3.1.0 < 3.1.1b1. A new tag must sort above every
 # earlier release tag, or pip and `firestarter fw` never offer it.
-LATEST=$(git tag --list '[0-9]*' | python3 -c '
+LATEST=$(git tag --list "$PATTERN" | python3 -c '
 import sys
 from packaging.version import InvalidVersion, Version
 vs = []
@@ -50,8 +61,8 @@ sys.exit(0 if Version('$VERSION') > Version('$LATEST') else 1)
     exit 1
 fi
 
-TARGET=$(git rev-parse origin/main)
-echo "Tag $VERSION on origin/main $(git log -1 --format='%h %s' "$TARGET")"
+TARGET=$(git rev-parse "origin/$BRANCH")
+echo "Tag $VERSION on origin/$BRANCH $(git log -1 --format='%h %s' "$TARGET")"
 read -r -p "Push the tag and publish? [y/N] " ANSWER
 if [ "$ANSWER" != "y" ]; then
     echo "Nothing pushed."
