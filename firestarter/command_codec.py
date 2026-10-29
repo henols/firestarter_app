@@ -98,7 +98,24 @@ def _memory_field(
         raise CommandEncodeError(
             f"'{key}' must be at most {cf.READ_TIMING_MAX_US} us, got {value}"
         )
+    if name == "vpp_mv" and value > cf.VPP_MAX_MV:
+        raise CommandEncodeError(
+            f"'{key}' must be at most {cf.VPP_MAX_MV} mV, got {value}"
+        )
     return struct.pack(">" + fmt, value)
+
+
+def _config_value(name: str, key: str, fmt: str, raw: Any) -> int:
+    value = _int(key, raw, fmt)
+    if name == "vcc" and value > cf.CALIBRATION_VCC_MAX_MV:
+        raise CommandEncodeError(
+            f"'{key}' must be at most {cf.CALIBRATION_VCC_MAX_MV} mV, got {value}"
+        )
+    if name == "rev" and value != 0xFF and value > cf.REVISION_MAX:
+        raise CommandEncodeError(
+            f"'{key}' must be 0..{cf.REVISION_MAX}, or 255 to clear it, got {value}"
+        )
+    return value
 
 
 def _encode_memory(command: dict) -> bytes:
@@ -119,11 +136,11 @@ def _encode_config(command: dict) -> bytes:
     _refuse_unknown(command, _HEADER_KEYS | _CONFIG_KEYS, "config command")
     present = 0
     fields = b""
-    for _, key, fmt, bit in cf.CONFIG_FIELDS:
+    for name, key, fmt, bit in cf.CONFIG_FIELDS:
         value = 0
         if key in command:
             present |= bit
-            value = _int(key, command[key], fmt)
+            value = _config_value(name, key, fmt, command[key])
         fields += struct.pack(">" + fmt, value)
     payload = struct.pack(">B", present) + fields
     assert len(payload) == cf.CONFIG_SIZE

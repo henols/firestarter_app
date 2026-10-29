@@ -14,6 +14,9 @@ BUS_LINES = 24
 LINE_ABSENT = 0xFF
 READ_TIMING_MAX_US = 1000
 FLAGS_MASK = 0x03F7
+VPP_MAX_MV = 25000
+CALIBRATION_VCC_MAX_MV = 10000
+REVISION_MAX = 5
 
 # (name, command-dict key, struct format, count, inside bus-config)
 MEMORY_FIELDS = (
@@ -76,6 +79,9 @@ REFUSALS = {
     9: "the config frame names an unknown or unsupported value",
     10: "a memory command lacks memory-size, algorithm, pin-count or vpp_mv",
     11: "the start address is past the end of the device or the write region",
+    12: "vpp_mv is above 25000 mV, the highest VPP in the chip database",
+    13: "the calibration supply voltage is above 10000 mV",
+    14: "the hardware revision is not 0 to 5, or 255 to clear it",
 }
 
 # Command-dict keys, one per frame field

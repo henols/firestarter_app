@@ -222,7 +222,7 @@ def test_values_outside_their_field_are_refused(command):
 
 
 def test_field_maxima_pass():
-    encode_command(_with(memory_size=0xFFFFFFFF, algorithm=0xFF, vpp_mv=0xFFFF))
+    encode_command(_with(memory_size=0xFFFFFFFF, algorithm=0xFF, vpp_mv=cf.VPP_MAX_MV))
 
 
 def test_bus_line_at_bus_width_is_refused_and_last_line_passes():
@@ -252,6 +252,29 @@ def test_read_timing_above_the_cap_is_refused(key):
     encode_command({**_READ_27C512, key: cf.READ_TIMING_MAX_US})
     with pytest.raises(CommandEncodeError, match="at most"):
         encode_command({**_READ_27C512, key: cf.READ_TIMING_MAX_US + 1})
+
+
+def test_vpp_above_the_database_maximum_is_refused():
+    encode_command({**_READ_27C512, "vpp_mv": cf.VPP_MAX_MV})
+    with pytest.raises(CommandEncodeError, match="at most"):
+        encode_command({**_READ_27C512, "vpp_mv": cf.VPP_MAX_MV + 1})
+
+
+def test_a_calibration_frame_with_an_implausible_vcc_is_refused():
+    encode_command({"state": COMMAND_CONFIG, "vcc": cf.CALIBRATION_VCC_MAX_MV})
+    with pytest.raises(CommandEncodeError, match="at most"):
+        encode_command({"state": COMMAND_CONFIG, "vcc": cf.CALIBRATION_VCC_MAX_MV + 1})
+
+
+@pytest.mark.parametrize("rev", [0, cf.REVISION_MAX, 0xFF])
+def test_a_known_revision_or_a_clear_is_accepted(rev):
+    encode_command({"state": COMMAND_CONFIG, "rev": rev})
+
+
+@pytest.mark.parametrize("rev", [cf.REVISION_MAX + 1, 0xFE])
+def test_an_unknown_revision_is_refused(rev):
+    with pytest.raises(CommandEncodeError, match="255 to clear"):
+        encode_command({"state": COMMAND_CONFIG, "rev": rev})
 
 
 def test_undefined_flag_bits_are_refused():

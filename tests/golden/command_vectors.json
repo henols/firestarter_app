@@ -252,6 +252,51 @@
     {
       "cmd": 14,
       "fields": {
+        "vcc": 10000
+      },
+      "flags": 0,
+      "frame": "f5010e0000000e0800000000000000000027100000",
+      "name": "config_calibrate_at_limit"
+    },
+    {
+      "cmd": 14,
+      "fields": {
+        "rev": 5
+      },
+      "flags": 0,
+      "frame": "f5010e0000000e0400000000000000000500000000",
+      "name": "config_highest_rev"
+    },
+    {
+      "cmd": 1,
+      "fields": {
+        "algorithm": 11,
+        "bus-config": {
+          "bus": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+          ]
+        },
+        "memory-size": 2048,
+        "pin-count": 24,
+        "vpp_mv": 25000
+      },
+      "flags": 0,
+      "frame": "f501010000003a0000080000000000000000000b1861a800000000000000000000000000000000000102030405060708090affffffffffffffffffffff00000000",
+      "name": "read_vpp_at_limit"
+    },
+    {
+      "cmd": 14,
+      "fields": {
         "bg": 1100
       },
       "flags": 0,
@@ -388,6 +433,21 @@
       "frame": "f501020000003a00000800ffffffff00000000071c30d400000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
       "name": "write_address_wraps",
       "refusal": 11
+    },
+    {
+      "frame": "f501020000003a000008000000000000000000071c61a900000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffff00000000",
+      "name": "vpp_above_database_maximum",
+      "refusal": 12
+    },
+    {
+      "frame": "f5010e0000000e0800000000000000000027110000",
+      "name": "config_calibration_vcc_implausible",
+      "refusal": 13
+    },
+    {
+      "frame": "f5010e0000000e0400000000000000000600000000",
+      "name": "config_unknown_rev",
+      "refusal": 14
     }
   ]
 }
