@@ -367,6 +367,7 @@ def _build_op_flags(
     # SDP auto-set condition inside write() below -- flipping this default
     # invalidates the removal-safety argument the `dev sdp` removal rests on.
     skip_sdp_unlock: bool = False,
+    skip_final_verify: bool = False,
     input_enable: bool | None = None,
     chip_disable: bool | None = None,
 ) -> int:
@@ -396,6 +397,7 @@ def _build_op_flags(
         verbose,
         skip_erase=skip_erase,
         skip_sdp_unlock=skip_sdp_unlock,
+        skip_final_verify=skip_final_verify,
     )
     if input_enable is not None:
         flags |= 0 if input_enable else FLAG_OUTPUT_ENABLE
@@ -933,6 +935,9 @@ def write(
             vpe_as_vpp=vpe_as_vpp,
             skip_erase=skip_erase,
             skip_sdp_unlock=skip_sdp_unlock,
+            # The read-back below compares every byte, so the board's own
+            # final verify pass would only repeat it.
+            skip_final_verify=verify,
         ),
         # Translate Click's `None` ("--pulse-us not supplied") into
         # write_eprom's own integer sentinel (0 means "use the database

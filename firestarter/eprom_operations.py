@@ -44,6 +44,7 @@ from firestarter.constants import (
     COMMAND_WRITE,
     FLAG_FORCE,
     FLAG_SKIP_ERASE,
+    FLAG_SKIP_FINAL_VERIFY,
     FLAG_SKIP_SDP_UNLOCK,
     FLAG_VERBOSE,
     FLAG_VPE_AS_VPP,
@@ -305,6 +306,7 @@ def build_flags(
     skip_erase=False,
     *,
     skip_sdp_unlock: bool = False,
+    skip_final_verify: bool = False,
 ):
     # skip_sdp_unlock is keyword-only BY REQUIREMENT, not by style: both
     # production callers (cli_handlers.py build_arg_flags / _build_op_flags)
@@ -340,6 +342,10 @@ def build_flags(
     # the handler's job, not this function's.
     if skip_sdp_unlock:
         flags |= FLAG_SKIP_SDP_UNLOCK
+    # Set for `write --verify` only: the host reads the region back, so the
+    # board's own final pass would read every block a second time.
+    if skip_final_verify:
+        flags |= FLAG_SKIP_FINAL_VERIFY
 
     return flags
 

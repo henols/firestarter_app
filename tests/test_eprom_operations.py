@@ -194,6 +194,14 @@ def test_build_flags_force_sets_bit() -> None:
     assert build_flags(force=True) & FLAG_FORCE
 
 
+def test_build_flags_skip_final_verify_sets_bit() -> None:
+    """skip_final_verify=True sets FLAG_SKIP_FINAL_VERIFY (0x200), alone."""
+    from firestarter.constants import FLAG_SKIP_FINAL_VERIFY
+    from firestarter.eprom_operations import build_flags
+
+    assert build_flags(skip_final_verify=True) == FLAG_SKIP_FINAL_VERIFY == 0x200
+
+
 def test_build_flags_no_blank_check_sets_no_wire_bit() -> None:
     """FWBLANK-04 (Phase 205): blank_check=False no longer composes any
     wire bit at all -- the flag it used to set (0x08) is retired from the

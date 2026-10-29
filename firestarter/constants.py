@@ -161,6 +161,11 @@ FLAG_VERBOSE = 0x80
 # argument. See test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on.
 FLAG_SKIP_SDP_UNLOCK = 0x100
 
+# Firmware sync: firestarter.h FLAG_SKIP_FINAL_VERIFY. Drops the board's final
+# full-block verify pass on 0x07/0x08 when `write --verify` reads the region
+# back on the host. Firmware without it ignores the bit and verifies anyway.
+FLAG_SKIP_FINAL_VERIFY = 0x200
+
 # Dev sweep knobs — Firmware sync: json_parser.c (key_read_settling, key_read_strobe)
 # JSON key name strings for host-tunable read-timing parameters.
 # MUST stay in sync with the PROGMEM key strings in firmware json_parser.c.
