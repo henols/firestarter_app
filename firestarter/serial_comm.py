@@ -70,18 +70,6 @@ rurp_logger = logging.getLogger("RURP")
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
-# Plausibility ceiling for the firmware-advertised per-block write-time
-# budget decoded by _decode_id_frame's budget arm below. DERIVED,
-# not chosen: the largest value a legitimate firmware could compute is
-# ceil(max_pulses 25 * 65535 us * buffer 4096 B / 1e6) * 2 + 2 = 13424 s,
-# evaluated at the [1, 4096] buffer-size plausibility ceiling --
-# rounded up to 14400 s (4 h). A value outside [1, WRITE_BUDGET_MAX_S] leaves
-# write_block_budget_s unset so the write-path fallback applies, mirroring
-# the buffer-size field's own behaviour exactly. The clamp exists so a
-# malfunctioning or
-# mismatched board cannot wedge the host -- it is not a defense against an
-# adversarial one.
-WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 GENERIC_FRAME_DECODE_ERROR_TEXT = CATALOG[MSG_ERR_EMPTY_INPUT].format
 SETUP_ACK_RECOVERY_TIMEOUT_S = 2.0
@@ -129,12 +117,8 @@ class SerialCommunicator:
     # every one of those into an AttributeError swallowed by the broad
     # `except Exception` in _probe_port, which degrades to "no programmer
     # found". Class defaults of None keep the gates fail-closed instead.
-    # The same ack also carries the firmware's advertised per-block
-    # write-time budget (write_block_budget_s below); the identical
-    # class-level-declaration reasoning applies to it.
     firmware_identity: str | None = None
     hw_revision: int | None = None
-    write_block_budget_s: int | None = None
     # The id of an ERROR frame that the caller caused on purpose, so the
     # frame is logged at DEBUG, not ERROR. A read that stops acking at the
     # first mismatch sets it to MSG_ERR_TIMEOUT: the firmware's ack-wait
@@ -190,7 +174,6 @@ class SerialCommunicator:
         # never a refusal (mirroring the buffer-size field's own reversal of
         # FirmwareOutdatedError into a safe default). Populated by
         # _decode_id_frame below. Consumed only on the write path.
-        self.write_block_budget_s: int | None = None
         # Bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
@@ -404,28 +387,6 @@ class SerialCommunicator:
                         self.firmware_identity = params_bytes[4:ver_end].decode(
                             "ascii", errors="replace"
                         )
-                        # The budget is appended AFTER the variable-length identity tail.
-                        # The offset MUST be the COMPUTED ver_end, never a fixed index: a
-                        # fixed index works on whichever board's identity string happens to
-                        # be that length and silently misreads on the next. Offsets 2 and 3
-                        # are already claimed, so a budget written there reads back as a
-                        # hardware revision and a version length.
-                        #
-                        # Nested past the ver_end guard because an ack with no identity tail
-                        # cannot carry this field. A truncated tail leaves it None rather
-                        # than yielding a partial value.
-                        if len(params_bytes) >= ver_end + 2:
-                            value = struct.unpack(
-                                ">H", params_bytes[ver_end : ver_end + 2]
-                            )[0]
-                            # Plausibility clamp, mirroring the [1, 4096] buffer-size one
-                            # in spirit: a hostile or corrupt ack
-                            # must not be able to install an unbounded host
-                            # timeout. Values outside this range leave
-                            # write_block_budget_s unset so the fallback
-                            # applies.
-                            if 1 <= value <= WRITE_BUDGET_MAX_S:
-                                self.write_block_budget_s = value
         return result
 
     # =================================================================

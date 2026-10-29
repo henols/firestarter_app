@@ -62,7 +62,6 @@ def _make_init(fake_ser: _FakeSerial):
         self.firmware_max_chunk = None
         self.firmware_identity = None
         self.hw_revision = None
-        self.write_block_budget_s = None
         self.seen_message_ids = set()
 
     return _init

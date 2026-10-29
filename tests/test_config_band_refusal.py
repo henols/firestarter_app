@@ -105,7 +105,6 @@ def test_a_firmware_config_refusal_exits_non_zero_with_its_text(
         self.firmware_max_chunk = None
         self.firmware_identity = None
         self.hw_revision = None
-        self.write_block_budget_s = None
         self.seen_message_ids = set()
         self.setup_refusal = None
 

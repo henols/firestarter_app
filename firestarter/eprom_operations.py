@@ -21,7 +21,7 @@ from typing import BinaryIO, Callable, Dict, Tuple  # noqa: UP035
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from firestarter import transport_counters
+from firestarter import transport_counters, write_budget
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.compare import (
     MAX_RETAINED_RANGES,
@@ -71,7 +71,6 @@ from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
     CONNECTION_STABILIZE_DELAY,
     DEFAULT_RESPONSE_TIMEOUT,
-    WRITE_BUDGET_MAX_S,
     SerialCommunicator,
 )
 from firestarter.timestamps import iso_cet_basic
@@ -153,15 +152,9 @@ _TIMEOUT_ADDR_RE = re.compile(r"at 0x([0-9a-fA-F]+)")
 # page-write flash family (protocol 0x05, FLASH_AMD_STD).
 _FLASH4_PROTOCOL_ID = 5
 
-# Fallback write-path response timeout, used when the firmware advertises no
-# per-block write-time budget. DERIVED, not picked: the worst shipped-database
-# block time with no advertisement is 0x0B at 50 ms/byte x 1024 B = 51.2 s, and
-# 0x07/0x08 at 25 x 1000 us x 1024 B = 25.6 s, so this is over 2x the worst
-# shipped case -- and it covers every REACHABLE 0x0B width, whose per-byte
-# bound cannot exceed 99998 us.
-#
-# Residual gap, stated: 0x07/0x08 only, at ~4687 us/byte on a Leonardo and
-# ~9375 us on an Uno.
+# Fallback write-path response timeout, for a protocol that has no 27C EPROM
+# row in write_budget.EPROM_ROWS. Those protocols (flash, 0x0D EEPROM, SRAM)
+# program a block in well under a second, so this is a generous ceiling.
 WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
 # the three per-byte program-budget ids _budget_failure_hint_
@@ -602,27 +595,20 @@ class EpromOperator:
         # Safe Uno-floor default: absent advertisement -> 512.
         return 512
 
-    def _write_block_timeout(self) -> float:
+    def _write_block_timeout(self, cmd_data: dict, buffer_size: int) -> float:
         """Return the per-response wait for a write's MAIN phase, in seconds.
 
-        The firmware's advertised budget is used VERBATIM -- it is already
-        padded firmware-side, so the host applies no multiplier.
-
-        An absent, truncated or implausible advertisement falls back to the
-        derived constant, never an error and never a refusal.
-
-        The range test is a second line of defence behind the decoder's own
-        plausibility clamp: a value outside it can only arrive if something
-        bypassed the decoder. Too-small and implausibly-large fall back
-        identically, so a corrupt or hostile ack can install neither a
-        too-tight nor an unbounded host wait.
-
-        MUST be called from inside `write_eprom`'s operation context: that
-        block's finally sets `self.comm` to None on exit, so a later call would
-        always take the None branch.
+        `write_budget.block_budget_s` gives the padded worst case for one
+        block of a 27C EPROM protocol, from the command's own algorithm and
+        pulse-delay and the firmware's block size. It is used verbatim: the
+        padding is already in it. Any other protocol uses the fallback.
         """
-        budget = getattr(self.comm, "write_block_budget_s", None) if self.comm else None
-        if budget is not None and 1 <= budget <= WRITE_BUDGET_MAX_S:
+        budget = write_budget.block_budget_s(
+            int(cmd_data.get("algorithm", 0)),
+            int(cmd_data.get("pulse-delay", 0)),
+            buffer_size,
+        )
+        if budget is not None:
             return float(budget)
         return WRITE_BLOCK_TIMEOUT_FALLBACK_S
 
@@ -2710,21 +2696,16 @@ class EpromOperator:
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
 
-            # _write_block_timeout() MUST be read here,
-            # inside this `with` block -- _operation_context's `finally`
-            # disconnects and sets self.comm to None once it exits (same
-            # constraint the seen_message_ids check below already relies
-            # on). _run_state_machine forwards **handler_kwargs verbatim to
-            # main_phase_handler (confirmed by reading it), so no
-            # _run_state_machine signature change is needed for this to
-            # reach _main_phase_send_data's new response_timeout kwarg.
+            # _run_state_machine forwards **handler_kwargs verbatim to
+            # main_phase_handler, so response_timeout reaches
+            # _main_phase_send_data unchanged.
             is_ok, _ = self._run_state_machine(
                 op_name,
                 main_phase_handler=self._main_phase_send_data,
                 input_file_path=input_file_path,
                 buffer_size=buf_size,
                 eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
-                response_timeout=self._write_block_timeout(),
+                response_timeout=self._write_block_timeout(cmd_data, buf_size),
             )
 
             # WRITE-04/WRITE-05 (Phase 203): record the write phase's own

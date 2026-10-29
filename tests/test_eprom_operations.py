@@ -2192,7 +2192,6 @@ def _fresh_comm_pair():
         instance.firmware_max_chunk = None
         instance.firmware_identity = None
         instance.hw_revision = None
-        instance.write_block_budget_s = None
         instance.seen_message_ids = set()
         return instance
 
