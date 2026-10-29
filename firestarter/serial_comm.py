@@ -385,8 +385,8 @@ class SerialCommunicator:
                 if len(params_bytes) >= 2:
                     value = struct.unpack(">H", params_bytes[:2])[0]
                     # Plausibility clamp: reject values outside [1, 4096].
-                    # No real board exceeds the 1024-byte Leonardo buffer; 4096
-                    # is a generous ceiling. Values outside this range leave
+                    # The largest board buffer is 1536 B (leonardo); 4096 is a
+                    # generous ceiling. Values outside this range leave
                     # firmware_max_chunk unset so the 512 floor applies.
                     if 1 <= value <= 4096:
                         self.firmware_max_chunk = value

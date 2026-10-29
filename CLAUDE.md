@@ -265,6 +265,11 @@ command frame layout is not in this table: it is generated (see Wire Protocol).
 
 The command-dict keys are not in `constants.py`. Use the generated `command_frame.KEY_*`.
 
+The write-time values of the 27C EPROM rows (`max_pulses`, `energy_cap_us`, the fallback pulse
+width) are in the generated `firestarter/eprom_rows.py`. **Do not edit it.** The meta repository
+generates it, and the firmware's `include/eprom_rows.h`, from `tools/protocol/eprom_rows.toml`.
+`write_budget.py` reads it.
+
 The project reserves two revision bytes. `0xFF` shows that no EEPROM override is present. `0xFE`
 (`REVISION_UNKNOWN`) shows that the ADC band-gap check found no band.
 

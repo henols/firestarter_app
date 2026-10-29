@@ -608,8 +608,8 @@ class EpromOperator:
         padding is already in it. Any other protocol uses the fallback.
         """
         budget = write_budget.block_budget_s(
-            int(cmd_data.get("algorithm", 0)),
-            int(cmd_data.get("pulse-delay", 0)),
+            int(cmd_data.get(cf.KEY_PROTOCOL, 0)),
+            int(cmd_data.get(cf.KEY_PULSE_DELAY, 0)),
             buffer_size,
         )
         if budget is not None:

@@ -11,9 +11,10 @@ The firmware used to calculate it and send it in the `MSG_OK_READY` ack. The
 host already knows every input, so the calculation moved here and the field
 left the ack.
 
-Firmware sync: `firestarter_fw/src/proms/eprom_params.cpp` (`max_pulses`,
-`energy_cap_us`) and the pulse-width fallbacks in `configure_eprom()`
-(`src/proms/eprom.cpp`). Change both sides together.
+The row values (`max_pulses`, `energy_cap_us`, the fallback pulse width) come
+from the generated `eprom_rows.py`. The meta repo generates it and the
+firmware's `include/eprom_rows.h` from `tools/protocol/eprom_rows.toml`, so the
+two sides cannot drift apart.
 
 Like `ram_test.py`, this is a pure module: no I/O, no serial access.
 """
@@ -21,6 +22,8 @@ Like `ram_test.py`, this is a pure module: no I/O, no serial access.
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from firestarter import eprom_rows
 
 
 @dataclass(frozen=True)
@@ -35,9 +38,7 @@ class EpromRow:
 
 
 EPROM_ROWS: dict[int, EpromRow] = {
-    0x07: EpromRow(max_pulses=25, energy_cap_us=0, fallback_pulse_us=1000),
-    0x08: EpromRow(max_pulses=25, energy_cap_us=0, fallback_pulse_us=100),
-    0x0B: EpromRow(max_pulses=255, energy_cap_us=50000, fallback_pulse_us=500),
+    protocol: EpromRow(*values) for protocol, values in eprom_rows.EPROM_ROWS.items()
 }
 
 
