@@ -63,6 +63,7 @@ from firestarter.chip_test import (
     sdp_hold_state,
     sdp_oracle_applicable,
 )
+from firestarter.command_codec import CommandEncodeError
 from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import (
     CONFIG_R1_MAX,
@@ -273,6 +274,11 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             # make this host-voiced refusal (write_blank_guard.py) read as a
             # hardware fault instead of an input-validation refusal.
             raise click.ClickException(str(e)) from e
+        except CommandEncodeError as e:
+            # The host refused the command before any byte reached the port.
+            # Above the EpromOperationError arm: "Programmer error" would read
+            # as a hardware fault for an input the frame cannot carry.
+            raise click.ClickException(f"Refused before sending: {e}") from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
         except Pin1HazardRefusedError as e:
@@ -1605,10 +1611,13 @@ _BANDGAP_NOMINAL_MV = 1100
 @cli.command(name="cal")
 @click.option(
     "--vcc",
-    type=click.FloatRange(min=0, min_open=True),
+    type=click.FloatRange(min=0, min_open=True, max=cf.CALIBRATION_VCC_MAX_MV / 1000),
     default=None,
     metavar="VOLTS",
-    help="Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09",
+    help=(
+        "Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09. "
+        f"At most {cf.CALIBRATION_VCC_MAX_MV / 1000:g} V."
+    ),
 )
 @click.option(
     "--reset",

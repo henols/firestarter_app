@@ -13,6 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from firestarter.cli_handlers import cli
+from firestarter.command_codec import CommandEncodeError
 from firestarter.config import ConfigManager
 from firestarter.constants import (
     CONFIG_BANDGAP_MAX_MV,
@@ -175,6 +176,39 @@ def test_cal_refuses_a_non_positive_vcc(vcc: str) -> None:
     result = CliRunner().invoke(cli, ["cal", "--vcc", vcc], obj=app)
     assert result.exit_code == 2, result.output
     hardware.calibrate_bandgap.assert_not_called()
+
+
+@pytest.mark.parametrize("vcc", ["10.001", "50.9"])
+def test_cal_refuses_a_vcc_the_frame_cannot_carry_before_any_port(vcc: str) -> None:
+    """A mistyped reading is a usage error, not a programmer fault."""
+    hardware = Mock(spec=HardwareManager)
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", vcc], obj=app)
+    assert result.exit_code == 2, result.output
+    assert "Programmer error" not in result.output
+    hardware.read_calibration.assert_not_called()
+    hardware.calibrate_bandgap.assert_not_called()
+
+
+def test_cal_accepts_the_highest_vcc_the_frame_carries() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = None
+    hardware.calibrate_bandgap.return_value = True
+    app = make_app_context(hardware_manager=hardware)
+    CliRunner().invoke(cli, ["cal", "--vcc", "10.0"], obj=app)
+    hardware.calibrate_bandgap.assert_called_once_with(10000)
+
+
+def test_a_host_encode_refusal_is_not_reported_as_a_programmer_error() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.side_effect = CommandEncodeError(
+        "'vcc' must be at most 10000 mV"
+    )
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "Refused before sending: 'vcc' must be at most 10000 mV" in result.output
+    assert "Programmer error" not in result.output
 
 
 def test_cal_refusal_names_the_board_without_calibration() -> None:
