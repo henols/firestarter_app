@@ -103,8 +103,20 @@ def _cfg_body(params: bytes) -> bytes:
     return head + bytes([_crc8_ccitt(head)])
 
 
-def test_decode_msg_ok_cfg_current_11_byte_form() -> None:
-    """The current ack carries r1, r2, override and the bandgap."""
+def test_decode_msg_ok_cfg_current_13_byte_form() -> None:
+    """The current ack carries r1, r2, override, the bandgap and its count."""
+    import struct
+
+    from firestarter.codec import decode_id_frame
+
+    body = _cfg_body(struct.pack(">IIBHH", 270000, 44000, 0xFF, 1100, 225))
+    msg = decode_id_frame(len(body), body)
+    assert msg is not None
+    assert msg.text == "R1: 270000, R2: 44000, Bandgap: 1100 mV, Bandgap count: 225"
+
+
+def test_decode_msg_ok_cfg_legacy_11_byte_form() -> None:
+    """Firmware before 3.3 carries r1, r2, override and the bandgap."""
     import struct
 
     from firestarter.codec import decode_id_frame

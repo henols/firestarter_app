@@ -243,24 +243,6 @@
     {
       "cmd": 14,
       "fields": {
-        "vcc": 5012
-      },
-      "flags": 0,
-      "frame": "f5010e0000000e0800000000000000000013940000",
-      "name": "config_calibrate"
-    },
-    {
-      "cmd": 14,
-      "fields": {
-        "vcc": 10000
-      },
-      "flags": 0,
-      "frame": "f5010e0000000e0800000000000000000027100000",
-      "name": "config_calibrate_at_limit"
-    },
-    {
-      "cmd": 14,
-      "fields": {
         "rev": 5
       },
       "flags": 0,
@@ -440,9 +422,9 @@
       "refusal": 12
     },
     {
-      "frame": "f5010e0000000e0800000000000000000027110000",
-      "name": "config_calibration_vcc_implausible",
-      "refusal": 13
+      "frame": "f5010e0000000e0800000000000000000013940000",
+      "name": "config_retired_vcc",
+      "refusal": 9
     },
     {
       "frame": "f5010e0000000e0400000000000000000600000000",

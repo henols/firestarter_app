@@ -195,9 +195,15 @@ CATALOG: dict[int, MessageDef] = {
         id=0x05,
         name="MSG_OK_CFG",
         severity=SEVERITY_OK,
-        format="R1: %lu, R2: %lu, Cfg: %u, Bandgap: %u mV",
-        params=(("u32", "dec"), ("u32", "dec"), ("u8", "dec"), ("u16", "dec")),
-        param_bytes=11,
+        format="R1: %lu, R2: %lu, Cfg: %u, Bandgap: %u mV, Bandgap count: %u",
+        params=(
+            ("u32", "dec"),
+            ("u32", "dec"),
+            ("u8", "dec"),
+            ("u16", "dec"),
+            ("u16", "dec"),
+        ),
+        param_bytes=13,
         wire_format="id_frame",
     ),
     0x10: MessageDef(

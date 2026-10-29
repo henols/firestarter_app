@@ -85,10 +85,11 @@ def _render_registers(msb: int, lsb: int, ctrl: int, remapped: int, view: int) -
 
 
 # Older, shorter forms of fixed-width acks that the host still accepts. The
-# value is the legacy param-region length; the decoder reads only the leading
-# catalog params that fit in it. MSG_OK_CFG gained the trailing u16 bandgap in
-# 3.1.0b4, so the 3.1.0 stable firmware still sends the 9-byte form.
-_LEGACY_PARAM_BYTES = {MSG_OK_CFG: 9}
+# values are the legacy param-region lengths; the decoder reads only the
+# leading catalog params that fit in one. MSG_OK_CFG gained the u16 bandgap in
+# 3.1.0b4 (11 bytes; 3.1.0 stable still sends 9) and the u16 bandgap count in
+# 3.3 (13 bytes).
+_LEGACY_PARAM_BYTES = {MSG_OK_CFG: (9, 11)}
 
 # REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
 # Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
@@ -122,9 +123,11 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
       (the override is in effect; the second field is what the board detected)
 
     P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8,
-                       params[3]=bandgap_mv u16 (absent on firmware before 3.1.0b4)
+                       params[3]=bandgap_mv u16 (absent on firmware before 3.1.0b4),
+                       params[4]=bandgap_adc u16 (absent on firmware before 3.3)
       override==0xFF → "R1: {r1}, R2: {r2}, Bandgap: {n} mV"
       override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}, Bandgap: {n} mV"
+      With the count, ", Bandgap count: {c}" follows. `cal --vcc` reads it.
       The Bandgap clause is always present when the ack carries the field:
       HardwareManager.read_calibration keys on it. The 9-byte form from older
       firmware has no bandgap, so it renders without the Bandgap clause, and
@@ -151,7 +154,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
         eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
         return f"{eff_str}, Detected HW: {phys_str}"
 
-    if msg_id == MSG_OK_CFG and len(params) in (3, 4):
+    if msg_id == MSG_OK_CFG and len(params) in (3, 4, 5):
         r1, r2, override = params[0], params[1], params[2]
         head = f"R1: {r1}, R2: {r2}"
         if override != 0xFF:
@@ -166,7 +169,10 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
             return head
         # v1.43 appended the calibrated reference. Rendered last so the
         # override clause keeps the position every prior release put it in.
-        return f"{head}, Bandgap: {params[3]} mV"
+        head += f", Bandgap: {params[3]} mV"
+        if len(params) == 5:
+            head += f", Bandgap count: {params[4]}"
+        return head
 
     # Silkscreen-aware rendering for the two
     # boot-time INFO surfaces that carry the same revision byte as
@@ -304,8 +310,8 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
     # entries carry param_bytes == -1 in the catalog; for those we
     # cannot pre-validate, but _decode_param will surface any overrun
     # via IndexError below.
-    legacy_len = _LEGACY_PARAM_BYTES.get(msg_id)
-    is_legacy = legacy_len is not None and len(params_bytes) == legacy_len
+    legacy_lens = _LEGACY_PARAM_BYTES.get(msg_id)
+    is_legacy = legacy_lens is not None and len(params_bytes) in legacy_lens
     if (
         entry.param_bytes >= 0
         and len(params_bytes) != entry.param_bytes

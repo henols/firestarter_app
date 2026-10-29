@@ -101,7 +101,7 @@ from firestarter.exceptions import (
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.fw_release_gate import require_installable_release
-from firestarter.hardware import HardwareManager
+from firestarter.hardware import HardwareManager, bandgap_from_measured_vcc
 from firestarter.lock_status import (
     classify_protection_response,
     exit_code_for_class,
@@ -1606,17 +1606,21 @@ def hw(app: AppContext) -> None:
 
 
 _BANDGAP_NOMINAL_MV = 1100
+# A plausibility bound for a 5 V supply pin, not a wire limit: the host sends
+# the bandgap, not the reading. A reading above it is a typo, refused before
+# any port opens.
+_CAL_VCC_MAX_V = 10.0
 
 
 @cli.command(name="cal")
 @click.option(
     "--vcc",
-    type=click.FloatRange(min=0, min_open=True, max=cf.CALIBRATION_VCC_MAX_MV / 1000),
+    type=click.FloatRange(min=0, min_open=True, max=_CAL_VCC_MAX_V),
     default=None,
     metavar="VOLTS",
     help=(
         "Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09. "
-        f"At most {cf.CALIBRATION_VCC_MAX_MV / 1000:g} V."
+        f"At most {_CAL_VCC_MAX_V:g} V."
     ),
 )
 @click.option(
@@ -1657,21 +1661,34 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
     if vcc is not None:
         measured_mv = int(round(vcc * 1000))
         before = app.hardware_manager.read_calibration()
-        if not app.hardware_manager.calibrate_bandgap(measured_mv):
+        if before is None:
+            click.echo(
+                "Could not read the calibration. The firmware may be older than "
+                "this CLI."
+            )
+            sys.exit(1)
+        bandgap_adc = before["bandgap_adc"]
+        if bandgap_adc is None:
+            click.echo(
+                "This firmware does not report its bandgap count. Update the "
+                "firmware to calibrate."
+            )
+            sys.exit(1)
+        if bandgap_adc == 0:
+            click.echo("This board has no bandgap calibration (py32f071).")
+            sys.exit(1)
+        bandgap_mv = bandgap_from_measured_vcc(measured_mv, bandgap_adc)
+        if bandgap_mv is None:
             click.echo(
                 "Calibration refused. The result was outside 1000-1200 mV, which "
                 "means the reading does not match this board. Check that the "
-                "multimeter is on the 5V pin and that the value is in volts. "
-                "A py32f071 board has no bandgap calibration and always "
-                "refuses it."
+                "multimeter is on the 5V pin and that the value is in volts."
             )
             sys.exit(1)
-        after = app.hardware_manager.read_calibration()
-        if before is not None and after is not None:
-            click.echo(
-                f"Reference: {before['bandgap_mv']} mV -> {after['bandgap_mv']} mV"
-            )
-            _echo_calibration_effect(after["bandgap_mv"])
+        if not app.hardware_manager.set_bandgap_mv(bandgap_mv):
+            sys.exit(1)
+        click.echo(f"Reference: {before['bandgap_mv']} mV -> {bandgap_mv} mV")
+        _echo_calibration_effect(bandgap_mv)
         sys.exit(0)
 
     current = app.hardware_manager.read_calibration()

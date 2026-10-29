@@ -169,17 +169,22 @@ def test_set_hardware_config_sends_accepted_revisions(monkeypatch, rev: int) -> 
     assert sent[0]["rev"] == (0xFF if rev == -1 else rev)
 
 
+def _calibration(bandgap_adc):
+    return {"r1": 270000, "r2": 44000, "bandgap_mv": 1100, "bandgap_adc": bandgap_adc}
+
+
 @pytest.mark.parametrize("vcc", ["0", "-5.0"])
 def test_cal_refuses_a_non_positive_vcc(vcc: str) -> None:
     hardware = Mock(spec=HardwareManager)
     app = make_app_context(hardware_manager=hardware)
     result = CliRunner().invoke(cli, ["cal", "--vcc", vcc], obj=app)
     assert result.exit_code == 2, result.output
-    hardware.calibrate_bandgap.assert_not_called()
+    hardware.read_calibration.assert_not_called()
+    hardware.set_bandgap_mv.assert_not_called()
 
 
 @pytest.mark.parametrize("vcc", ["10.001", "50.9"])
-def test_cal_refuses_a_vcc_the_frame_cannot_carry_before_any_port(vcc: str) -> None:
+def test_cal_refuses_an_implausible_vcc_before_any_port(vcc: str) -> None:
     """A mistyped reading is a usage error, not a programmer fault."""
     hardware = Mock(spec=HardwareManager)
     app = make_app_context(hardware_manager=hardware)
@@ -187,35 +192,68 @@ def test_cal_refuses_a_vcc_the_frame_cannot_carry_before_any_port(vcc: str) -> N
     assert result.exit_code == 2, result.output
     assert "Programmer error" not in result.output
     hardware.read_calibration.assert_not_called()
-    hardware.calibrate_bandgap.assert_not_called()
+    hardware.set_bandgap_mv.assert_not_called()
 
 
-def test_cal_accepts_the_highest_vcc_the_frame_carries() -> None:
+def test_cal_stores_the_bandgap_it_back_solves() -> None:
+    """5.09 V on a board that counts 206 is a 1024 mV bandgap."""
     hardware = Mock(spec=HardwareManager)
-    hardware.read_calibration.return_value = None
-    hardware.calibrate_bandgap.return_value = True
+    hardware.read_calibration.return_value = _calibration(206)
+    hardware.set_bandgap_mv.return_value = True
     app = make_app_context(hardware_manager=hardware)
-    CliRunner().invoke(cli, ["cal", "--vcc", "10.0"], obj=app)
-    hardware.calibrate_bandgap.assert_called_once_with(10000)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.09"], obj=app)
+    assert result.exit_code == 0, result.output
+    hardware.set_bandgap_mv.assert_called_once_with(1024)
+    assert "Reference: 1100 mV -> 1024 mV" in result.output
+
+
+def test_cal_refuses_a_result_outside_the_band_without_writing() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = _calibration(206)
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "9.0"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "outside 1000-1200 mV" in result.output
+    hardware.set_bandgap_mv.assert_not_called()
+
+
+def test_cal_exits_non_zero_when_the_firmware_refuses_the_bandgap() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = _calibration(206)
+    hardware.set_bandgap_mv.return_value = False
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.09"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "Reference:" not in result.output
 
 
 def test_a_host_encode_refusal_is_not_reported_as_a_programmer_error() -> None:
     hardware = Mock(spec=HardwareManager)
     hardware.read_calibration.side_effect = CommandEncodeError(
-        "'vcc' must be at most 10000 mV"
+        "'flags' must be 0..65535"
     )
     app = make_app_context(hardware_manager=hardware)
     result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
     assert result.exit_code == 1, result.output
-    assert "Refused before sending: 'vcc' must be at most 10000 mV" in result.output
+    assert "Refused before sending: 'flags' must be 0..65535" in result.output
     assert "Programmer error" not in result.output
 
 
 def test_cal_refusal_names_the_board_without_calibration() -> None:
     hardware = Mock(spec=HardwareManager)
-    hardware.read_calibration.return_value = None
-    hardware.calibrate_bandgap.return_value = False
+    hardware.read_calibration.return_value = _calibration(0)
     app = make_app_context(hardware_manager=hardware)
     result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
     assert result.exit_code == 1, result.output
     assert "py32f071" in result.output
+    hardware.set_bandgap_mv.assert_not_called()
+
+
+def test_cal_refuses_firmware_that_sends_no_bandgap_count() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = _calibration(None)
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "Update the firmware" in result.output
+    hardware.set_bandgap_mv.assert_not_called()

@@ -15,7 +15,6 @@ LINE_ABSENT = 0xFF
 READ_TIMING_MAX_US = 1000
 FLAGS_MASK = 0x03F7
 VPP_MAX_MV = 25000
-CALIBRATION_VCC_MAX_MV = 10000
 REVISION_MAX = 5
 
 # (name, command-dict key, struct format, count, inside bus-config)
@@ -38,12 +37,12 @@ MEMORY_FIELDS = (
 )
 MEMORY_SIZE = 58
 
-# (name, command-dict key, struct format, present bit)
+# (name, command-dict key, struct format, present bit); a retired field has no key
 CONFIG_FIELDS = (
     ("r1", "r1", "I", 0x01),
     ("r2", "r2", "I", 0x02),
     ("rev", "rev", "B", 0x04),
-    ("vcc", "vcc", "H", 0x08),
+    ("vcc", None, "H", 0x00),
     ("bg", "bg", "H", 0x10),
 )
 CONFIG_SIZE = 14
@@ -80,7 +79,7 @@ REFUSALS = {
     10: "a memory command lacks memory-size, algorithm, pin-count or vpp_mv",
     11: "the start address is past the end of the device or the write region",
     12: "vpp_mv is above 25000 mV, the highest VPP in the chip database",
-    13: "the calibration supply voltage is above 10000 mV",
+    13: "the calibration supply voltage is above 10000 mV (no longer sent)",
     14: "the hardware revision is not 0 to 5, or 255 to clear it",
 }
 
@@ -103,5 +102,4 @@ KEY_STATIC_HIGH_MASK = "static-high"
 KEY_R1 = "r1"
 KEY_R2 = "r2"
 KEY_REV = "rev"
-KEY_VCC = "vcc"
 KEY_BG = "bg"
