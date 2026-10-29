@@ -34,6 +34,7 @@ from firestarter.hardware import HardwareManager
 from firestarter.messages import (
     MSG_DATA_CHUNK,
     MSG_END_DONE,
+    MSG_ERR_UNKNOWN_CMD,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
 )
@@ -1401,6 +1402,29 @@ def test_dev_read_returns_false(runner: CliRunner) -> None:
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["dev", "read", "W27C512"], obj=app)
     assert result.exit_code == 1
+
+
+def test_dev_adc_names_a_missing_command(runner: CliRunner) -> None:
+    """Only an UNKNOWN_CMD answer says the firmware lacks the command."""
+    hw = Mock(spec=HardwareManager)
+    hw.read_adc_raw.return_value = None
+    hw.last_adc_error_code = MSG_ERR_UNKNOWN_CMD
+    app = make_app_context(hardware_manager=hw)
+    result = runner.invoke(cli, ["dev", "adc"], obj=app)
+    assert result.exit_code == 1
+    assert "does not have this command" in result.output
+
+
+def test_dev_adc_does_not_blame_the_firmware_on_a_timeout(runner: CliRunner) -> None:
+    hw = Mock(spec=HardwareManager)
+    hw.read_adc_raw.return_value = None
+    hw.last_adc_error_code = None
+    app = make_app_context(hardware_manager=hw)
+    result = runner.invoke(cli, ["dev", "adc"], obj=app)
+    assert result.exit_code == 1
+    assert "Check that the firmware is a beta build." in result.output
+    assert "leonardo" not in result.output
+    assert "does not have this command" not in result.output
 
 
 def test_dev_reg_happy_path(runner: CliRunner) -> None:

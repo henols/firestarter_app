@@ -1052,7 +1052,9 @@ class EpromOperator:
                 _raise_for_error_response(response, response.message)
             if response.type == "OK" and final_msg is None:
                 final_msg = response.message  # Capture final message from MAIN's OK
-            # MAIN phase: DATA frames are flow-control; ack them (unchanged).
+            # MAIN phase: DATA frames are progress. Ack them unless the caller
+            # passes ack_data=False. The RAM test does: its firmware reads no
+            # input in MAIN, so an ack would answer the END ACK wait too early.
             self._handle_progress_response(response, progress, ack_data=ack_data)
         return final_msg
 
@@ -3473,14 +3475,15 @@ class EpromOperator:
 
     def ram_test(
         self, eprom_name: str, eprom_data_dict: dict
-    ) -> Tuple[bool, RamTestFailure | None]:  # noqa: UP006
-        """Send `CMD_RAM_TEST` and return `(passed, first_failure)`.
+    ) -> Tuple[bool, RamTestFailure | None, str | None]:  # noqa: UP006
+        """Send `CMD_RAM_TEST` and return `(passed, first_failure, reason)`.
 
-        `(True, None)`: every March C- element ran and every read matched.
-        `(False, failure)`: the firmware found a bad cell; `failure` says
-        which. `(False, None)`: the test did not complete for another
-        reason (communication, setup); `last_firmware_error_message` holds
-        the firmware's own text when there is one.
+        `(True, None, None)`: every March C- element ran on every data
+        background and every read matched. `(False, failure, reason)`: the
+        firmware found a bad cell; `failure` says which. `(False, None,
+        reason)`: the test did not complete for another reason
+        (communication, setup, a firmware error); `reason` says why, and
+        comes from this call only.
 
         Raises `FirmwareOutdatedError` when the firmware does not know the
         command. Keyed on the message id, not a version: a version probe
@@ -3490,18 +3493,23 @@ class EpromOperator:
         (`ram_test.refusal_reason`); the firmware refuses a non-RAM protocol
         again with MSG_ERR_NOT_SUPPORTED.
         """
+        # A setup failure returns before _run_state_machine clears these, so
+        # clear them here: no caller may see an earlier operation's error.
+        self.last_firmware_error_code = None
+        self.last_firmware_error_message = None
         with self._operation_context(
             eprom_name, eprom_data_dict, COMMAND_RAM_TEST, 0
         ) as (cmd_data, _, op_name):
             if not cmd_data:
-                return False, None
+                # _setup_operation has already logged the cause.
+                return False, None, "could not set up the operation"
 
             logger.info(f"Running the March C- RAM test on {eprom_name.upper()}")
-            is_ok, _final_msg = self._run_state_machine(
+            is_ok, message = self._run_state_machine(
                 op_name, main_phase_handler=self._main_phase_simple, ack_data=False
             )
             if is_ok:
-                return True, None
+                return True, None, None
             if self.last_firmware_error_code == MSG_ERR_UNKNOWN_CMD:
                 raise FirmwareOutdatedError(
                     f"{eprom_name.upper()}: attached firmware does not implement "
@@ -3509,8 +3517,8 @@ class EpromOperator:
                     "'firestarter fw --install'."
                 )
             if self.last_firmware_error_code == MSG_ERR_RAM_TEST:
-                return False, parse_failure(self.last_firmware_error_message)
-            return False, None
+                return False, parse_failure(self.last_firmware_error_message), message
+            return False, None, message
 
 
 # Example usage (for testing this module directly)
