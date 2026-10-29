@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 83
+Total messages: 89
 """
 
 from dataclasses import dataclass
@@ -64,6 +64,7 @@ MSG_INFO_MAIN_START = 0x40
 MSG_INFO_MAIN_DONE = 0x41
 MSG_INFO_INIT_START = 0x42
 MSG_INFO_END_START = 0x43
+MSG_INFO_REGISTERS = 0x44
 MSG_INFO_RETRIES = 0x51
 MSG_INFO_REG_HEADER = 0x52
 MSG_INFO_BIT_HEADER = 0x53
@@ -92,6 +93,8 @@ MSG_WARN_SDP_UNLOCK_SKIPPED = 0x86
 MSG_WARN_SDP_TBLC_EXCEEDED = 0x87
 MSG_WARN_VCC_IMPLAUSIBLE = 0x88
 MSG_WARN_NOT_CALIBRATED = 0x89
+MSG_WARN_VPP_LOW_MV = 0x8A
+MSG_WARN_VPP_HIGH_MV = 0x8B
 MSG_ERR_BAD_JSON = 0xA0
 MSG_ERR_NO_CMD = 0xA1
 MSG_ERR_SETUP = 0xA2
@@ -126,13 +129,16 @@ MSG_ERR_ENERGY_CAP = 0xBE
 MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_ERR_FL4_PAGE_ALIGN = 0xC0
 MSG_ERR_CALIBRATION = 0xC1
+MSG_ERR_VPP_HIGH_MV = 0xC3
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
+MSG_DATA_VPP_MV = 0xE3
 MSG_DATA_VPP_VOLTAGE = 0xE4
 MSG_DATA_VPE_VOLTAGE = 0xE5
 MSG_DATA_CHUNK = 0xE6
 MSG_DATA_ADC_RAW = 0xE7
+MSG_DATA_VPE_MV = 0xE8
 MSG_DEBUG = 0xF0
 
 
@@ -253,6 +259,21 @@ CATALOG: dict[int, MessageDef] = {
         format="End start",
         params=(),
         param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x44: MessageDef(
+        id=0x44,
+        name="MSG_INFO_REGISTERS",
+        severity=SEVERITY_INFO,
+        format="MSB 0x%02X, LSB 0x%02X, CTRL 0x%03X, remapped 0x%02X, view %u",
+        params=(
+            ("u8", "hex_byte"),
+            ("u8", "hex_byte"),
+            ("u16", "hex_word"),
+            ("u8", "hex_byte"),
+            ("u8", "dec"),
+        ),
+        param_bytes=6,
         wire_format="id_frame",
     ),
     0x51: MessageDef(
@@ -505,6 +526,24 @@ CATALOG: dict[int, MessageDef] = {
         format="Voltage readings are uncalibrated on this board. Run 'firestarter cal' to make them trustworthy.",
         params=(),
         param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x8A: MessageDef(
+        id=0x8A,
+        name="MSG_WARN_VPP_LOW_MV",
+        severity=SEVERITY_WARN,
+        format="VPP is low: %u mV < %u mV",
+        params=(("u16", "dec"), ("u16", "dec")),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0x8B: MessageDef(
+        id=0x8B,
+        name="MSG_WARN_VPP_HIGH_MV",
+        severity=SEVERITY_WARN,
+        format="VPP is high: %u mV > %u mV",
+        params=(("u16", "dec"), ("u16", "dec")),
+        param_bytes=4,
         wire_format="id_frame",
     ),
     0xA0: MessageDef(
@@ -813,6 +852,15 @@ CATALOG: dict[int, MessageDef] = {
         param_bytes=8,
         wire_format="id_frame",
     ),
+    0xC3: MessageDef(
+        id=0xC3,
+        name="MSG_ERR_VPP_HIGH_MV",
+        severity=SEVERITY_ERROR,
+        format="VPP is high: %u mV > %u mV",
+        params=(("u16", "dec"), ("u16", "dec")),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
     0xE0: MessageDef(
         id=0xE0,
         name="MSG_DATA_PROGRESS",
@@ -838,6 +886,15 @@ CATALOG: dict[int, MessageDef] = {
         format="Sending data",
         params=(),
         param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xE3: MessageDef(
+        id=0xE3,
+        name="MSG_DATA_VPP_MV",
+        severity=SEVERITY_DATA,
+        format="VPP: %u mV, Internal VCC: %u mV",
+        params=(("u16", "dec"), ("u16", "dec")),
+        param_bytes=4,
         wire_format="id_frame",
     ),
     0xE4: MessageDef(
@@ -882,6 +939,15 @@ CATALOG: dict[int, MessageDef] = {
             ("u32", "dec"),
         ),
         param_bytes=17,
+        wire_format="id_frame",
+    ),
+    0xE8: MessageDef(
+        id=0xE8,
+        name="MSG_DATA_VPE_MV",
+        severity=SEVERITY_DATA,
+        format="VPE: %u mV, Internal VCC: %u mV",
+        params=(("u16", "dec"), ("u16", "dec")),
+        param_bytes=4,
         wire_format="id_frame",
     ),
     0xF0: MessageDef(

@@ -11,11 +11,15 @@ from firestarter.constants import REVISION_2_2, REVISION_UNKNOWN
 from firestarter.messages import (
     CATALOG,
     MSG_DATA_CHUNK,
+    MSG_ERR_VPP_HIGH_MV,
     MSG_INFO_CMD,
     MSG_INFO_HW,
     MSG_INFO_PHYSICAL_HW,
+    MSG_INFO_REGISTERS,
     MSG_OK_CFG,
     MSG_OK_REV,
+    MSG_WARN_VPP_HIGH_MV,
+    MSG_WARN_VPP_LOW_MV,
 )
 
 
@@ -152,3 +156,64 @@ def test_decode_msg_ok_cfg_other_lengths_still_rejected() -> None:
 def test_format_msg_ok_cfg_legacy_three_params_has_no_bandgap() -> None:
     out = format_message(MSG_OK_CFG, [1000, 2000, 0xFF], CATALOG[MSG_OK_CFG])
     assert out == "R1: 1000, R2: 2000"
+
+
+def test_format_registers_dev_reg_draws_three_tables() -> None:
+    """MSG_INFO_REGISTERS view 0 (`dev reg`): MSB, LSB and an 8-bit CTRL, in
+    the layout the firmware used to print, value first then D7..D0."""
+    out = format_message(
+        MSG_INFO_REGISTERS, [0x12, 0x34, 0x0A5, 0x5A, 0], CATALOG[MSG_INFO_REGISTERS]
+    )
+    assert out == "\n".join(
+        [
+            "MSB: 0x12",
+            "|D7|D6|D5|D4|D3|D2|D1|D0|",
+            "| 0| 0| 0| 1| 0| 0| 1| 0|",
+            "LSB: 0x34",
+            "|D7|D6|D5|D4|D3|D2|D1|D0|",
+            "| 0| 0| 1| 1| 0| 1| 0| 0|",
+            "CTRL: 0xA5",
+            "|D7|D6|D5|D4|D3|D2|D1|D0|",
+            "| 1| 0| 1| 0| 0| 1| 0| 1|",
+        ]
+    )
+
+
+def test_format_registers_firestarter_view_has_nine_bit_ctrl_and_remap() -> None:
+    out = format_message(
+        MSG_INFO_REGISTERS, [0, 0, 0x1A5, 0x5A, 1], CATALOG[MSG_INFO_REGISTERS]
+    )
+    assert out is not None
+    lines = out.split("\n")
+    assert lines[6:9] == [
+        "CTRL: 0x1A5",
+        "|D8|D7|D6|D5|D4|D3|D2|D1|D0|",
+        "| 1| 1| 0| 1| 0| 0| 1| 0| 1|",
+    ]
+    assert lines[9] == "CTRL remapped: 0x5A"
+
+
+def test_format_registers_dev_addr_view_names_the_top_address() -> None:
+    out = format_message(
+        MSG_INFO_REGISTERS, [0, 0, 0x03, 0x07, 2], CATALOG[MSG_INFO_REGISTERS]
+    )
+    assert out is not None
+    assert "TOP addr: 0x03" in out.split("\n")
+    assert "CTRL remapped: 0x07" in out.split("\n")
+
+
+def test_format_vpp_reports_show_volts_from_millivolts() -> None:
+    """The firmware sends mV; the host shows volts to 10 mV, where the old
+    frames could only carry tenths."""
+    high = format_message(
+        MSG_ERR_VPP_HIGH_MV, [14449, 13000], CATALOG[MSG_ERR_VPP_HIGH_MV]
+    )
+    assert high == "VPP is high: 14.45 V > 13.00 V"
+    forced = format_message(
+        MSG_WARN_VPP_HIGH_MV, [14449, 13000], CATALOG[MSG_WARN_VPP_HIGH_MV]
+    )
+    assert forced == "VPP is high: 14.45 V > 13.00 V"
+    low = format_message(
+        MSG_WARN_VPP_LOW_MV, [12000, 13000], CATALOG[MSG_WARN_VPP_LOW_MV]
+    )
+    assert low == "VPP is low: 12.00 V < 13.00 V"
