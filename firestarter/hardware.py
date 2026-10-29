@@ -32,6 +32,7 @@ from firestarter.exceptions import (
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.messages import CATALOG, MSG_WARN_VCC_IMPLAUSIBLE
 from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Hardware")
@@ -54,10 +55,34 @@ def _config_value_refusal(
     return None
 
 
-# Tolerant match for the FIRST "%u.%uV" pair in a 0xE4/0xE5 DATA message
-# (e.g. "VPP: 20.9V, Internal VCC: 5.0V") -- guards against catalog format
-# wording drift (Pitfall 3 / T-111-DRIFT).
-_VOLTAGE_RE = re.compile(r"(\d+)\.(\d+)\s*V")
+# The rendered MSG_DATA_VPP_MV / MSG_DATA_VPE_MV text, e.g.
+# "VPP: 12449 mV, Internal VCC: 5012 mV". The frame payload does not reach
+# the caller (Response.payload is filled only for MSG_DATA_CHUNK), so the
+# values come back from the text.
+_VOLTAGE_RE = re.compile(r"(\d+) mV, Internal VCC: (\d+) mV")
+
+# Plausible internal-VCC band, in millivolts. USB VBUS is specified
+# 4.75-5.25 V (USB 2.0 section 7.2.2) and the board derives VCC from it
+# through a series switch, so a reading outside this band is the stored
+# bandgap being wrong, not the supply -- and that error scales every VPP/VPE
+# reading. The band is for a 5 V board: a py32f071 board runs from 3.3 V and
+# gets no such check.
+VCC_PLAUSIBLE_MIN_MV = 4400
+VCC_PLAUSIBLE_MAX_MV = 5250
+
+
+def _vcc_is_checked(firmware_identity: str | None) -> bool:
+    """False for a board whose VCC is not a 5 V USB supply (py32f071)."""
+    return not (firmware_identity or "").endswith(":py32f071")
+
+
+def _warn_if_vcc_implausible(vcc_mv: int) -> bool:
+    """Log MSG_WARN_VCC_IMPLAUSIBLE's text when `vcc_mv` is outside the
+    band. Returns True when it warned, so the caller warns once a command."""
+    if VCC_PLAUSIBLE_MIN_MV <= vcc_mv <= VCC_PLAUSIBLE_MAX_MV:
+        return False
+    logger.warning(CATALOG[MSG_WARN_VCC_IMPLAUSIBLE].format % vcc_mv)
+    return True
 
 
 class ProgrammerIdentity(NamedTuple):
@@ -125,7 +150,7 @@ class HardwareManager:
             # If the command sent by find_and_connect was just to establish connection,
             # and the actual data command needs to be sent *after* connection,
             # then we'd do:
-            # comm.send_json_command(actual_data_command_dict)
+            # comm.send_command(actual_data_command_dict)
             # is_ok, msg = comm.expect_ack()
             # For HW_VERSION, FW_VERSION, CONFIG, the initial command IS the data command.  # noqa: E501
 
@@ -296,7 +321,7 @@ class HardwareManager:
     # a silkscreen-aware "Override HW: Rev 2.0-class" when an override is set,
     # and drops the field entirely when it is not. A single pattern spanning
     # them matched only the raw form and broke the moment codec.py did its job.
-    # Same tolerance rationale as _VOLTAGE_RE above.
+    # One pattern per field, so wording drift around a field cannot break it.
     _CFG_R1_RE = re.compile(r"R1:\s*(\d+)")
     _CFG_R2_RE = re.compile(r"R2:\s*(\d+)")
     _CFG_BANDGAP_RE = re.compile(r"Bandgap:\s*(\d+)")
@@ -408,6 +433,9 @@ class HardwareManager:
             # After receiving ready, send an ACK to start the reading loop on the firmware.  # noqa: E501
             comm.send_ack()
 
+            # The VCC warning is printed once per command, not once per
+            # reading: the condition cannot change between samples.
+            vcc_warned = not _vcc_is_checked(comm.firmware_identity)
             start_time = time.time()
             while True:
                 response = comm.get_response()
@@ -415,6 +443,15 @@ class HardwareManager:
                 message = response.message
 
                 if response_type == "DATA":
+                    reading = self._parse_voltage_frame(message)
+                    if reading is not None:
+                        rail_mv, vcc_mv = reading
+                        if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
+                            vcc_warned = True
+                        message = (
+                            f"{voltage_type_str}: {rail_mv / 1000:.3f} V, "
+                            f"Internal VCC: {vcc_mv / 1000:.3f} V"
+                        )
                     print(f"\r{message}    ", end="", flush=True)
 
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
@@ -432,12 +469,10 @@ class HardwareManager:
                     )
                     return True
                 elif response_type == "WARN":
-                    # A warning never ends a read. The firmware emits the
-                    # implausible-VCC warning once per command, ahead of the
-                    # DATA frame for that same sample, so do NOT ack here --
-                    # the reading this warning belongs to is still coming.
-                    # No log call: _log_response in serial_comm already
-                    # surfaces every WARN frame at logging.WARNING.
+                    # A warning never ends a read, and it is not a sample:
+                    # do NOT ack here -- the reading it precedes is still
+                    # coming. No log call: _log_response in serial_comm
+                    # already surfaces every WARN frame at logging.WARNING.
                     print()
                 elif response_type == "ERROR":
                     print()
@@ -478,12 +513,10 @@ class HardwareManager:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)
 
-    def _parse_voltage_frame(self, message: str | None) -> int | None:
+    def _parse_voltage_frame(self, message: str | None) -> tuple[int, int] | None:
         """
-        Parses the FIRST "%u.%uV" pair out of a 0xE4/0xE5 DATA message (e.g.
-        "VPP: 20.9V, Internal VCC: 5.0V") and reconstructs the value as
-        v_int*1000 + v_dec*100 -- the wire only carries whole volts + one
-        tenths digit, so the result sits on a 100 mV grid (never finer).
+        Returns `(rail_mv, vcc_mv)` from a MSG_DATA_VPP_MV / MSG_DATA_VPE_MV
+        message, e.g. "VPP: 12449 mV, Internal VCC: 5012 mV" -> (12449, 5012).
 
         Returns None (honest fallback, never a fabricated 0) if the message
         does not match -- e.g. no message, garbage, or an unexpected format.
@@ -491,8 +524,7 @@ class HardwareManager:
         match = _VOLTAGE_RE.search(message or "")
         if not match:
             return None
-        v_int, v_dec = int(match.group(1)), int(match.group(2))
-        return v_int * 1000 + v_dec * 100
+        return int(match.group(1)), int(match.group(2))
 
     def _sample_one_voltage(self, state: int, n: int = 3, flags: int = 0) -> int | None:
         """
@@ -529,6 +561,7 @@ class HardwareManager:
                 return None
 
             comm.send_ack()  # start the reading loop on the firmware
+            vcc_warned = not _vcc_is_checked(comm.firmware_identity)
 
             for _ in range(n):
                 response = comm.get_response()
@@ -539,9 +572,12 @@ class HardwareManager:
                     response = comm.get_response()
                 if response.type != "DATA":
                     break
-                mv = self._parse_voltage_frame(response.message)
-                if mv is not None:
-                    samples.append(mv)
+                reading = self._parse_voltage_frame(response.message)
+                if reading is not None:
+                    rail_mv, vcc_mv = reading
+                    samples.append(rail_mv)
+                    if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
+                        vcc_warned = True
                 comm.send_ack()  # acknowledge data and request next reading
 
             # Tell the firmware to end the command now, rather than letting

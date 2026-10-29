@@ -1420,17 +1420,17 @@ class TestManageFirmwareUpdate:
         """When current_version >= latest_version (and not --force), returns True."""
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(
-            fm, "check_current_firmware", lambda **kw: ("/dev/ttyACM0", "3.1.0", "uno")
+            fm, "check_current_firmware", lambda **kw: ("/dev/ttyACM0", "3.4.0", "uno")
         )
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
             lambda channel="stable", version=None, board="uno", **_kw: (
-                "3.1.0",
+                "3.4.0",
                 "https://example.com/firestarter_uno.hex",
             ),
         )
-        result = fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
+        result = fm.manage_firmware_update(install_flag=True, app_version="3.4.0")
         assert result is True
 
     def test_manage_no_current_no_install_intent_returns_false(self, monkeypatch):
@@ -1443,13 +1443,13 @@ class TestManageFirmwareUpdate:
             fm,
             "fetch_release_info",
             lambda channel="stable", version=None, board="uno", **_kw: (
-                "3.1.0",
+                "3.4.0",
                 "https://example.com/firestarter_uno.hex",
             ),
         )
         # install_flag=False + no FLAG_FORCE in flags=0 → returns False
         result = fm.manage_firmware_update(
-            install_flag=False, flags=0, app_version="3.1.0"
+            install_flag=False, flags=0, app_version="3.4.0"
         )
         assert result is False
 
@@ -1490,19 +1490,19 @@ class TestNewerFirmwareRefusal:
     def test_too_new_release_refuses_and_flashes_nothing(self, monkeypatch):
         """The refusal must stop the flash, not just log a complaint."""
         fm, download, install = self._manager(
-            monkeypatch, current="3.1.0", latest="3.2.0"
+            monkeypatch, current="3.4.0", latest="3.5.0"
         )
         with pytest.raises(FirmwareReleaseRefusedError):
-            fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
+            fm.manage_firmware_update(install_flag=True, app_version="3.4.0")
         download.assert_not_called()
         install.assert_not_called()
 
     def test_override_allows_the_install(self, monkeypatch):
         fm, _download, install = self._manager(
-            monkeypatch, current="3.1.0", latest="3.2.0"
+            monkeypatch, current="3.4.0", latest="3.5.0"
         )
         result = fm.manage_firmware_update(
-            install_flag=True, app_version="3.1.0", allow_newer_firmware=True
+            install_flag=True, app_version="3.4.0", allow_newer_firmware=True
         )
         assert result is True
         install.assert_called_once()
@@ -1517,29 +1517,44 @@ class TestNewerFirmwareRefusal:
         just declared it cannot speak.
         """
         fm, _download, install = self._manager(
-            monkeypatch, current="3.1.0", latest="3.2.0"
+            monkeypatch, current="3.4.0", latest="3.5.0"
         )
         with pytest.raises(FirmwareReleaseRefusedError):
             fm.manage_firmware_update(
-                install_flag=True, flags=FLAG_FORCE, app_version="3.1.0"
+                install_flag=True, flags=FLAG_FORCE, app_version="3.4.0"
             )
         install.assert_not_called()
 
     def test_matching_feature_version_is_unchanged(self, monkeypatch):
         """The regression twin: the gate must not disturb the ordinary path."""
         fm, _download, install = self._manager(
-            monkeypatch, current="3.0.0", latest="3.1.5"
+            monkeypatch, current="3.3.0", latest="3.4.5"
         )
-        result = fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
+        result = fm.manage_firmware_update(install_flag=True, app_version="3.4.0")
         assert result is True
         install.assert_called_once()
+
+    def test_too_old_release_refuses_and_flashes_nothing(self, monkeypatch):
+        """Firmware below the binary frame floor: no flag waives it."""
+        fm, download, install = self._manager(
+            monkeypatch, current="3.4.0", latest="3.1.1"
+        )
+        with pytest.raises(FirmwareReleaseRefusedError):
+            fm.manage_firmware_update(
+                install_flag=True,
+                flags=FLAG_FORCE,
+                app_version="3.4.0",
+                allow_newer_firmware=True,
+            )
+        download.assert_not_called()
+        install.assert_not_called()
 
     def test_absent_release_keeps_the_failed_fetch_path(self, monkeypatch):
         """A fetch that returned nothing is reported as a fetch failure, not a mismatch."""
         fm, _download, install = self._manager(
-            monkeypatch, current="3.1.0", latest=None
+            monkeypatch, current="3.4.0", latest=None
         )
-        result = fm.manage_firmware_update(install_flag=True, app_version="3.1.0")
+        result = fm.manage_firmware_update(install_flag=True, app_version="3.4.0")
         assert result is False
         install.assert_not_called()
 
@@ -1551,8 +1566,8 @@ class TestNewerFirmwareRefusal:
         it. Reporting success there would be the wrong answer.
         """
         fm, _download, install = self._manager(
-            monkeypatch, current="3.2.0", latest="3.2.0"
+            monkeypatch, current="3.5.0", latest="3.5.0"
         )
         with pytest.raises(FirmwareReleaseRefusedError):
-            fm.manage_firmware_update(install_flag=False, app_version="3.1.0")
+            fm.manage_firmware_update(install_flag=False, app_version="3.4.0")
         install.assert_not_called()

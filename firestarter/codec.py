@@ -12,6 +12,7 @@ import logging
 import struct
 from typing import Any, List  # noqa: UP035
 
+from firestarter.command_frame import REFUSALS
 from firestarter.constants import (
     COMMAND_NAMES,
     REVISION_0,
@@ -29,16 +30,59 @@ from firestarter.messages import (
     DEBUG_CATALOG,
     MSG_DATA_CHUNK,
     MSG_DEBUG,
+    MSG_ERR_BAD_COMMAND,
+    MSG_ERR_FRAME_VERSION,
+    MSG_ERR_VPP_HIGH_MV,
     MSG_INFO_CMD,
     MSG_INFO_HW,
     MSG_INFO_PHYSICAL_HW,
+    MSG_INFO_REGISTERS,
     MSG_OK_CFG,
     MSG_OK_REV,
+    MSG_WARN_VPP_HIGH_MV,
+    MSG_WARN_VPP_LOW_MV,
     SEVERITY_LABEL,
     MessageDef,
 )
 
 logger = logging.getLogger("Codec")
+
+# MSG_INFO_REGISTERS views (firmware sync: dev_tools.cpp DT_VIEW_*).
+_REGISTER_VIEW_REG_FIRESTARTER = 1
+_REGISTER_VIEW_ADDR = 2
+
+
+def _volts(mv: int) -> str:
+    """`'12.449 V'` for a millivolt value: every millivolt the firmware sent."""
+    return f"{mv / 1000:.3f} V"
+
+
+def _register_table(name: str, value: int, bits: int) -> list[str]:
+    """One register as the three lines `dev reg` / `dev addr` print: the
+    value, the bit header and the bit row, D(bits-1) first."""
+    header = "|D8" if bits == 9 else ""
+    row = "".join(f"| {(value >> i) & 1}" for i in range(bits - 1, -1, -1))
+    return [
+        f"{name}: 0x{value:02X}",
+        f"{header}|D7|D6|D5|D4|D3|D2|D1|D0|",
+        f"{row}|",
+    ]
+
+
+def _render_registers(msb: int, lsb: int, ctrl: int, remapped: int, view: int) -> str:
+    """The bit tables for MSG_INFO_REGISTERS. The firmware sends raw values;
+    the table layout is the one the firmware used to print."""
+    lines = _register_table("MSB", msb, 8) + _register_table("LSB", lsb, 8)
+    if view == _REGISTER_VIEW_ADDR:
+        lines += _register_table("TOP addr", ctrl, 8)
+        lines += _register_table("CTRL remapped", remapped, 8)
+    elif view == _REGISTER_VIEW_REG_FIRESTARTER:
+        lines += _register_table("CTRL", ctrl, 9)
+        lines += _register_table("CTRL remapped", remapped, 8)
+    else:
+        lines += _register_table("CTRL", ctrl & 0xFF, 8)
+    return "\n".join(lines)
+
 
 # Older, shorter forms of fixed-width acks that the host still accepts. The
 # value is the legacy param-region length; the decoder reads only the leading
@@ -135,6 +179,22 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
     if msg_id == MSG_INFO_PHYSICAL_HW and len(params) == 1:
         byte = params[0]
         return f"Physical HW: {_REVISION_SILKSCREEN.get(byte, f'Rev{byte}')}"
+
+    if msg_id == MSG_ERR_BAD_COMMAND and len(params) == 1:
+        code = params[0]
+        return f"Command refused: {REFUSALS.get(code, f'reason {code}')}"
+
+    if msg_id == MSG_INFO_REGISTERS and len(params) == 5:
+        return _render_registers(*params)
+
+    # The firmware sends millivolts; show volts. The catalog text (mV) is the
+    # fallback for any other shape.
+    if msg_id in (MSG_WARN_VPP_LOW_MV, MSG_WARN_VPP_HIGH_MV, MSG_ERR_VPP_HIGH_MV):
+        if len(params) == 2:
+            measured, expected = params
+            relation = "<" if msg_id == MSG_WARN_VPP_LOW_MV else ">"
+            state = "low" if msg_id == MSG_WARN_VPP_LOW_MV else "high"
+            return f"VPP is {state}: {_volts(measured)} {relation} {_volts(expected)}"
 
     if msg_id == MSG_INFO_CMD and len(params) == 1:
         cmd = params[0]
@@ -295,15 +355,17 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
 
     # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
     # loop can obtain the chip data without a second read call.
-    chunk_payload = None
+    # MSG_ERR_FRAME_VERSION also carries its parameter bytes, so setup can
+    # compare the firmware's frame version with this host's.
+    payload = None
     if (
         msg_id == MSG_DATA_CHUNK
         and values
         and isinstance(values[0], (bytes, bytearray))
     ):
-        chunk_payload = bytes(values[0])
+        payload = bytes(values[0])
+    elif msg_id == MSG_ERR_FRAME_VERSION:
+        payload = params_bytes
 
     severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-    return LogMessage(
-        severity=severity_label, text=text, id=msg_id, payload=chunk_payload
-    )
+    return LogMessage(severity=severity_label, text=text, id=msg_id, payload=payload)

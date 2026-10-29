@@ -250,7 +250,6 @@ def make_comm(fake_serial):
         instance.firmware_max_chunk = None
         instance.firmware_identity = None
         instance.hw_revision = None
-        instance.write_block_budget_s = None
         instance.seen_message_ids = set()
         instance.setup_refusal = None
         return instance

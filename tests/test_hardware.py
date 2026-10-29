@@ -12,7 +12,6 @@ Test pattern: patch ``SerialCommunicator.find_and_connect`` to return a
 frames the firmware would emit.
 """
 
-import re
 import struct
 from typing import Iterator  # noqa: UP035
 from unittest.mock import Mock, patch
@@ -22,7 +21,7 @@ import pytest
 from firestarter.config import ConfigManager
 from firestarter.constants import COMMAND_READ_VPE
 from firestarter.hardware import HardwareManager
-from firestarter.messages import MSG_END_DONE
+from firestarter.messages import MSG_DATA_VPE_MV, MSG_DATA_VPP_MV, MSG_END_DONE
 
 from .conftest import build_frame
 
@@ -366,22 +365,33 @@ def test_read_vpp_voltage_ready_not_ok_returns_false(
     assert ok is False
 
 
-def test_parse_voltage_frame_reconstructs_mv(hw_config) -> None:
-    """`_parse_voltage_frame` reconstructs mV as v_int*1000 + v_dec*100 --
-    the Pitfall-2 KAT pinning the units contract (never read v_int alone as
-    mV, never treat the wire as raw mV)."""
+def _mv_frame(msg_id: int, rail_mv: int, vcc_mv: int = 5000) -> bytes:
+    return build_frame(msg_id, struct.pack(">HH", rail_mv, vcc_mv))
+
+
+def test_parse_voltage_frame_returns_exact_mv(hw_config) -> None:
+    """The firmware sends millivolts, so the host keeps every mV: 12449 is
+    not rounded to the 100 mV grid the old volts-and-tenths frame forced."""
     hw = HardwareManager(hw_config)
 
-    assert hw._parse_voltage_frame("VPP: 20.9V, Internal VCC: 5.0V") == 20900
-    assert hw._parse_voltage_frame("VPE: 21.0V, Internal VCC: 5.0V") == 21000
+    assert hw._parse_voltage_frame("VPP: 12449 mV, Internal VCC: 5012 mV") == (
+        12449,
+        5012,
+    )
+    assert hw._parse_voltage_frame("VPE: 21000 mV, Internal VCC: 4999 mV") == (
+        21000,
+        4999,
+    )
+    assert hw._parse_voltage_frame("VPP: 20.9V, Internal VCC: 5.0V") is None
+    assert hw._parse_voltage_frame(None) is None
 
 
 def test_sample_vpp_mv_returns_median(hw_config, make_comm, fake_serial) -> None:
-    """`sample_vpp_mv()` feeds three synthetic 0xE4 frames and returns the
-    median reconstructed mV value (20900 for a constant 20.9V rail)."""
+    """`sample_vpp_mv()` feeds three MSG_DATA_VPP_MV frames and returns the
+    median mV value."""
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     for _ in range(3):
-        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+        fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 20900))
     comm = make_comm()
 
     hw = HardwareManager(hw_config)
@@ -393,11 +403,11 @@ def test_sample_vpp_mv_returns_median(hw_config, make_comm, fake_serial) -> None
 
 
 def test_sample_vpe_mv_uses_state_12(hw_config, make_comm, fake_serial) -> None:
-    """`sample_vpe_mv()` mirrors `sample_vpp_mv()` but parses 0xE5 frames and
-    connects with `state == COMMAND_READ_VPE` (12)."""
+    """`sample_vpe_mv()` mirrors `sample_vpp_mv()` but parses MSG_DATA_VPE_MV
+    frames and connects with `state == COMMAND_READ_VPE` (12)."""
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     for _ in range(3):
-        fake_serial.feed(build_frame(0xE5, struct.pack(">HHHH", 21, 0, 5, 0)))
+        fake_serial.feed(_mv_frame(MSG_DATA_VPE_MV, 21000))
     comm = make_comm()
 
     hw = HardwareManager(hw_config)
@@ -441,8 +451,8 @@ def test_sample_median_of_even_n_off_grid(hw_config, make_comm, fake_serial) -> 
     """Median of an even-N sample set (20900, 21000) is 20950, cast to
     `int` -- pins the even-N off-grid rounding behavior (Pitfall 5)."""
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
-    fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
-    fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 21, 0, 5, 0)))
+    fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 20900))
+    fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 21000))
     comm = make_comm()
 
     hw = HardwareManager(hw_config)
@@ -472,7 +482,7 @@ def test_sample_vpp_mv_sends_done_before_disconnect(
     firmware is told to end the command instead of being left dangling."""
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     for _ in range(3):
-        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+        fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 20900))
     comm = make_comm()
 
     manager = Mock()
@@ -496,22 +506,48 @@ def test_sample_vpp_mv_sends_done_before_disconnect(
 
 
 def test_voltage_format_pin() -> None:
-    """Pin the 0xE4/0xE5 `CATALOG` format strings against the sampler's
-    tolerant regex -- a codegen regen that changes the wording silently
-    breaks the parser otherwise (Pitfall 3 / T-111-DRIFT)."""
+    """Pin the MSG_DATA_VPP_MV / MSG_DATA_VPE_MV catalog formats against the
+    sampler's regex -- a codegen regen that changes the wording silently
+    breaks the parser otherwise."""
+    from firestarter.hardware import _VOLTAGE_RE
     from firestarter.messages import CATALOG
 
-    pattern = r"(\d+)\.(\d+)\s*V"
+    for msg_id in (MSG_DATA_VPP_MV, MSG_DATA_VPE_MV):
+        match = _VOLTAGE_RE.search(CATALOG[msg_id].format % (12449, 5012))
+        assert match is not None
+        assert match.groups() == ("12449", "5012")
 
-    rendered_vpp = CATALOG[0xE4].format % (20, 9, 5, 0)
-    match_vpp = re.search(pattern, rendered_vpp)
-    assert match_vpp is not None
-    assert match_vpp.groups() == ("20", "9")
 
-    rendered_vpe = CATALOG[0xE5].format % (21, 0, 5, 0)
-    match_vpe = re.search(pattern, rendered_vpe)
-    assert match_vpe is not None
-    assert match_vpe.groups() == ("21", "0")
+@pytest.mark.parametrize(
+    ("identity", "vcc_mv", "warnings"),
+    [
+        ("3.3.0:uno", 5600, 1),  # implausible: warned once, not per sample
+        ("3.3.0:uno", 4999, 0),  # in the band
+        ("3.3.0:py32f071", 3300, 0),  # a 3.3 V board has no 5 V band
+    ],
+)
+def test_the_host_warns_about_an_implausible_vcc_once(
+    hw_config, make_comm, fake_serial, caplog, identity, vcc_mv, warnings
+) -> None:
+    """The firmware sends VCC in mV and no longer checks it; the host warns
+    once per command with MSG_WARN_VCC_IMPLAUSIBLE's text."""
+    from firestarter.messages import CATALOG, MSG_WARN_VCC_IMPLAUSIBLE
+
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    for _ in range(3):
+        fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 13000, vcc_mv))
+    comm = make_comm()
+    comm.firmware_identity = identity
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        assert hw.sample_vpp_mv() == 13000
+
+    text = CATALOG[MSG_WARN_VCC_IMPLAUSIBLE].format % vcc_mv
+    assert [r.getMessage() for r in caplog.records].count(text) == warnings
 
 
 def test_read_adc_raw_parses_three_frames(hw_config, make_comm, fake_serial) -> None:
@@ -568,7 +604,7 @@ def test_read_adc_raw_returns_none_when_nothing_parses(
     # Three DATA frames that read cleanly but are not ADC frames: each is
     # skipped by the parser, none is a transport error.
     for _ in range(3):
-        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+        fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 20900))
     comm = make_comm()
 
     hw = HardwareManager(hw_config)

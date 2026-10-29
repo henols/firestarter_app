@@ -21,6 +21,7 @@ import click.shell_completion
 from rich.console import Console
 
 from firestarter import __version__ as version
+from firestarter import command_frame as cf
 from firestarter import (
     dip24_2816_erase_gate,
     flash4_erase_gate,
@@ -62,6 +63,7 @@ from firestarter.chip_test import (
     sdp_hold_state,
     sdp_oracle_applicable,
 )
+from firestarter.command_codec import CommandEncodeError
 from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import (
     CONFIG_R1_MAX,
@@ -85,6 +87,7 @@ from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     EpromOperationError,
+    FirmwareFrameVersionError,
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
@@ -238,6 +241,8 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             return f(*args, **kwargs)
         except ChipNotFoundError as e:
             raise click.ClickException(str(e)) from e
+        except FirmwareFrameVersionError as e:
+            raise click.ClickException(f"Command frame version mismatch: {e}") from e
         except FirmwareOutdatedError as e:
             raise click.ClickException(f"Firmware outdated: {e}") from e
         except (SerialError, SerialTimeoutError) as e:
@@ -269,6 +274,11 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             # make this host-voiced refusal (write_blank_guard.py) read as a
             # hardware fault instead of an input-validation refusal.
             raise click.ClickException(str(e)) from e
+        except CommandEncodeError as e:
+            # The host refused the command before any byte reached the port.
+            # Above the EpromOperationError arm: "Programmer error" would read
+            # as a hardware fault for an input the frame cannot carry.
+            raise click.ClickException(f"Refused before sending: {e}") from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
         except Pin1HazardRefusedError as e:
@@ -367,6 +377,7 @@ def _build_op_flags(
     # SDP auto-set condition inside write() below -- flipping this default
     # invalidates the removal-safety argument the `dev sdp` removal rests on.
     skip_sdp_unlock: bool = False,
+    skip_final_verify: bool = False,
     input_enable: bool | None = None,
     chip_disable: bool | None = None,
 ) -> int:
@@ -396,6 +407,7 @@ def _build_op_flags(
         verbose,
         skip_erase=skip_erase,
         skip_sdp_unlock=skip_sdp_unlock,
+        skip_final_verify=skip_final_verify,
     )
     if input_enable is not None:
         flags |= 0 if input_enable else FLAG_OUTPUT_ENABLE
@@ -933,6 +945,9 @@ def write(
             vpe_as_vpp=vpe_as_vpp,
             skip_erase=skip_erase,
             skip_sdp_unlock=skip_sdp_unlock,
+            # The read-back below compares every byte, so the board's own
+            # final verify pass would only repeat it.
+            skip_final_verify=verify,
         ),
         # Translate Click's `None` ("--pulse-us not supplied") into
         # write_eprom's own integer sentinel (0 means "use the database
@@ -1048,8 +1063,7 @@ def _address_size_refusal_exit_code(
     """Refuse a negative start address or a size below 1 byte before the
     serial port opens.
 
-    The firmware refuses both at setup, with the same 'Bad JSON' answer that
-    firmware too old for this CLI gives, so without this check the operator
+    The firmware refuses both at setup, so without this check the operator
     sees only "no programmer found". Returns 2 to refuse with, or `None`.
     A malformed string is not refused here: `_setup_operation`'s own parse
     handling still owns that error.
@@ -1597,10 +1611,13 @@ _BANDGAP_NOMINAL_MV = 1100
 @cli.command(name="cal")
 @click.option(
     "--vcc",
-    type=click.FloatRange(min=0, min_open=True),
+    type=click.FloatRange(min=0, min_open=True, max=cf.CALIBRATION_VCC_MAX_MV / 1000),
     default=None,
     metavar="VOLTS",
-    help="Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09",
+    help=(
+        "Calibrate using a multimeter reading of the 5V pin, e.g. --vcc 5.09. "
+        f"At most {cf.CALIBRATION_VCC_MAX_MV / 1000:g} V."
+    ),
 )
 @click.option(
     "--reset",
@@ -2271,16 +2288,22 @@ if _DEV_TOOLS_ENABLED:
     @click.option(
         "--read-settling",
         "read_settling_us",
-        type=int,
+        type=click.IntRange(0, cf.READ_TIMING_MAX_US),
         default=0,
-        help="Address-settling delay before /CE assert (µs; 0=firmware default 0µs).",
+        help=(
+            "Address-settling delay before /CE assert "
+            f"(µs, 0..{cf.READ_TIMING_MAX_US}; 0=firmware default 0µs)."
+        ),
     )
     @click.option(
         "--read-strobe",
         "read_strobe_us",
-        type=int,
+        type=click.IntRange(0, cf.READ_TIMING_MAX_US),
         default=0,
-        help="/CE read-strobe pulse width (µs; 0=firmware default 3µs).",
+        help=(
+            "/CE read-strobe pulse width "
+            f"(µs, 0..{cf.READ_TIMING_MAX_US}; 0=firmware default 3µs)."
+        ),
     )
     @click.pass_obj
     @map_typed_errors

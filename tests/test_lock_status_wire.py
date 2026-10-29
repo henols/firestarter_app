@@ -20,11 +20,11 @@ Six legs:
 
 from __future__ import annotations
 
-import json
 import re
 
 import pytest
 
+from firestarter import command_frame
 from firestarter.constants import COMMAND_LOCK_STATUS
 from firestarter.frame_parser import cobs_decode
 from firestarter.lock_status import (
@@ -55,12 +55,12 @@ def test_outgoing_command_carries_command_lock_status_constant(
     """Leg 1 (frame build). `EpromOperator._setup_operation` builds a
     command dict with `cmd=COMMAND_LOCK_STATUS` and hands it to
     `SerialCommunicator.find_and_connect`, which drives
-    `send_json_command` at connect time -- this is the request the host
+    `send_command` at connect time -- this is the request the host
     actually emits for this command. Asserted against the constant, never
     a bare literal command-value integer, so this leg survives a
     deliberate renumber and reddens only on an accidental one."""
     comm = make_comm()
-    comm.send_json_command({"cmd": COMMAND_LOCK_STATUS, "algorithm": 6})
+    comm.send_command({"cmd": COMMAND_LOCK_STATUS, "algorithm": 6})
 
     fake_serial._buf.seek(0)
     written = fake_serial._buf.read()
@@ -69,8 +69,8 @@ def test_outgoing_command_carries_command_lock_status_constant(
     body = written[:-1]
     decoded = cobs_decode(body)
     payload = decoded[:-1]  # strip the trailing CRC8 byte
-    sent = json.loads(payload)
-    assert sent["cmd"] == COMMAND_LOCK_STATUS
+    assert payload[0] == command_frame.MAGIC
+    assert payload[2] == COMMAND_LOCK_STATUS
 
 
 @pytest.mark.parametrize("decode_byte", [DECODE_UNPROTECTED, DECODE_PROTECTED])

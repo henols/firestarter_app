@@ -71,17 +71,52 @@ def test_feature_version_parsing(raw, expected) -> None:
 @pytest.mark.parametrize(
     ("app_version", "release_version", "refused"),
     [
-        ("3.1.0", "3.2.0", True),  # violating input: release is ahead
-        ("3.1.0", "3.1.5", False),  # patch ignored
-        ("3.1.0b2", "3.1.0b5", False),  # same feature version
-        ("3.2.0", "3.1.0", False),  # reverse mismatch: out of scope
-        ("3.1.0", "3.1.0", False),  # boundary: equality passes
+        ("3.4.0", "3.5.0", True),  # violating input: release is ahead
+        ("3.4.0", "3.4.5", False),  # patch ignored
+        ("3.4.0b2", "3.4.0b5", False),  # same feature version
+        ("3.5.0", "3.4.0", False),  # reverse mismatch: out of scope
+        ("3.4.0", "3.4.0", False),  # boundary: equality passes
         ("3.9.0", "4.0.0", True),  # major step
         ("4.0.0", "3.9.0", False),  # major reverse
     ],
 )
 def test_is_refused_rule(app_version, release_version, refused) -> None:
     assert is_refused(app_version, release_version) is refused
+
+
+# ---------------------------------------------------------------------------
+# B2. The floor -- firmware older than the binary command frame
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("release_version", "refused"),
+    [
+        ("3.3.0", False),  # boundary: the floor itself passes
+        ("3.3.0b1", False),
+        ("3.2.0", True),  # skipped: 3.2.0b1 on PyPI is a JSON-era CLI
+        ("3.1.1b2", True),  # JSON-era firmware
+        ("2.0.6", True),
+    ],
+)
+def test_release_below_the_floor_is_refused(release_version, refused) -> None:
+    assert is_refused("3.4.0", release_version) is refused
+
+
+def test_allow_newer_does_not_waive_the_floor() -> None:
+    with pytest.raises(FirmwareReleaseRefusedError):
+        require_installable_release("3.4.0", "3.1.1", allow_newer=True)
+
+
+def test_too_old_refusal_names_the_release_the_floor_and_the_remedy() -> None:
+    with pytest.raises(FirmwareReleaseRefusedError) as exc:
+        require_installable_release("3.4.0", "3.1.1")
+    text = str(exc.value)
+    assert "3.1.1" in text
+    assert "3.3" in text
+    assert "fw --firmware-version" in text
+    # The floor has no escape: offering one would install JSON-era firmware.
+    assert "--allow-newer-firmware" not in text
 
 
 # ---------------------------------------------------------------------------
@@ -92,10 +127,10 @@ def test_is_refused_rule(app_version, release_version, refused) -> None:
 @pytest.mark.parametrize(
     ("app_version", "release_version"),
     [
-        ("garbage", "3.1.0"),
-        ("3.1.0", "garbage"),
-        (None, "3.1.0"),
-        ("", "3.1.0"),
+        ("garbage", "3.4.0"),
+        ("3.4.0", "garbage"),
+        (None, "3.4.0"),
+        ("", "3.4.0"),
     ],
 )
 def test_unreadable_version_refuses(app_version, release_version) -> None:
@@ -114,8 +149,8 @@ def test_absent_release_does_not_refuse(release_version) -> None:
     version-mismatch refusal would be a lie. This is the single documented
     fail-open edge of an otherwise fail-closed gate.
     """
-    assert is_refused("3.1.0", release_version) is False
-    require_installable_release("3.1.0", release_version)
+    assert is_refused("3.4.0", release_version) is False
+    require_installable_release("3.4.0", release_version)
 
 
 # ---------------------------------------------------------------------------
@@ -124,17 +159,17 @@ def test_absent_release_does_not_refuse(release_version) -> None:
 
 
 def test_allow_newer_waives_the_refusal() -> None:
-    require_installable_release("3.1.0", "3.2.0", allow_newer=True)
+    require_installable_release("3.4.0", "3.5.0", allow_newer=True)
 
 
 def test_allow_newer_waives_the_unreadable_case() -> None:
-    require_installable_release("garbage", "3.1.0", allow_newer=True)
+    require_installable_release("garbage", "3.4.0", allow_newer=True)
 
 
 def test_override_defaults_to_false_for_library_callers() -> None:
     """Omitting the kwarg must not silently grant the waiver."""
     with pytest.raises(FirmwareReleaseRefusedError):
-        require_installable_release("3.1.0", "3.2.0")
+        require_installable_release("3.4.0", "3.5.0")
 
 
 # ---------------------------------------------------------------------------
@@ -144,23 +179,23 @@ def test_override_defaults_to_false_for_library_callers() -> None:
 
 def test_too_new_message_is_the_format_constant() -> None:
     with pytest.raises(FirmwareReleaseRefusedError) as exc:
-        require_installable_release("3.1.0", "3.2.0")
+        require_installable_release("3.4.0", "3.5.0")
     assert str(exc.value) == _REFUSAL_FORMAT.format(
-        app="3.1.0",
-        release="3.2.0",
-        app_feature="3.1",
-        release_feature="3.2",
+        app="3.4.0",
+        release="3.5.0",
+        app_feature="3.4",
+        release_feature="3.5",
     )
 
 
 def test_unreadable_message_is_the_other_format_constant() -> None:
     with pytest.raises(FirmwareReleaseRefusedError) as exc:
-        require_installable_release("garbage", "3.1.0")
+        require_installable_release("garbage", "3.4.0")
     assert str(exc.value) == _UNREADABLE_FORMAT.format(
         app="garbage",
-        release="3.1.0",
+        release="3.4.0",
         app_feature="an unreadable version",
-        release_feature="3.1",
+        release_feature="3.4",
     )
 
 
@@ -203,10 +238,10 @@ def test_pinned_too_new_refuses_before_any_port_or_request(
     refusal that happened after a port opened would still exit 1 and still
     print the right text, and only these assertions tell the two apart.
     """
-    monkeypatch.setattr(_pkg, "__version__", "3.1.0")
+    monkeypatch.setattr(_pkg, "__version__", "3.4.0")
     result = runner.invoke(
         cli,
-        ["fw", "--firmware-version", "3.2.0"],
+        ["fw", "--firmware-version", "3.5.0"],
         obj=make_app_context(firmware_manager=fw_manager),
     )
     assert result.exit_code == 1
@@ -215,14 +250,29 @@ def test_pinned_too_new_refuses_before_any_port_or_request(
     fw_manager.manage_firmware_update.assert_not_called()
 
 
+def test_pinned_too_old_refuses_before_any_port_or_request(
+    runner, fw_manager, monkeypatch
+) -> None:
+    monkeypatch.setattr(_pkg, "__version__", "3.4.0")
+    result = runner.invoke(
+        cli,
+        ["fw", "--allow-newer-firmware", "--firmware-version", "3.1.1"],
+        obj=make_app_context(firmware_manager=fw_manager),
+    )
+    assert result.exit_code == 1
+    assert "older than the binary command frame" in result.output
+    fw_manager.check_current_firmware.assert_not_called()
+    fw_manager.manage_firmware_update.assert_not_called()
+
+
 def test_pinned_same_feature_version_reaches_the_manager(
     runner, fw_manager, monkeypatch
 ) -> None:
-    monkeypatch.setattr(_pkg, "__version__", "3.1.0")
+    monkeypatch.setattr(_pkg, "__version__", "3.4.0")
     fw_manager.manage_firmware_update.return_value = True
     result = runner.invoke(
         cli,
-        ["fw", "--firmware-version", "3.1.5"],
+        ["fw", "--firmware-version", "3.4.5"],
         obj=make_app_context(firmware_manager=fw_manager),
     )
     assert result.exit_code == 0
@@ -230,11 +280,11 @@ def test_pinned_same_feature_version_reaches_the_manager(
 
 
 def test_override_flag_reaches_the_manager(runner, fw_manager, monkeypatch) -> None:
-    monkeypatch.setattr(_pkg, "__version__", "3.1.0")
+    monkeypatch.setattr(_pkg, "__version__", "3.4.0")
     fw_manager.manage_firmware_update.return_value = True
     result = runner.invoke(
         cli,
-        ["fw", "--allow-newer-firmware", "--firmware-version", "3.2.0"],
+        ["fw", "--allow-newer-firmware", "--firmware-version", "3.5.0"],
         obj=make_app_context(firmware_manager=fw_manager),
     )
     assert result.exit_code == 0
@@ -249,10 +299,10 @@ def test_list_still_enumerates_a_too_new_release(
 
     Without it there is no supported way to find out which release to pin.
     """
-    monkeypatch.setattr(_pkg, "__version__", "3.1.0")
+    monkeypatch.setattr(_pkg, "__version__", "3.4.0")
     fw_manager.list_releases.return_value = [
         {
-            "version": "3.2.0",
+            "version": "3.5.0",
             "channel": "stable",
             "published": "2026-09-25T00:00:00Z",
             "asset_url": "https://example.invalid/firestarter_uno.hex",
@@ -264,7 +314,7 @@ def test_list_still_enumerates_a_too_new_release(
         obj=make_app_context(firmware_manager=fw_manager),
     )
     assert result.exit_code == 0
-    assert "3.2.0" in result.output
+    assert "3.5.0" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -275,11 +325,11 @@ def test_list_still_enumerates_a_too_new_release(
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("3.2.6", False),
-        ("v3.2.6", False),
-        ("3.2.7b1", True),
-        ("3.2.0rc1", True),
-        ("3.2.7.dev3+gabc1234", True),
+        ("3.4.6", False),
+        ("v3.4.6", False),
+        ("3.4.7b1", True),
+        ("3.4.0rc1", True),
+        ("3.4.7.dev3+gabc1234", True),
         ("not-a-version", None),
         ("", None),
         (None, None),
@@ -289,31 +339,31 @@ def test_is_prerelease_version(raw, expected) -> None:
     assert is_prerelease_version(raw) is expected
 
 
-@pytest.mark.parametrize("release_version", ["3.2.7b1", "3.2.0rc1", "3.3.0.dev1"])
+@pytest.mark.parametrize("release_version", ["3.4.7b1", "3.4.0rc1", "3.5.0.dev1"])
 @pytest.mark.parametrize("allow_newer", [False, True])
 def test_stable_cli_refuses_a_prerelease(release_version, allow_newer) -> None:
     """No waiver: --allow-newer-firmware does not open this refusal."""
     with pytest.raises(FirmwareReleaseRefusedError) as exc:
-        require_installable_release("3.2.6", release_version, allow_newer=allow_newer)
+        require_installable_release("3.4.6", release_version, allow_newer=allow_newer)
     assert str(exc.value) == _PRERELEASE_ON_STABLE_FORMAT.format(
-        app="3.2.6", release=release_version
+        app="3.4.6", release=release_version
     )
 
 
 def test_stable_cli_refuses_an_older_prerelease() -> None:
     """The rule ignores the feature version: an older pre-release is refused too."""
     with pytest.raises(FirmwareReleaseRefusedError):
-        require_installable_release("3.2.6", "3.1.0b2")
+        require_installable_release("3.4.6", "3.3.0b2")
 
 
 @pytest.mark.parametrize(
     ("app_version", "release_version"),
     [
-        ("3.2.6", "3.2.6"),  # stable on stable
-        ("3.2.6", None),  # nothing to flash
-        ("3.2.7b1", "3.2.7b2"),  # pre-release CLI
-        ("3.2.7.dev3+gabc1234", "3.2.7b1"),  # dev checkout
-        ("3.2.7b1", "3.2.6"),  # pre-release CLI, stable firmware
+        ("3.4.6", "3.4.6"),  # stable on stable
+        ("3.4.6", None),  # nothing to flash
+        ("3.4.7b1", "3.4.7b2"),  # pre-release CLI
+        ("3.4.7.dev3+gabc1234", "3.4.7b1"),  # dev checkout
+        ("3.4.7b1", "3.4.6"),  # pre-release CLI, stable firmware
     ],
 )
 def test_prerelease_rule_passes(app_version, release_version) -> None:
@@ -322,7 +372,7 @@ def test_prerelease_rule_passes(app_version, release_version) -> None:
 
 def test_stable_cli_unreadable_release_keeps_the_unreadable_refusal() -> None:
     with pytest.raises(FirmwareReleaseRefusedError) as exc:
-        require_installable_release("3.2.6", "garbage")
+        require_installable_release("3.4.6", "garbage")
     assert "is a pre-release" not in str(exc.value)
     assert "not readable" in str(exc.value)
 
@@ -330,10 +380,10 @@ def test_stable_cli_unreadable_release_keeps_the_unreadable_refusal() -> None:
 def test_pinned_prerelease_on_stable_cli_refuses_before_any_port_or_request(
     runner, fw_manager, monkeypatch
 ) -> None:
-    monkeypatch.setattr(_pkg, "__version__", "3.2.6")
+    monkeypatch.setattr(_pkg, "__version__", "3.4.6")
     result = runner.invoke(
         cli,
-        ["fw", "--install", "--firmware-version", "3.2.7b1"],
+        ["fw", "--install", "--firmware-version", "3.4.7b1"],
         obj=make_app_context(firmware_manager=fw_manager),
     )
     assert result.exit_code == 1
@@ -350,13 +400,13 @@ def test_pre_channel_on_stable_library_call_refuses_before_download(
     monkeypatch.setattr(
         fm,
         "check_current_firmware",
-        lambda **_kw: ("/dev/ttyACM0", "3.2.6", "uno"),
+        lambda **_kw: ("/dev/ttyACM0", "3.4.6", "uno"),
     )
     monkeypatch.setattr(
         fm,
         "fetch_release_info",
         lambda channel="stable", version=None, board="uno", **_kw: (
-            "3.2.7b1",
+            "3.4.7b1",
             "https://example.invalid/uno.hex",
         ),
     )
@@ -370,7 +420,7 @@ def test_pre_channel_on_stable_library_call_refuses_before_download(
         fm.manage_firmware_update(
             install_flag=True,
             channel="pre",
-            app_version="3.2.6",
+            app_version="3.4.6",
             allow_newer_firmware=True,
         )
 
@@ -383,14 +433,14 @@ def test_pre_channel_on_stable_library_call_refuses_before_download(
 @pytest.mark.parametrize(
     ("app_version", "fw_version", "expected"),
     [
-        ("3.2.6", "3.2.2", True),
-        ("3.2.6", "3.2.9", True),  # patch ignored
-        ("3.2.6", "3.2.3b1", False),  # pre-release
-        ("3.2.6", "3.1.1", False),  # older line
-        ("3.2.6", "3.3.0", False),  # newer line
-        ("3.2.6", "garbage", False),
-        ("3.2.6", None, False),
-        (None, "3.2.2", False),
+        ("3.4.6", "3.4.2", True),
+        ("3.4.6", "3.4.9", True),  # patch ignored
+        ("3.4.6", "3.4.3b1", False),  # pre-release
+        ("3.4.6", "3.3.1", False),  # older line
+        ("3.4.6", "3.5.0", False),  # newer line
+        ("3.4.6", "garbage", False),
+        ("3.4.6", None, False),
+        (None, "3.4.2", False),
     ],
 )
 def test_matches_stable_cli(app_version, fw_version, expected) -> None:
@@ -401,14 +451,14 @@ def test_matches_stable_cli(app_version, fw_version, expected) -> None:
 def test_stable_cli_refuses_an_older_line(allow_newer) -> None:
     """No waiver: --allow-newer-firmware does not open this refusal."""
     with pytest.raises(FirmwareReleaseRefusedError) as exc:
-        require_installable_release("3.2.6", "3.1.1", allow_newer=allow_newer)
+        require_installable_release("3.4.6", "3.3.1", allow_newer=allow_newer)
     assert str(exc.value) == _OLDER_LINE_ON_STABLE_FORMAT.format(
-        app="3.2.6", release="3.1.1", app_feature="3.2", release_feature="3.1"
+        app="3.4.6", release="3.3.1", app_feature="3.4", release_feature="3.3"
     )
 
 
 def test_prerelease_cli_installs_an_older_line() -> None:
-    require_installable_release("3.2.7b1", "3.1.1")
+    require_installable_release("3.4.7b1", "3.3.1")
 
 
 def _release(tag: str, *, draft: bool = False) -> dict:
@@ -425,13 +475,13 @@ def _release(tag: str, *, draft: bool = False) -> dict:
 
 
 _RELEASES = [
-    _release("3.3.0"),
-    _release("3.2.9", draft=True),
-    _release("3.2.3b1"),
-    _release("3.2.2"),
-    _release("3.2.10rc1"),
-    _release("3.2.1"),
-    _release("3.1.1"),
+    _release("3.5.0"),
+    _release("3.4.9", draft=True),
+    _release("3.4.3b1"),
+    _release("3.4.2"),
+    _release("3.4.10rc1"),
+    _release("3.4.1"),
+    _release("3.3.1"),
 ]
 
 
@@ -440,27 +490,27 @@ def test_stable_channel_on_stable_cli_picks_the_highest_matching_stable() -> Non
     fm._fetch_all_releases = lambda **_kw: _RELEASES
     fm.fetch_latest_release_info = lambda **_kw: pytest.fail("must not use /latest")
     version, url = fm.fetch_release_info(
-        channel="stable", board="uno", app_version="3.2.6"
+        channel="stable", board="uno", app_version="3.4.6"
     )
-    assert version == "3.2.2"
-    assert url == "https://example.invalid/3.2.2/uno.hex"
+    assert version == "3.4.2"
+    assert url == "https://example.invalid/3.4.2/uno.hex"
 
 
 def test_stable_channel_with_no_matching_stable_resolves_nothing() -> None:
     fm = FirmwareManager(config_manager=MagicMock())
     fm._fetch_all_releases = lambda **_kw: _RELEASES
     assert fm.fetch_release_info(
-        channel="stable", board="uno", app_version="3.4.0"
+        channel="stable", board="uno", app_version="3.6.0"
     ) == (None, None)
 
 
 def test_stable_channel_on_prerelease_cli_keeps_latest() -> None:
     fm = FirmwareManager(config_manager=MagicMock())
     fm._fetch_all_releases = lambda **_kw: pytest.fail("must use /latest")
-    fm.fetch_latest_release_info = lambda board="uno": ("3.3.0", "u")
+    fm.fetch_latest_release_info = lambda board="uno": ("3.5.0", "u")
     assert fm.fetch_release_info(
-        channel="stable", board="uno", app_version="3.2.7b2"
-    ) == ("3.3.0", "u")
+        channel="stable", board="uno", app_version="3.4.7b2"
+    ) == ("3.5.0", "u")
 
 
 def _manager_on_board(monkeypatch, current_version: str, latest_version: str):
@@ -483,29 +533,29 @@ def _manager_on_board(monkeypatch, current_version: str, latest_version: str):
     return fm, installed
 
 
-@pytest.mark.parametrize("current_version", ["3.2.3b1", "3.3.0", "3.1.1"])
+@pytest.mark.parametrize("current_version", ["3.4.3b1", "3.5.0", "3.3.1"])
 def test_stable_cli_installs_matching_stable_over_a_mismatched_board(
     monkeypatch, current_version
 ) -> None:
     """A higher version on the board is still not up to date on a stable CLI."""
-    fm, installed = _manager_on_board(monkeypatch, current_version, "3.2.2")
-    assert fm.manage_firmware_update(install_flag=True, app_version="3.2.6")
+    fm, installed = _manager_on_board(monkeypatch, current_version, "3.4.2")
+    assert fm.manage_firmware_update(install_flag=True, app_version="3.4.6")
     assert len(installed) == 1
 
 
 def test_stable_cli_bare_fw_offers_the_matching_stable(monkeypatch) -> None:
-    fm, installed = _manager_on_board(monkeypatch, "3.2.3b1", "3.2.2")
+    fm, installed = _manager_on_board(monkeypatch, "3.4.3b1", "3.4.2")
     prompts = []
     monkeypatch.setattr(
         "firestarter.firmware.Confirm.ask",
         lambda prompt, **_kw: prompts.append(prompt) or False,
     )
-    assert fm.manage_firmware_update(app_version="3.2.6")
-    assert prompts == ["Install firmware 3.2.2 for uno (current: 3.2.3b1)?"]
+    assert fm.manage_firmware_update(app_version="3.4.6")
+    assert prompts == ["Install firmware 3.4.2 for uno (current: 3.4.3b1)?"]
     assert installed == []
 
 
 def test_prerelease_cli_keeps_a_newer_prerelease_board(monkeypatch) -> None:
-    fm, installed = _manager_on_board(monkeypatch, "3.2.3b1", "3.2.2")
-    assert fm.manage_firmware_update(install_flag=True, app_version="3.2.7b2")
+    fm, installed = _manager_on_board(monkeypatch, "3.4.3b1", "3.4.2")
+    assert fm.manage_firmware_update(install_flag=True, app_version="3.4.7b2")
     assert installed == []

@@ -34,14 +34,14 @@ LEONARDO_BUFFER_SIZE = 1024
 MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
 
 # Command-channel frame size limit — Firmware sync: firestarter.h CMD_FRAME_MAX
-# Largest legitimate JSON command (~422 B) + headroom = 512; equals BUFFER_SIZE.
+# The transport's frame cap; a binary command frame is at most 65 B.
 # Firmware parity: firestarter.h #define CMD_FRAME_MAX DATA_BUFFER_SIZE
 # per CLAUDE.md constant-parity rule.
 CMD_FRAME_MAX = 512
 
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
-# cmd field values sent in JSON commands to the Arduino firmware.
+# cmd values carried in the header of each binary command frame.
 # The ladder now reaches 16 (COMMAND_LOCK_STATUS). Per
 # CLAUDE.md's constants-are-duplicated rule, this ladder and firmware's
 # CMD_* ladder in firestarter.h move together — every addition here must be
@@ -122,7 +122,7 @@ COMMAND_NAMES = {
 }
 
 # Control Flags — Firmware sync: firestarter.h
-# flags bitmask values sent in JSON commands.
+# flags bitmask values carried in the header of each binary command frame.
 FLAG_FORCE = 0x01
 FLAG_CAN_ERASE = 0x02
 FLAG_SKIP_ERASE = 0x04
@@ -161,31 +161,21 @@ FLAG_VERBOSE = 0x80
 # argument. See test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on.
 FLAG_SKIP_SDP_UNLOCK = 0x100
 
-# Dev sweep knobs — Firmware sync: json_parser.c (key_read_settling, key_read_strobe)
-# JSON key name strings for host-tunable read-timing parameters.
-# MUST stay in sync with the PROGMEM key strings in firmware json_parser.c.
-# Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
-JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
-JSON_KEY_READ_STROBE_US = "read-strobe-us"
-# Per-chip page size wire field. Emitted by database.py's
-# convert_to_programmer only when the DB supplies a page_size --
-# emit-when-present, mirrors the chip-id pattern. When absent, firmware
-# falls back to its own named AT28C page-size floor constant.
-# Firmware sync: json_parser.c (key_page_size).
-# (firestarter commit 58c6a3c) -- the PROGMEM string exists and is dispatched
-# from key_parsers[].
-JSON_KEY_PAGE_SIZE = "page-size"
-# Absolute, exclusive end address of the operation's region. Emitted by
-# _setup_operation in eprom_operations.py, not by database.py's
-# convert_to_programmer -- the region is a property of the operation (which
-# bytes are being written), not of the chip row.
-# Absent-semantics are the OPPOSITE of page-size above: absent means the
-# WHOLE DEVICE. page-size guards a destructive write, so refusing on
-# absence is the safe direction there; this field guards a relaxation of an
-# existing whole-device check, so falling back to the stricter existing
-# behaviour on absence is the safe direction here instead.
-# Firmware sync: json_parser.c (key_region_end).
-JSON_KEY_REGION_END = "region-end"
+# Firmware sync: firestarter.h FLAG_SKIP_FINAL_VERIFY. Drops the board's final
+# full-block verify pass on 0x07/0x08 when `write --verify` reads the region
+# back on the host. Firmware without it ignores the bit and verifies anyway.
+FLAG_SKIP_FINAL_VERIFY = 0x200
+
+# Command-dict keys are generated: command_frame.KEY_* (from the meta repo's
+# tools/protocol/command_frame.toml). Absent-semantics of two of them:
+# - KEY_PAGE_SIZE: emitted by database.convert_to_programmer only when the DB
+#   supplies a page size. When absent, firmware falls back to its own named
+#   AT28C page-size floor constant.
+# - KEY_REGION_END: emitted by _setup_operation in eprom_operations.py, because
+#   the region is a property of the operation, not of the chip row. Absent
+#   means the WHOLE DEVICE, the opposite of page-size: this field guards a
+#   relaxation of an existing whole-device check, so falling back to the
+#   stricter behaviour on absence is the safe direction.
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
 # Documentary only — Python does not write the control register directly

@@ -10,12 +10,13 @@ same real part.
 
 **What this module proves:**
 
-- HOST-01 / D-09: a firmware-advertised per-block write-time budget
-  (``write_block_budget_s``, CAP-03) is used **verbatim** as the MAIN-phase
-  ``get_response`` timeout on the write path -- no host-side multiplier.
-- D-10: an absent, zero, or implausibly-large advertisement falls back to a
-  derived, generous, fixed timeout -- never the old 10 s default and never a
-  refusal.
+- HOST-01: the host's own per-block write-time budget
+  (``write_budget.block_budget_s``, from the command's algorithm and
+  pulse-delay and the firmware's block size) is used **verbatim** as the
+  MAIN-phase ``get_response`` timeout on the write path. The firmware used
+  to send this figure in its ack; it no longer does.
+- A protocol with no 27C EPROM row falls back to a generous fixed timeout --
+  never the old 10 s default and never a refusal.
 - D-12 (the most important claim here): every non-write path -- ``verify``,
   ``blank-check``, ``erase`` -- keeps waiting exactly
   ``DEFAULT_RESPONSE_TIMEOUT``, so a genuinely dead board still reports in
@@ -30,13 +31,13 @@ same real part.
   driver docstring below describes.
 - D-13: the write's INIT/END phases (``_execute_phase``) are untouched --
   they keep their bare, argument-free ``get_response()`` call regardless of
-  what MAIN-phase budget was advertised.
+  what MAIN-phase budget applies.
 - Pitfall 6 (`143-RESEARCH.md`): none of these tests wait out a real
   timeout. ``_FakeSerial.read()`` returns ``b""`` immediately when its
   buffer is empty, and ``_read_and_parse_lines`` responds with
   ``time.sleep(0.001); continue`` **without** resetting ``start_time``
   (``firestarter/serial_comm.py``) -- so a naive test that "feeds nothing
-  and asserts no timeout" would run for the full advertised budget (120 s,
+  and asserts no timeout" would run for the full write budget (120 s,
   or thousands of seconds against a real one). Tests 1-5 use the
   **call-argument oracle**: wrap ``SerialCommunicator.get_response`` and
   assert the ``timeout`` value it was actually called with, which is exact
@@ -191,7 +192,8 @@ def _drive_data_operation_and_record_timeouts(
     fake_serial,
     *,
     method_name: str,
-    advertised_budget: int | None = None,
+    pulse_delay: int | None = None,
+    max_chunk: int | None = None,
 ):
     """Drive ``write_eprom`` or ``verify_eprom`` (both share
     ``_main_phase_send_data``) against ``_REAL_27C_CHIP`` through a fake
@@ -203,14 +205,11 @@ def _drive_data_operation_and_record_timeouts(
     proves the two methods diverge only in whether ``response_timeout`` is
     threaded in.
 
-    ``advertised_budget`` sets ``write_block_budget_s`` directly on the
-    ``make_comm()`` instance BEFORE it is returned from
-    ``_fake_find_and_connect`` -- simulating what CAP-03's decode arm would
-    have populated from a real ack, without needing a real ack frame.
-    ``None`` simulates CAP-03 absent (a released beta firmware with CAP-02
-    but not CAP-03, or a v1.31 build after 143-03's CAP-02 port but before
-    its CAP-03 append -- corrected D-10 non-claim: NOT a mid-milestone
-    v1.31 build, which BF-1 shows cannot connect at all).
+    ``pulse_delay`` overrides the command's ``pulse-delay`` and
+    ``max_chunk`` sets ``firmware_max_chunk`` on the ``make_comm()``
+    instance (what the ack's buffer-size field would have set). Together
+    they fix the inputs of the host's own budget calculation
+    (``write_budget.block_budget_s``).
 
     Feeds exactly ``MSG_INIT_DONE``, [``MSG_OK_REQ_DATA`` for
     ``write_eprom`` / ``MSG_DATA_CHUNK`` for ``verify_eprom``],
@@ -244,11 +243,14 @@ def _drive_data_operation_and_record_timeouts(
 
     def _fake_find_and_connect(command_dict, config, **kwargs):
         instance = make_comm()
-        instance.write_block_budget_s = advertised_budget
+        if max_chunk is not None:
+            instance.firmware_max_chunk = max_chunk
         return instance
 
     db = EpromDatabase(skip_local_override=True)
     programmer_dict = resolve_chip(_REAL_27C_CHIP, db=db)
+    if pulse_delay is not None:
+        programmer_dict["pulse-delay"] = pulse_delay
 
     calls: list = []
     operator = EpromOperator(ConfigManager())
@@ -265,7 +267,12 @@ def _drive_data_operation_and_record_timeouts(
 
 
 def _drive_write_and_record_timeouts(
-    tmp_path, make_comm, fake_serial, *, advertised_budget: int | None
+    tmp_path,
+    make_comm,
+    fake_serial,
+    *,
+    pulse_delay: int | None = None,
+    max_chunk: int | None = None,
 ):
     """``write_eprom``-only convenience wrapper over
     ``_drive_data_operation_and_record_timeouts`` -- see its docstring.
@@ -275,7 +282,8 @@ def _drive_write_and_record_timeouts(
         make_comm,
         fake_serial,
         method_name="write_eprom",
-        advertised_budget=advertised_budget,
+        pulse_delay=pulse_delay,
+        max_chunk=max_chunk,
     )
 
 
@@ -377,79 +385,58 @@ def _drive_blank_check_and_record_timeouts(make_comm, fake_serial):
     return ok, calls
 
 
-def test_write_uses_advertised_budget(tmp_path, make_comm, fake_serial) -> None:
-    """HOST-01 / D-09: an advertised budget is used VERBATIM on the write
-    path. A 250 s advertisement must produce a MAIN-phase ``get_response``
-    timeout of exactly 250.0 -- never ``250 * anything`` and never the old
-    10 s default -- because the firmware already padded the figure (its own
-    ``delay(500)`` VPE settle, the final full-block verify pass and the
-    per-pulse settle are folded in); the host must not multiply on top.
-    """
+# 0x07 at 1000 us on a 1024-byte block: 25 pulses x 1000 us x 1024 B =
+# 25.6 s, ceil 26, padded 26 x 2 + 2 = 54 s.
+_BUDGET_0X07_1000US_1024B = 54.0
+
+
+def test_write_uses_the_host_calculated_budget(
+    tmp_path, make_comm, fake_serial
+) -> None:
+    """The write path's MAIN-phase timeout is the host's own
+    ``write_budget.block_budget_s`` for this command, used verbatim -- never
+    multiplied and never the 10 s default."""
     ok, calls = _drive_write_and_record_timeouts(
-        tmp_path, make_comm, fake_serial, advertised_budget=250
+        tmp_path, make_comm, fake_serial, pulse_delay=1000, max_chunk=1024
     )
-    assert ok is True, "HOST-01: the driven write must complete successfully"
+    assert ok is True, "the driven write must complete successfully"
 
     main_phase_timeouts = [_timeout_of(c) for c in _main_phase_calls(calls)]
-    assert 250.0 in main_phase_timeouts, (
-        "HOST-01/D-09: expected a MAIN-phase get_response call with "
-        f"timeout=250.0 (the advertised budget, used verbatim); got "
-        f"{main_phase_timeouts}"
-    )
-    assert DEFAULT_RESPONSE_TIMEOUT not in main_phase_timeouts, (
-        "D-09: the write path must never fall back to DEFAULT_RESPONSE_TIMEOUT "
-        f"when a budget was advertised; got {main_phase_timeouts}"
+    assert all(t == _BUDGET_0X07_1000US_1024B for t in main_phase_timeouts), (
+        f"expected every MAIN-phase timeout to be {_BUDGET_0X07_1000US_1024B}; "
+        f"got {main_phase_timeouts}"
     )
 
 
-def test_absent_budget_falls_back_to_120s(tmp_path, make_comm, fake_serial) -> None:
-    """HOST-01 / D-10: no advertisement (``write_block_budget_s`` stays
-    ``None`` -- the realistic case is a released ``beta`` firmware with
-    CAP-02 but not CAP-03, or a v1.31 build after 143-03's CAP-02 port but
-    before its CAP-03 append; corrected from D-10's own wording, NOT a
-    mid-milestone v1.31 build, which BF-1 shows cannot connect at all) must
-    fall back to the derived ``WRITE_BLOCK_TIMEOUT_FALLBACK_S`` (120.0).
-    Mirrors ``_calculate_buffer_size``'s precedent: Phase 54's
-    ``FirmwareOutdatedError`` was reversed into exactly this shape -- absent
-    means safe default, never an error and never a refusal.
-    """
+def test_the_budget_follows_the_firmware_block_size(
+    tmp_path, make_comm, fake_serial
+) -> None:
+    """With no buffer size in the ack the host uses the 512-byte floor, and
+    the budget is calculated for that block: 25 x 1000 us x 512 B = 12.8 s,
+    ceil 13, padded 28 s."""
     ok, calls = _drive_write_and_record_timeouts(
-        tmp_path, make_comm, fake_serial, advertised_budget=None
+        tmp_path, make_comm, fake_serial, pulse_delay=1000
     )
-    assert ok is True, "HOST-01: the driven write must complete successfully"
+    assert ok is True, "the driven write must complete successfully"
 
     main_phase_timeouts = [_timeout_of(c) for c in _main_phase_calls(calls)]
-    assert all(t == 120.0 for t in main_phase_timeouts), (
-        "D-10: an absent advertisement must fall back to exactly 120.0 on "
-        f"every MAIN-phase call; got {main_phase_timeouts}"
+    assert all(t == 28.0 for t in main_phase_timeouts), main_phase_timeouts
+
+
+def test_a_protocol_without_an_eprom_row_falls_back_to_120s() -> None:
+    """Flash, 0x0D EEPROM and SRAM have no 27C row: the write path uses
+    ``WRITE_BLOCK_TIMEOUT_FALLBACK_S``."""
+    from firestarter.eprom_operations import (
+        WRITE_BLOCK_TIMEOUT_FALLBACK_S,
+        EpromOperator,
     )
 
-
-def test_implausible_budget_is_clamped_away(tmp_path, make_comm, fake_serial) -> None:
-    """D-10: a value that never passed ``serial_comm``'s own
-    ``[1, WRITE_BUDGET_MAX_S]`` decode-time plausibility clamp -- reachable
-    only if something bypassed the decoder and wrote ``write_block_budget_s``
-    directly -- must still fall back to 120.0. This is the consumer's OWN
-    ``[1, WRITE_BUDGET_MAX_S]`` range test, a second line of defence behind
-    the decoder's clamp: a corrupt or hostile ack must not be able to
-    install either a too-tight (``0``) or an unbounded (``999999``) host
-    wait. Two sub-cases, driven on fresh instances (a successful write closes
-    its fake serial port, so the second drive needs its own
-    ``(serial, comm)`` pair -- see ``_fresh_serial_and_comm``).
-    """
-    pairs = [(fake_serial, make_comm), _fresh_serial_and_comm()]
-    for (serial, comm_factory), bad_budget in zip(pairs, (0, 999999)):
-        ok, calls = _drive_write_and_record_timeouts(
-            tmp_path, comm_factory, serial, advertised_budget=bad_budget
+    operator = EpromOperator(ConfigManager())
+    for algorithm in (0x05, 0x0D, 0x28):
+        timeout = operator._write_block_timeout(
+            {"algorithm": algorithm, "pulse-delay": 0}, 1024
         )
-        assert ok is True, "HOST-01: the driven write must complete successfully"
-
-        main_phase_timeouts = [_timeout_of(c) for c in _main_phase_calls(calls)]
-        assert all(t == 120.0 for t in main_phase_timeouts), (
-            f"D-10: an implausible advertised budget ({bad_budget}) must "
-            f"fall back to exactly 120.0 on every MAIN-phase call; got "
-            f"{main_phase_timeouts}"
-        )
+        assert timeout == WRITE_BLOCK_TIMEOUT_FALLBACK_S == 120.0
 
 
 def test_non_write_paths_keep_default_timeout(tmp_path, make_comm, fake_serial) -> None:
@@ -531,7 +518,7 @@ def test_init_and_end_phases_keep_default_timeout(
     tmp_path, make_comm, fake_serial
 ) -> None:
     """D-13: a write's INIT and END phases stay argument-free even though its
-    MAIN phase now uses the advertised budget. The INIT phase of a write
+    MAIN phase uses the write budget. The INIT phase of a write
     (erase plus chunked blank check) emits one ``MSG_DATA_PROGRESS`` per
     chunk and each yielded frame resets the read loop's ``start_time``
     (``firestarter/serial_comm.py``), so its 10 s window is fed by
@@ -541,14 +528,14 @@ def test_init_and_end_phases_keep_default_timeout(
     radius -- this is why ``_execute_phase`` keeps its bare
     ``get_response()`` call untouched.
 
-    The contrast half (MAIN *does* carry the advertised budget) is asserted
+    The contrast half (MAIN *does* carry the budget) is asserted
     in the SAME test and against the SAME drive -- this is also what makes
     the test genuinely fail before Task 2 lands: today nothing is threaded
     at all, so the MAIN calls would be argument-free too, and an INIT/END
     -only assertion would pass on the current code for the wrong reason.
     """
     ok, calls = _drive_write_and_record_timeouts(
-        tmp_path, make_comm, fake_serial, advertised_budget=250
+        tmp_path, make_comm, fake_serial, pulse_delay=1000, max_chunk=1024
     )
     assert ok is True, "D-13: the driven write must complete successfully"
     assert len(calls) == 4, (
@@ -558,18 +545,18 @@ def test_init_and_end_phases_keep_default_timeout(
     init_call, main_call_1, main_call_2, end_call = calls
 
     main_timeouts = [_timeout_of(main_call_1), _timeout_of(main_call_2)]
-    assert 250.0 in main_timeouts, (
+    assert _BUDGET_0X07_1000US_1024B in main_timeouts, (
         "HOST-01: expected this write's own MAIN phase to carry the "
-        f"advertised 250.0 s budget so this test can prove the CONTRAST "
-        f"with INIT/END; got {main_timeouts}"
+        f"{_BUDGET_0X07_1000US_1024B} s budget so this test can prove the "
+        f"CONTRAST with INIT/END; got {main_timeouts}"
     )
 
     for label, call in (("INIT", init_call), ("END", end_call)):
         timeout = _timeout_of(call)
         assert timeout is None, (
             f"D-13: the write's {label}-phase get_response call must stay "
-            "argument-free (bare get_response()) even though a 250 s budget "
-            f"was advertised for the MAIN phase; got timeout={timeout}"
+            "argument-free (bare get_response()) even though the MAIN phase "
+            f"carries a budget; got timeout={timeout}"
         )
 
 
@@ -581,7 +568,7 @@ def test_long_gap_within_budget_does_not_time_out(make_comm, fake_serial) -> Non
     immediately when its buffer is empty, and the read loop sleeps 1 ms per
     empty read without resetting ``start_time`` (``firestarter/serial_comm.py``)
     -- so a naive version of this test, one that actually waited out a real
-    gap, would run for the full advertised budget (120 s, or thousands of
+    gap, would run for the full write budget (120 s, or thousands of
     seconds against a real one).
 
     This test proves ``get_response`` survives a SIMULATED inter-frame gap

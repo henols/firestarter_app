@@ -665,8 +665,9 @@ for one Rev 2.0 shield, with the pot at maximum and the socket empty, in the ben
   the socket through one. The separately measured ratiometric figure (about 7.5 %, range
   6.8–8.3 %) is the only value for the instrument alone. Both values here are inside that range.
   The operating rule stays: set a pot target from a meter reading, never from the firmware value.
-- **The monitor wire format has whole volts and one tenths digit.** Each firmware value is on a
-  100 mV grid, whatever its accuracy.
+- **The monitor wire format had whole volts and one tenths digit.** Each firmware value above is on
+  a 100 mV grid, whatever its accuracy. Later firmware sends millivolts (`MSG_DATA_VPP_MV`,
+  `MSG_DATA_VPE_MV`), so a new measurement is not limited to that grid.
 - **Nobody measured the direct-VPE-to-pin-21 destination.** The twenty direct-VPE rows get VPE
   through `CTRL_VPE_ENABLE` to **pin 21**. This is a different pin from the socket-pin-1 value that
   this section uses. `CTRL_VPE_ENABLE` and `CTRL_VPP_P1_ENABLE` route to different pins. The
@@ -677,7 +678,7 @@ for one Rev 2.0 shield, with the pot at maximum and the socket empty, in the ben
 - **The two Texas Instruments supplement rows at a hardcoded 25000 mV are `UNVERIFIED`**, with no
   write proof. They do not come from the `infoic.xml` decode or from a datasheet-cited override.
 - **The shortfall warning gap.** If a part needs more than the routed rail delivers, the only
-  operator signal is the low-VPP warning of the firmware (`MSG_WARN_VPP_LOW`, `eprom_check_vpp`).
+  operator signal is the low-VPP warning of the firmware (`MSG_WARN_VPP_LOW_MV`, `eprom_check_vpp`).
   The warning names the measured rail and the required voltage, and the operation continues. Its
   trigger is a 5 % window on a reading that is about 7.6 % high. A real shortfall smaller than that
   combined margin can pass with no warning.

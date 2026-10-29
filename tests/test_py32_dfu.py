@@ -838,13 +838,14 @@ class TestPortlessInstall:
         monkeypatch.setattr(_pkg, "__version__", "3.0.0b12")
 
     def _manager(self, monkeypatch, board):
+        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
         fm = FirmwareManager(config_manager=MagicMock())
         # No identity read is possible: the bootloader speaks DFU, not CDC.
         monkeypatch.setattr(
             fm, "check_current_firmware", lambda *a, **kw: (None, None, None)
         )
         monkeypatch.setattr(
-            fm, "fetch_release_info", lambda **kw: ("3.0.0b12", "http://x/fw.bin")
+            fm, "fetch_release_info", lambda **kw: ("3.3.0b12", "http://x/fw.bin")
         )
         monkeypatch.setattr(fm, "_download_firmware_file", lambda url: "/tmp/fw.bin")
         recorded = {}
@@ -887,7 +888,7 @@ class TestPortlessInstall:
         monkeypatch.setattr(
             fm,
             "check_current_firmware",
-            lambda *a, **kw: ("/dev/ttyACM0", "3.0.0b11", "leonardo"),
+            lambda *a, **kw: ("/dev/ttyACM0", "3.3.0b11", "leonardo"),
         )
         monkeypatch.setattr(
             fm,
@@ -903,14 +904,15 @@ class TestPortlessInstall:
 
     def test_default_board_still_yields_to_detection(self, monkeypatch):
         """The default --board=uno must keep deferring to the detected board."""
+        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(
             fm,
             "check_current_firmware",
-            lambda *a, **kw: ("/dev/ttyACM0", "3.0.0b11", "leonardo"),
+            lambda *a, **kw: ("/dev/ttyACM0", "3.3.0b11", "leonardo"),
         )
         monkeypatch.setattr(
-            fm, "fetch_release_info", lambda **kw: ("3.0.0b11", "http://x/fw.hex")
+            fm, "fetch_release_info", lambda **kw: ("3.3.0b11", "http://x/fw.hex")
         )
         # Up to date and not forced: returns True without installing.
         monkeypatch.setattr(

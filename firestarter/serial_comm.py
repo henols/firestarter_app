@@ -7,7 +7,6 @@ Permission is hereby granted under MIT license.
 Serial Communication Module
 """
 
-import json
 import logging
 import os
 import re
@@ -20,6 +19,8 @@ import serial.serialutil
 import serial.tools.list_ports
 
 import firestarter.codec as codec
+import firestarter.command_codec as command_codec
+import firestarter.command_frame as cf
 import firestarter.flash4_erase_gate as flash4_erase_gate
 import firestarter.transport_counters as transport_counters
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
@@ -36,6 +37,7 @@ from firestarter.constants import (
     REVISION_2_3,
 )
 from firestarter.exceptions import (
+    FirmwareFrameVersionError,
     FirmwareOutdatedError,
     HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
@@ -59,7 +61,9 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
 )
 from firestarter.messages import (
     CATALOG,
+    MSG_ERR_BAD_FRAME,
     MSG_ERR_EMPTY_INPUT,
+    MSG_ERR_FRAME_VERSION,
     MSG_ERR_PROTOCOL_NOT_IMPLEMENTED,
     MSG_OK_READY,
 )
@@ -70,18 +74,6 @@ rurp_logger = logging.getLogger("RURP")
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
-# Plausibility ceiling for the firmware-advertised per-block write-time
-# budget decoded by _decode_id_frame's budget arm below. DERIVED,
-# not chosen: the largest value a legitimate firmware could compute is
-# ceil(max_pulses 25 * 65535 us * buffer 4096 B / 1e6) * 2 + 2 = 13424 s,
-# evaluated at the [1, 4096] buffer-size plausibility ceiling --
-# rounded up to 14400 s (4 h). A value outside [1, WRITE_BUDGET_MAX_S] leaves
-# write_block_budget_s unset so the write-path fallback applies, mirroring
-# the buffer-size field's own behaviour exactly. The clamp exists so a
-# malfunctioning or
-# mismatched board cannot wedge the host -- it is not a defense against an
-# adversarial one.
-WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 GENERIC_FRAME_DECODE_ERROR_TEXT = CATALOG[MSG_ERR_EMPTY_INPUT].format
 SETUP_ACK_RECOVERY_TIMEOUT_S = 2.0
@@ -129,12 +121,15 @@ class SerialCommunicator:
     # every one of those into an AttributeError swallowed by the broad
     # `except Exception` in _probe_port, which degrades to "no programmer
     # found". Class defaults of None keep the gates fail-closed instead.
-    # The same ack also carries the firmware's advertised per-block
-    # write-time budget (write_block_budget_s below); the identical
-    # class-level-declaration reasoning applies to it.
     firmware_identity: str | None = None
     hw_revision: int | None = None
-    write_block_budget_s: int | None = None
+    # The message id of the last ERROR that expect_ack returned, so a caller
+    # can tell an unsupported frame from any other refusal. Class-level for
+    # the same reason as the three above.
+    last_ack_error_id: int | None = None
+    # The parameter bytes of that ERROR when the decoder keeps them
+    # (MSG_ERR_FRAME_VERSION), else None.
+    last_ack_error_payload: bytes | None = None
     # The id of an ERROR frame that the caller caused on purpose, so the
     # frame is logged at DEBUG, not ERROR. A read that stops acking at the
     # first mismatch sets it to MSG_ERR_TIMEOUT: the firmware's ack-wait
@@ -155,7 +150,7 @@ class SerialCommunicator:
         self.programmer_info: str | None = None
         # Fault-injection hook — None by default; production path is byte-identical.
         # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
-        # getattr-guarded in send_json_command; this attribute is the formal default.
+        # getattr-guarded in _send_framed; this attribute is the formal default.
         self._fault_inject_outgoing: Callable[[bytes], bytes] | None = None
         # DEPRECATED: firmware_buffer_size was set by the earlier
         # identity-string parse (3rd colon-field). That parse block is removed; capacity
@@ -190,7 +185,6 @@ class SerialCommunicator:
         # never a refusal (mirroring the buffer-size field's own reversal of
         # FirmwareOutdatedError into a safe default). Populated by
         # _decode_id_frame below. Consumed only on the write path.
-        self.write_block_budget_s: int | None = None
         # Bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
@@ -248,24 +242,29 @@ class SerialCommunicator:
         logger.debug(f"Sending string: {data_string}")
         return self.send_bytes(data_string.encode(encoding))
 
-    def send_json_command(self, command_dict: dict) -> int:
-        """Serialise ``command_dict`` as a COBS+CRC8 framed command and send it.
+    def send_command(self, command_dict: dict) -> int:
+        """Encode ``command_dict`` as a binary command frame and send it.
 
-        Frame layout (ADR §4.3):
-            COBS(json_bytes + CRC8(json_bytes)) + 0x00
+        ``command_codec.encode_command`` builds the frame; ``_send_framed``
+        adds the CRC8 and the COBS framing. A dict the frame cannot carry
+        raises ``CommandEncodeError`` before anything reaches the port.
+        """
+        self._log_command_details(command_dict)
+        return self._send_framed(command_codec.encode_command(command_dict))
 
-        Encode order is LOAD-BEARING: CRC8 is computed over the RAW json_bytes
-        FIRST, then the (json_bytes + crc_byte) stream is COBS-encoded as a unit.
+    def _send_framed(self, payload: bytes) -> int:
+        """Send one command payload as ``COBS(payload + CRC8(payload)) + 0x00``.
+
+        Encode order is LOAD-BEARING: CRC8 is computed over the RAW payload
+        FIRST, then the (payload + crc_byte) stream is COBS-encoded as a unit.
         Never COBS-encode first then CRC the body — that would silently break the
         firmware's CRC8 verify (RESEARCH Pitfall 2).
 
         The full frame is assembled as a single ``bytes`` object and passed to
         ``send_bytes()`` in ONE call — a split write is forbidden.
         """
-        self._log_command_details(command_dict)
-        json_bytes = json.dumps(command_dict, separators=(",", ":")).encode("ascii")
-        crc = _crc8_ccitt(json_bytes)
-        body = cobs_encode(json_bytes + bytes([crc]))
+        crc = _crc8_ccitt(payload)
+        body = cobs_encode(payload + bytes([crc]))
         frame = body + b"\x00"
         # FAULT INJECTION — only active when _fault_inject_outgoing is set.
         # Production path: attribute is None by default → no-op.
@@ -386,8 +385,8 @@ class SerialCommunicator:
                 if len(params_bytes) >= 2:
                     value = struct.unpack(">H", params_bytes[:2])[0]
                     # Plausibility clamp: reject values outside [1, 4096].
-                    # No real board exceeds the 1024-byte Leonardo buffer; 4096
-                    # is a generous ceiling. Values outside this range leave
+                    # The largest board buffer is 1536 B (leonardo); 4096 is a
+                    # generous ceiling. Values outside this range leave
                     # firmware_max_chunk unset so the 512 floor applies.
                     if 1 <= value <= 4096:
                         self.firmware_max_chunk = value
@@ -404,28 +403,6 @@ class SerialCommunicator:
                         self.firmware_identity = params_bytes[4:ver_end].decode(
                             "ascii", errors="replace"
                         )
-                        # The budget is appended AFTER the variable-length identity tail.
-                        # The offset MUST be the COMPUTED ver_end, never a fixed index: a
-                        # fixed index works on whichever board's identity string happens to
-                        # be that length and silently misreads on the next. Offsets 2 and 3
-                        # are already claimed, so a budget written there reads back as a
-                        # hardware revision and a version length.
-                        #
-                        # Nested past the ver_end guard because an ack with no identity tail
-                        # cannot carry this field. A truncated tail leaves it None rather
-                        # than yielding a partial value.
-                        if len(params_bytes) >= ver_end + 2:
-                            value = struct.unpack(
-                                ">H", params_bytes[ver_end : ver_end + 2]
-                            )[0]
-                            # Plausibility clamp, mirroring the [1, 4096] buffer-size one
-                            # in spirit: a hostile or corrupt ack
-                            # must not be able to install an unbounded host
-                            # timeout. Values outside this range leave
-                            # write_block_budget_s unset so the fallback
-                            # applies.
-                            if 1 <= value <= WRITE_BUDGET_MAX_S:
-                                self.write_block_budget_s = value
         return result
 
     # =================================================================
@@ -590,6 +567,8 @@ class SerialCommunicator:
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
+        self.last_ack_error_id = None
+        self.last_ack_error_payload = None
         while True:
             response = self.get_response(timeout)
             if response.type == "OK":
@@ -597,6 +576,8 @@ class SerialCommunicator:
             elif response.type == "ERROR":
                 if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
                     raise ProtocolNotImplementedError(response.message)
+                self.last_ack_error_id = response.id
+                self.last_ack_error_payload = response.payload
                 return False, response.message
             # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
@@ -885,7 +866,7 @@ class SerialCommunicator:
         # until firestarter_operation_init, which blocks on
         # op_wait_for_ack(). Raising below means that ack is never sent, so
         # the operation never starts and the rail stays down.
-        self.send_json_command(command_to_send)
+        self.send_command(command_to_send)
         is_ok, msg = self.expect_ack()
 
         if msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
@@ -901,6 +882,14 @@ class SerialCommunicator:
                 if remaining <= 0:
                     break
                 is_ok, msg = self.expect_ack(timeout=remaining)
+
+        if not is_ok and self.last_ack_error_id == MSG_ERR_FRAME_VERSION:
+            self._refuse_frame_version()
+
+        if not is_ok and self.last_ack_error_id == MSG_ERR_BAD_FRAME:
+            is_ok, msg = self._recover_from_unsupported_frame(
+                command_to_send, allow_outdated_firmware
+            )
 
         if not is_ok:
             logger.debug(f"Port {self.port_name} responded but not with OK: {msg}")
@@ -983,6 +972,68 @@ class SerialCommunicator:
         config_manager.remember_port(self.port_name)  # never promotes a typed --port
         return True
 
+    def _refuse_frame_version(self) -> None:
+        """Raise FirmwareFrameVersionError for a MSG_ERR_FRAME_VERSION ack.
+
+        The firmware read the binary magic and refused the frame version, so it
+        is binary firmware of another frame version, never JSON-era firmware.
+        No path resends anything, the firmware-update read path included: a
+        JSON query would only draw a MSG_ERR_BAD_FRAME. The parameter is the
+        frame version the firmware reads, and it names the side to upgrade.
+        """
+        payload = self.last_ack_error_payload or b""
+        firmware = payload[0] if payload else 0
+        if firmware > cf.VERSION:
+            advice = (
+                "The firmware is newer than this CLI. Upgrade the CLI: "
+                "'pip install --upgrade firestarter'."
+            )
+        else:
+            advice = (
+                "The firmware is older than this CLI. Upgrade the firmware "
+                "using 'firestarter fw --install'."
+            )
+        raise FirmwareFrameVersionError(
+            f"The firmware on {self.port_name} reads command frame version "
+            f"{firmware}, and this CLI sends version {cf.VERSION}. {advice}",
+            firmware=firmware,
+            host=cf.VERSION,
+        )
+
+    def _recover_from_unsupported_frame(
+        self, command_to_send: dict, allow_outdated_firmware: bool
+    ) -> Tuple[bool, str | None]:  # noqa: UP006
+        """Handle MSG_ERR_BAD_FRAME, the firmware's answer to a frame it cannot read.
+
+        Firmware from before the binary command protocol parses every frame
+        as JSON, and jsmn rejects the binary magic byte, so it answers every
+        binary command with this id. Binary firmware answers a frame version
+        it does not read with MSG_ERR_FRAME_VERSION instead, so this id means
+        JSON-era firmware (or a frame corrupted past the CRC). A chip
+        operation must refuse: this host has no JSON command path.
+
+        The firmware-update read path is the one exception, for the same
+        reason it waives the version gate: it reads the version of firmware
+        it is about to replace. It resends the version query once, as the
+        JSON that firmware understands. No other command is ever sent as JSON.
+        """
+        is_version_read = (
+            command_codec.command_ordinal(command_to_send) == COMMAND_FW_VERSION
+        )
+        if not (allow_outdated_firmware and is_version_read):
+            raise FirmwareOutdatedError(
+                f"The firmware on {self.port_name} cannot read this host's "
+                f"binary command frames; it predates the binary command "
+                f"protocol. Please upgrade the firmware using "
+                f"'firestarter fw --install'."
+            )
+        logger.debug(
+            f"{self.port_name}: firmware refused the binary version query; "
+            f"resending it as JSON because this is the firmware-update read path."
+        )
+        self._send_framed(command_codec.encode_legacy_fw_version_query(command_to_send))
+        return self.expect_ack()
+
     @staticmethod
     def _probe_port(
         port_name: str,
@@ -1011,7 +1062,7 @@ class SerialCommunicator:
             logger.debug(f"Probing for programmer on {port_name}...")
             communicator = SerialCommunicator(port=port_name, baud_rate=baud_rate)
             # Dev-only: arm the outgoing-frame fault BEFORE
-            # the first send_json_command below. Default None => production no-op.
+            # the first send_command below. Default None => production no-op.
             if fault_inject_outgoing is not None:
                 communicator._fault_inject_outgoing = fault_inject_outgoing
             communicator.consume_remaining_input()
@@ -1100,12 +1151,17 @@ class SerialCommunicator:
 
         ``fault_inject_outgoing`` (dev-only) installs an
         outgoing-frame mutation hook on each probed communicator BEFORE the first
-        ``send_json_command`` (the setup/handshake command). It defaults to None, so
+        ``send_command`` (the setup/handshake command). It defaults to None, so
         the production path is byte-identical. It exists because a READ's
         MAIN phase emits only plaintext acks (``send_string``) — the setup command
         sent here is the ONLY corruptible host→fw command frame, so the outgoing
         fault MUST be injected at connection time, not after setup.
         """
+        # Encode once before any port is opened, so a dict the command frame
+        # cannot carry raises CommandEncodeError here instead of failing every
+        # probe and surfacing as "no programmer found".
+        command_codec.encode_command(command_to_send)
+
         # Was the port named on THIS invocation, or merely remembered from a
         # previous successful run? `cli()` records a typed --port with
         # persist=False, and every command reads it back out of the in-memory
@@ -1258,7 +1314,7 @@ if __name__ == "__main__":
         )
 
         # Example: Send another command after connection
-        # comm.send_json_command({"state": STATE_HW_VERSION})
+        # comm.send_command({"state": STATE_HW_VERSION})
         ok, msg = comm.expect_ack()
         if ok:
             logger.info(f"Hardware version: {msg}")

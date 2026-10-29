@@ -21,7 +21,8 @@ from typing import BinaryIO, Callable, Dict, Tuple  # noqa: UP035
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from firestarter import transport_counters
+from firestarter import command_frame as cf
+from firestarter import transport_counters, write_budget
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.compare import (
     MAX_RETAINED_RANGES,
@@ -44,12 +45,10 @@ from firestarter.constants import (
     COMMAND_WRITE,
     FLAG_FORCE,
     FLAG_SKIP_ERASE,
+    FLAG_SKIP_FINAL_VERIFY,
     FLAG_SKIP_SDP_UNLOCK,
     FLAG_VERBOSE,
     FLAG_VPE_AS_VPP,
-    JSON_KEY_READ_SETTLING_DELAY,
-    JSON_KEY_READ_STROBE_US,
-    JSON_KEY_REGION_END,
 )
 from firestarter.exceptions import (
     EpromOperationError,
@@ -71,7 +70,6 @@ from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
     CONNECTION_STABILIZE_DELAY,
     DEFAULT_RESPONSE_TIMEOUT,
-    WRITE_BUDGET_MAX_S,
     SerialCommunicator,
 )
 from firestarter.timestamps import iso_cet_basic
@@ -153,15 +151,9 @@ _TIMEOUT_ADDR_RE = re.compile(r"at 0x([0-9a-fA-F]+)")
 # page-write flash family (protocol 0x05, FLASH_AMD_STD).
 _FLASH4_PROTOCOL_ID = 5
 
-# Fallback write-path response timeout, used when the firmware advertises no
-# per-block write-time budget. DERIVED, not picked: the worst shipped-database
-# block time with no advertisement is 0x0B at 50 ms/byte x 1024 B = 51.2 s, and
-# 0x07/0x08 at 25 x 1000 us x 1024 B = 25.6 s, so this is over 2x the worst
-# shipped case -- and it covers every REACHABLE 0x0B width, whose per-byte
-# bound cannot exceed 99998 us.
-#
-# Residual gap, stated: 0x07/0x08 only, at ~4687 us/byte on a Leonardo and
-# ~9375 us on an Uno.
+# Fallback write-path response timeout, for a protocol that has no 27C EPROM
+# row in write_budget.EPROM_ROWS. Those protocols (flash, 0x0D EEPROM, SRAM)
+# program a block in well under a second, so this is a generous ceiling.
 WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
 # the three per-byte program-budget ids _budget_failure_hint_
@@ -312,6 +304,7 @@ def build_flags(
     skip_erase=False,
     *,
     skip_sdp_unlock: bool = False,
+    skip_final_verify: bool = False,
 ):
     # skip_sdp_unlock is keyword-only BY REQUIREMENT, not by style: both
     # production callers (cli_handlers.py build_arg_flags / _build_op_flags)
@@ -347,6 +340,10 @@ def build_flags(
     # the handler's job, not this function's.
     if skip_sdp_unlock:
         flags |= FLAG_SKIP_SDP_UNLOCK
+    # Set for `write --verify` only: the host reads the region back, so the
+    # board's own final pass would read every block a second time.
+    if skip_final_verify:
+        flags |= FLAG_SKIP_FINAL_VERIFY
 
     return flags
 
@@ -602,27 +599,20 @@ class EpromOperator:
         # Safe Uno-floor default: absent advertisement -> 512.
         return 512
 
-    def _write_block_timeout(self) -> float:
+    def _write_block_timeout(self, cmd_data: dict, buffer_size: int) -> float:
         """Return the per-response wait for a write's MAIN phase, in seconds.
 
-        The firmware's advertised budget is used VERBATIM -- it is already
-        padded firmware-side, so the host applies no multiplier.
-
-        An absent, truncated or implausible advertisement falls back to the
-        derived constant, never an error and never a refusal.
-
-        The range test is a second line of defence behind the decoder's own
-        plausibility clamp: a value outside it can only arrive if something
-        bypassed the decoder. Too-small and implausibly-large fall back
-        identically, so a corrupt or hostile ack can install neither a
-        too-tight nor an unbounded host wait.
-
-        MUST be called from inside `write_eprom`'s operation context: that
-        block's finally sets `self.comm` to None on exit, so a later call would
-        always take the None branch.
+        `write_budget.block_budget_s` gives the padded worst case for one
+        block of a 27C EPROM protocol, from the command's own algorithm and
+        pulse-delay and the firmware's block size. It is used verbatim: the
+        padding is already in it. Any other protocol uses the fallback.
         """
-        budget = getattr(self.comm, "write_block_budget_s", None) if self.comm else None
-        if budget is not None and 1 <= budget <= WRITE_BUDGET_MAX_S:
+        budget = write_budget.block_budget_s(
+            int(cmd_data.get(cf.KEY_PROTOCOL, 0)),
+            int(cmd_data.get(cf.KEY_PULSE_DELAY, 0)),
+            buffer_size,
+        )
+        if budget is not None:
             return float(budget)
         return WRITE_BLOCK_TIMEOUT_FALLBACK_S
 
@@ -701,7 +691,7 @@ class EpromOperator:
         # own premise expires in Phase 205, which removes the firmware-side
         # write-init blank check this key exists to scope.
         if region_length is not None and region_length > 0 and cmd == COMMAND_WRITE:
-            command_dict[JSON_KEY_REGION_END] = addr + region_length
+            command_dict[cf.KEY_REGION_END] = addr + region_length
 
         # SESS-01 (Phase 206): the lease's second-and-later setup. Taken only
         # when a lease is active AND the held link is still connected --
@@ -1433,9 +1423,9 @@ class EpromOperator:
                     eprom_data_dict
                 )  # shallow copy — never mutate caller's dict
                 if read_settling_us:
-                    eprom_data_dict[JSON_KEY_READ_SETTLING_DELAY] = read_settling_us
+                    eprom_data_dict[cf.KEY_READ_SETTLING_US] = read_settling_us
                 if read_strobe_us:
-                    eprom_data_dict[JSON_KEY_READ_STROBE_US] = read_strobe_us
+                    eprom_data_dict[cf.KEY_READ_STROBE_US] = read_strobe_us
 
             # Run loop: N reads through the production state machine
             results = []  # list of (run_i, sha_hex, bytes_written)
@@ -1735,7 +1725,7 @@ class EpromOperator:
         # Outgoing: the hook is threaded into _operation_context so it corrupts the
         #   SETUP command frame at connection time. This is the ONLY corruptible
         #   host->fw command frame — a READ's MAIN phase emits plaintext acks
-        #   (send_string), never send_json_command, so the previous "set the hook
+        #   (send_string), never send_command, so the previous "set the hook
         #   after setup" wiring never fired -- a false negative. The firmware rejects the
         #   corrupt frame (CRC8-before-parse / inter-byte timeout) -> connection setup
         #   fails with a bounded error == the expected outcome.
@@ -2005,7 +1995,7 @@ class EpromOperator:
             comm.consume_remaining_input()
 
             # 1. Baseline clean command on the open connection.
-            comm.send_json_command(fw_cmd)
+            comm.send_command(fw_cmd)
             baseline_ok, _ = comm.expect_ack()
             comm.consume_remaining_input()
             if not baseline_ok:
@@ -2014,7 +2004,7 @@ class EpromOperator:
                 # 2. One corrupted command frame, timed to the firmware error response.
                 comm._fault_inject_outgoing = hook  # type: ignore[attr-defined]
                 _t0 = time.monotonic()
-                comm.send_json_command(fw_cmd)
+                comm.send_command(fw_cmd)
                 try:
                     corrupt_is_ok, corrupt_msg = comm.expect_ack()
                 except SerialTimeoutError as e:
@@ -2028,7 +2018,7 @@ class EpromOperator:
                 )
 
                 # 3. Recovery: clean command on the SAME open connection.
-                comm.send_json_command(fw_cmd)
+                comm.send_command(fw_cmd)
                 try:
                     recovery_ok, _ = comm.expect_ack()
                 except SerialTimeoutError:
@@ -2710,21 +2700,16 @@ class EpromOperator:
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
 
-            # _write_block_timeout() MUST be read here,
-            # inside this `with` block -- _operation_context's `finally`
-            # disconnects and sets self.comm to None once it exits (same
-            # constraint the seen_message_ids check below already relies
-            # on). _run_state_machine forwards **handler_kwargs verbatim to
-            # main_phase_handler (confirmed by reading it), so no
-            # _run_state_machine signature change is needed for this to
-            # reach _main_phase_send_data's new response_timeout kwarg.
+            # _run_state_machine forwards **handler_kwargs verbatim to
+            # main_phase_handler, so response_timeout reaches
+            # _main_phase_send_data unchanged.
             is_ok, _ = self._run_state_machine(
                 op_name,
                 main_phase_handler=self._main_phase_send_data,
                 input_file_path=input_file_path,
                 buffer_size=buf_size,
                 eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
-                response_timeout=self._write_block_timeout(),
+                response_timeout=self._write_block_timeout(cmd_data, buf_size),
             )
 
             # WRITE-04/WRITE-05 (Phase 203): record the write phase's own
@@ -3007,7 +2992,7 @@ class EpromOperator:
         # region_length here -- it does not call require_page_alignment,
         # which is where that computation already lives on the write path.
         # This value is NOT forwarded to _operation_context as region_length
-        # below: that kwarg only reaches the wire as JSON_KEY_REGION_END for
+        # below: that kwarg only reaches the wire as cf.KEY_REGION_END for
         # cmd == COMMAND_WRITE (_setup_operation's guard, an equality since
         # Phase 204 retired COMMAND_VERIFY -- the write path is now the only
         # composer of that key), and this path composes COMMAND_READ, so

@@ -89,7 +89,6 @@ def _comm_factory_for(serial: _FakeSerial):
         instance.firmware_max_chunk = None
         instance.firmware_identity = None
         instance.hw_revision = None
-        instance.write_block_budget_s = None
         instance.seen_message_ids = set()
         return instance
 
@@ -953,3 +952,29 @@ def test_write_verify_calls_verify_eprom_with_size_str_none_and_force_flag(
     kwargs = operator.verify_eprom.call_args.kwargs
     assert kwargs["size_str"] is None
     assert kwargs["suppress_verdict_line"] is True
+
+
+def test_write_verify_tells_the_board_to_skip_its_final_pass(
+    runner: CliRunner,
+) -> None:
+    """`--verify` reads the whole region back on the host, so the write sends
+    FLAG_SKIP_FINAL_VERIFY: the board's own final pass would read every block
+    a second time. A plain write leaves the bit clear."""
+    from firestarter.constants import FLAG_SKIP_FINAL_VERIFY
+
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
+    _run_write(runner, operator, extra_args=["--verify"])
+    flags = operator.write_eprom.call_args.kwargs["operation_flags"]
+    assert flags & FLAG_SKIP_FINAL_VERIFY
+    # The read-back itself is not a write: it never carries the bit.
+    verify_flags = operator.verify_eprom.call_args.kwargs["operation_flags"]
+    assert not verify_flags & FLAG_SKIP_FINAL_VERIFY
+
+    plain = Mock(spec=EpromOperator)
+    plain.write_eprom.return_value = True
+    _run_write(runner, plain)
+    assert not plain.write_eprom.call_args.kwargs["operation_flags"] & (
+        FLAG_SKIP_FINAL_VERIFY
+    )
