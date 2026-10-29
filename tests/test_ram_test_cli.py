@@ -35,13 +35,13 @@ def _app() -> tuple[AppContext, MagicMock]:
     return make_app_context(eprom_operator=operator), operator
 
 
-def _invoke(runner: CliRunner, app: AppContext, chip: str):
-    return runner.invoke(cli, ["ram-test", chip], obj=app)
+def _invoke(runner: CliRunner, app: AppContext, chip: str, *options: str):
+    return runner.invoke(cli, ["ram-test", chip, *options], obj=app)
 
 
 def test_pass_exits_zero(runner: CliRunner) -> None:
     app, operator = _app()
-    operator.ram_test.return_value = (True, None)
+    operator.ram_test.return_value = (True, None, None)
 
     result = _invoke(runner, app, "62256")
 
@@ -56,6 +56,7 @@ def test_bad_cell_exits_one_with_the_failure(runner: CliRunner) -> None:
     operator.ram_test.return_value = (
         False,
         RamTestFailure(element=3, address=0x2000, expected=0x00, actual=0x04),
+        "RAM test failed in March element 3",
     )
 
     result = _invoke(runner, app, "62256")
@@ -63,15 +64,15 @@ def test_bad_cell_exits_one_with_the_failure(runner: CliRunner) -> None:
     assert result.exit_code == 1, result.output
     assert "RAM test FAILED: 62256" in result.output
     assert "0x002000" in result.output
-    assert "Bad bits: 0x04" in result.output
+    assert "Bad bits:   0x04" in result.output
 
 
 @pytest.mark.parametrize(
     ("chip", "text"),
     [
         ("AT28C256", "not a RAM"),
-        ("FM1608", "without power"),
-        ("DS1225(TEST)", "without power"),
+        ("FM1608", "Use --force"),
+        ("DS1225(TEST)", "Use --force"),
     ],
 )
 def test_refusal_exits_two_without_opening_the_port(
@@ -84,6 +85,41 @@ def test_refusal_exits_two_without_opening_the_port(
     assert result.exit_code == 2, result.output
     assert text in result.output
     operator.ram_test.assert_not_called()
+
+
+@pytest.mark.parametrize("chip", ["FM1608", "DS1225(TEST)"])
+def test_force_runs_a_non_volatile_part_with_a_warning(
+    runner: CliRunner, chip: str
+) -> None:
+    app, operator = _app()
+    operator.ram_test.return_value = (True, None, None)
+
+    result = _invoke(runner, app, chip, "--force")
+
+    assert result.exit_code == 0, result.output
+    assert "all data on this part will be overwritten" in result.output
+    assert "RAM test PASSED" in result.output
+    operator.ram_test.assert_called_once()
+
+
+def test_force_does_not_run_a_part_that_is_not_a_ram(runner: CliRunner) -> None:
+    app, operator = _app()
+
+    result = _invoke(runner, app, "AT28C256", "--force")
+
+    assert result.exit_code == 2, result.output
+    assert "not a RAM" in result.output
+    operator.ram_test.assert_not_called()
+
+
+def test_a_volatile_part_prints_no_warning(runner: CliRunner) -> None:
+    app, operator = _app()
+    operator.ram_test.return_value = (True, None, None)
+
+    result = _invoke(runner, app, "62256", "--force")
+
+    assert result.exit_code == 0, result.output
+    assert "overwritten" not in result.output
 
 
 def test_unknown_chip_exits_two(runner: CliRunner) -> None:
@@ -115,12 +151,35 @@ def test_communication_error_exits_two(runner: CliRunner) -> None:
     assert "port gone" in result.output
 
 
-def test_incomplete_test_exits_two_with_the_firmware_text(runner: CliRunner) -> None:
+def test_incomplete_test_exits_two_with_the_reason(runner: CliRunner) -> None:
     app, operator = _app()
-    operator.ram_test.return_value = (False, None)
-    operator.last_firmware_error_message = "Command timeout"
+    operator.ram_test.return_value = (False, None, "Command timeout")
 
     result = _invoke(runner, app, "62256")
 
     assert result.exit_code == 2, result.output
     assert "did not complete: Command timeout" in result.output
+
+
+def test_a_setup_failure_exits_two_and_says_so(runner: CliRunner) -> None:
+    app, operator = _app()
+    operator.ram_test.return_value = (False, None, "could not set up the operation")
+
+    result = _invoke(runner, app, "62256")
+
+    assert result.exit_code == 2, result.output
+    assert "did not complete: could not set up the operation" in result.output
+
+
+def test_an_earlier_operation_error_is_not_reported(runner: CliRunner) -> None:
+    """The CLI reports only the reason that ram_test returns. Text left on
+    the operator by an earlier operation never reaches the output."""
+    app, operator = _app()
+    operator.last_firmware_error_message = "an earlier operation failed"
+    operator.ram_test.return_value = (False, None, None)
+
+    result = _invoke(runner, app, "62256")
+
+    assert result.exit_code == 2, result.output
+    assert "did not complete: no response" in result.output
+    assert "earlier operation" not in result.output

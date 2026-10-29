@@ -86,7 +86,7 @@
     id        Checks an EPROM, if supported.
     info      EPROM info.
     list      List all EPROMs in the database.
-    ram-test  Tests a volatile SRAM with the March C- algorithm.
+    ram-test  Tests an SRAM with the March C- algorithm.
     read      Reads the content from an EPROM.
     search    Search for EPROMs in the database.
     verify    Verifies the content of an EPROM.
