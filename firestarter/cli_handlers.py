@@ -27,6 +27,7 @@ from firestarter import (
     jp5_gate,
     log_capture,
     page_size_gate,
+    ram_test,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
     write_blank_guard,
@@ -105,6 +106,7 @@ from firestarter.lock_status import (
     render_lock_status,
 )
 from firestarter.logging_utils import SingleLineStatusHandler
+from firestarter.messages import MSG_ERR_UNKNOWN_CMD
 from firestarter.protection_readability import (
     GATE_TOKEN_READ_PERMITTED,
     protection_gate_for_entry,
@@ -1548,6 +1550,71 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
     sys.exit(0 if res else 1)
 
 
+@cli.command(name="ram-test")
+@click.argument("eprom", shell_complete=_complete_eprom)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Also test a non-volatile part. All data on the part is lost.",
+)
+@click.pass_obj
+def ram_test_cmd(app: AppContext, eprom: str, force: bool) -> None:
+    """Tests an SRAM with the March C- algorithm.
+
+    The firmware runs March C- once for each of four data backgrounds (0x00,
+    0x55, 0x33 and 0x0F). It writes and reads every cell 40 times, in 24
+    passes up and down the address range. The test finds stuck bits, bits
+    that do not change, address faults, coupling faults between cells and
+    between bits of one cell, and shorted data lines. It does not measure
+    access time. No programming voltage reaches the socket.
+
+    The test overwrites every cell. It refuses non-volatile parts (NVRAM,
+    timekeeper RAM and FRAM) unless you give --force.
+
+    Exits 0 when the RAM passes, 1 when the test finds a bad cell, and 2
+    when the test cannot run to the end: a refused part, outdated firmware,
+    or a communication or setup failure.
+    """
+    # The typed errors are caught here, not by map_typed_errors: its
+    # ClickException exits 1, and 1 must mean a bad cell only.
+    try:
+        eprom_data = resolve_chip(eprom, db=app.db)
+        entry = app.db.get_eprom(eprom) or {}
+        reason = ram_test.refusal_reason(entry, eprom, force=force)
+        if reason:
+            click.echo(reason)
+            sys.exit(2)
+        if ram_test.is_non_volatile(entry):
+            click.echo(
+                f"{eprom.upper()} is non-volatile: all data on this part will "
+                "be overwritten."
+            )
+        passed, failure, reason = app.eprom_operator.ram_test(eprom, eprom_data)
+    except FirmwareOutdatedError as e:
+        click.echo(f"Firmware outdated: {e}")
+        raise SystemExit(2) from e
+    except (
+        ChipNotFoundError,
+        SerialError,
+        EpromOperationError,
+        HardwareOperationError,
+    ) as e:
+        click.echo(str(e))
+        raise SystemExit(2) from e
+
+    if passed:
+        click.echo(
+            f"RAM test PASSED: {eprom.upper()} (March C-, "
+            f"{eprom_data['memory-size']} bytes)"
+        )
+        sys.exit(0)
+    if failure is not None:
+        click.echo(ram_test.render_failure(eprom, failure))
+        sys.exit(1)
+    click.echo(f"RAM test did not complete: {reason or 'no response'}")
+    sys.exit(2)
+
+
 # ---------------------------------------------------------------------------
 # Voltage commands
 # ---------------------------------------------------------------------------
@@ -2489,9 +2556,16 @@ if _DEV_TOOLS_ENABLED:
         """
         frames = app.hardware_manager.read_adc_raw()
         if not frames:
-            click.echo(
-                "Could not read the ADC. Check that the firmware is a beta build."
-            )
+            if app.hardware_manager.last_adc_error_code == MSG_ERR_UNKNOWN_CMD:
+                click.echo(
+                    "Could not read the ADC. The attached firmware does not "
+                    "have this command: a stable build, or a leonardo "
+                    "pre-release build."
+                )
+            else:
+                click.echo(
+                    "Could not read the ADC. Check that the firmware is a beta build."
+                )
             sys.exit(1)
         mode_names = {0: "rails off", 1: "VPP", 2: "VPE"}
         for frame in frames:

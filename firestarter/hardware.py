@@ -104,6 +104,10 @@ class HardwareManager:
     and reading VPP/VPE voltages.
     """
 
+    # The firmware's error id from the last read_adc_raw() call, or None.
+    # MSG_ERR_UNKNOWN_CMD means the image does not have CMD_DEV_ADC.
+    last_adc_error_code: int | None = None
+
     def __init__(self, config_manager: ConfigManager):
         self.config = config_manager
 
@@ -576,8 +580,10 @@ class HardwareManager:
 
         Returns one dict per frame with keys mode, divider_adc, bandgap_adc,
         voltage_mv, vcc_mv, r1, r2 -- or None on any transport error or if no
-        frame could be parsed. Never a fabricated zero.
+        frame could be parsed. Never a fabricated zero. When the firmware
+        answers with an ERROR frame, `last_adc_error_code` holds its id.
         """
+        self.last_adc_error_code = None
         comm = None
         frames: list[dict[str, int]] = []
         command: dict[str, int] = {"state": COMMAND_DEV_ADC}
@@ -592,6 +598,8 @@ class HardwareManager:
             comm = SerialCommunicator.find_and_connect(command, self.config)
             for _ in range(3):
                 response = comm.get_response()
+                if response.type == "ERROR":
+                    self.last_adc_error_code = response.id
                 if response.type != "DATA":
                     break
                 match = self._ADC_RAW_RE.search(response.message or "")
