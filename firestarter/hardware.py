@@ -449,8 +449,8 @@ class HardwareManager:
                         if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
                             vcc_warned = True
                         message = (
-                            f"{voltage_type_str}: {rail_mv / 1000:.2f} V, "
-                            f"Internal VCC: {vcc_mv / 1000:.2f} V"
+                            f"{voltage_type_str}: {rail_mv / 1000:.3f} V, "
+                            f"Internal VCC: {vcc_mv / 1000:.3f} V"
                         )
                     print(f"\r{message}    ", end="", flush=True)
 

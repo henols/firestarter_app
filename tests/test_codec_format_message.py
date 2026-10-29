@@ -203,17 +203,17 @@ def test_format_registers_dev_addr_view_names_the_top_address() -> None:
 
 
 def test_format_vpp_reports_show_volts_from_millivolts() -> None:
-    """The firmware sends mV; the host shows volts to 10 mV, where the old
+    """The firmware sends mV; the host shows every millivolt, where the old
     frames could only carry tenths."""
     high = format_message(
         MSG_ERR_VPP_HIGH_MV, [14449, 13000], CATALOG[MSG_ERR_VPP_HIGH_MV]
     )
-    assert high == "VPP is high: 14.45 V > 13.00 V"
+    assert high == "VPP is high: 14.449 V > 13.000 V"
     forced = format_message(
         MSG_WARN_VPP_HIGH_MV, [14449, 13000], CATALOG[MSG_WARN_VPP_HIGH_MV]
     )
-    assert forced == "VPP is high: 14.45 V > 13.00 V"
+    assert forced == "VPP is high: 14.449 V > 13.000 V"
     low = format_message(
         MSG_WARN_VPP_LOW_MV, [12000, 13000], CATALOG[MSG_WARN_VPP_LOW_MV]
     )
-    assert low == "VPP is low: 12.00 V < 13.00 V"
+    assert low == "VPP is low: 12.000 V < 13.000 V"

@@ -53,8 +53,8 @@ _REGISTER_VIEW_ADDR = 2
 
 
 def _volts(mv: int) -> str:
-    """`'12.45 V'` for a millivolt value."""
-    return f"{mv / 1000:.2f} V"
+    """`'12.449 V'` for a millivolt value: every millivolt the firmware sent."""
+    return f"{mv / 1000:.3f} V"
 
 
 def _register_table(name: str, value: int, bits: int) -> list[str]:
