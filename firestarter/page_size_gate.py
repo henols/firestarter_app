@@ -46,8 +46,8 @@ from __future__ import annotations
 import os
 from typing import Any, Mapping  # noqa: UP035
 
+from firestarter import command_frame as cf
 from firestarter.address_parser import parse_address
-from firestarter.constants import JSON_KEY_PAGE_SIZE
 from firestarter.exceptions import PageAlignmentError, PageSizeUnavailableError
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 
@@ -106,7 +106,7 @@ def require_page_size(
     Returns immediately when `operation` is not a write, and again when
     `programmer_data` does not describe a protocol 0x05 part. Otherwise
     raises `PageSizeUnavailableError` unless `programmer_data` carries a
-    truthy page-size value under the wire key `constants.JSON_KEY_PAGE_SIZE`.
+    truthy page-size value under the wire key `command_frame.KEY_PAGE_SIZE`.
 
     This is the fail-CLOSED direction, the opposite of
     `flash4_erase_gate.is_flash4`'s documented fail-open polarity: absent
@@ -120,7 +120,7 @@ def require_page_size(
         return
     if not requires_page_size(programmer_data):
         return
-    page_size = (programmer_data or {}).get(JSON_KEY_PAGE_SIZE)
+    page_size = (programmer_data or {}).get(cf.KEY_PAGE_SIZE)
     if not page_size:
         raise PageSizeUnavailableError(
             _REFUSAL_FORMAT.format(chip_name=chip_name.upper())
@@ -156,7 +156,7 @@ def require_page_alignment(
         return
     if not requires_page_size(programmer_data):
         return
-    page_size = (programmer_data or {}).get(JSON_KEY_PAGE_SIZE)
+    page_size = (programmer_data or {}).get(cf.KEY_PAGE_SIZE)
     if not page_size:
         raise PageAlignmentError(_REFUSAL_FORMAT.format(chip_name=chip_name.upper()))
     try:

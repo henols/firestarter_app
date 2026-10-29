@@ -121,7 +121,7 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
         raise ChipNotFoundError(name)
 
     # The firmware refuses a memory command whose memory-size, pin-count or
-    # vpp_mv is 0, with the same 'Bad JSON' answer that old firmware gives.
+    # vpp_mv is 0 (MSG_ERR_BAD_COMMAND), so the port walk sees no programmer.
     # No shipped row has a 0 here; a user database override can.
     zero_fields = [key for key in _NON_ZERO_WIRE_FIELDS if not data.get(key)]
     if zero_fields:

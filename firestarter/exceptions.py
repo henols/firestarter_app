@@ -34,6 +34,22 @@ class FirmwareOutdatedError(SerialError):
     pass
 
 
+class FirmwareFrameVersionError(FirmwareOutdatedError):
+    """The firmware reads another binary command frame version than this host.
+
+    The firmware sent MSG_ERR_FRAME_VERSION with the frame version it reads.
+    Either side can be the older one, so the message names which to upgrade.
+    A FirmwareOutdatedError subclass so every path that surfaces a version
+    refusal to the operator, instead of reporting "no programmer found",
+    surfaces this one too.
+    """
+
+    def __init__(self, *args: object, firmware: int, host: int) -> None:
+        super().__init__(*args)
+        self.firmware = firmware
+        self.host = host
+
+
 class HardwareRevisionUnsupportedError(SerialError):
     """Raised when the attached shield revision cannot safely program the chip.
 

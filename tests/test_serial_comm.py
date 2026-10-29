@@ -7,11 +7,11 @@ branches), ``_log_command_details`` (flag-decoding), and the ``_parse_response_l
 prefix-matching surface.
 """
 
-import json as _json
 import logging
 
 import pytest
 
+from firestarter.command_codec import encode_command
 from firestarter.constants import (
     COMMAND_FW_VERSION,
     FLAG_CAN_ERASE,
@@ -144,27 +144,27 @@ def test_send_string_routes_through_send_bytes(make_comm) -> None:
     assert n == 5
 
 
-def test_send_json_command_routes_through_send_string(make_comm) -> None:
-    """send_json_command serialises the dict as compact JSON."""
+def test_send_command_routes_through_send_string(make_comm) -> None:
+    """send_command writes the whole framed binary command."""
     comm = make_comm()
-    n = comm.send_json_command({"cmd": 2, "value": 42})
-    # JSON output is at least len("{\"cmd\":2,\"value\":42}") bytes
-    assert n > 10
+    n = comm.send_command({"cmd": 2, "memory-size": 42})
+    # header 7 + memory payload 58 + CRC 1, COBS-encoded, plus the delimiter
+    assert n > 7 + 58 + 1
 
 
-def test_send_json_command_emits_cobs_frame(make_comm, fake_serial) -> None:
-    """send_json_command emits a valid COBS+CRC8 frame terminated by 0x00.
+def test_send_command_emits_cobs_frame(make_comm, fake_serial) -> None:
+    """send_command emits a valid COBS+CRC8 frame terminated by 0x00.
 
     Contract (FRAME-05 / T-51-05):
     - The entire write ends with b"\\x00" (the COBS delimiter).
     - The body (everything before the trailing 0x00) contains no 0x00 byte.
     - cobs_decode(body) produces payload + crc_byte where
-      crc_byte == _crc8_ccitt(payload) and json.loads(payload) matches
-      the original command dict (round-trip integrity).
+      crc_byte == _crc8_ccitt(payload) and payload is the binary command
+      frame that command_codec.encode_command builds for the dict.
     """
     comm = make_comm()
-    cmd = {"cmd": 2, "value": 42}
-    comm.send_json_command(cmd)
+    cmd = {"cmd": 2, "memory-size": 42}
+    comm.send_command(cmd)
 
     # Read what was written to the fake serial
     fake_serial._buf.seek(0)
@@ -182,17 +182,16 @@ def test_send_json_command_emits_cobs_frame(make_comm, fake_serial) -> None:
     payload = decoded[:-1]
     crc_byte = decoded[-1]
 
-    # CRC8 over the raw JSON bytes (BEFORE COBS encode — ADR §4.3)
+    # CRC8 over the raw command bytes (BEFORE COBS encode — ADR §4.3)
     expected_crc = _crc8_ccitt(payload)
     assert crc_byte == expected_crc, (
         f"CRC8 mismatch: got 0x{crc_byte:02X}, expected 0x{expected_crc:02X}"
     )
 
-    # Payload must be the compact JSON of the original command
-    assert _json.loads(payload) == cmd
+    assert payload == encode_command(cmd)
 
 
-def test_send_json_command_atomic_frame(make_comm, fake_serial, monkeypatch) -> None:
+def test_send_command_atomic_frame(make_comm, fake_serial, monkeypatch) -> None:
     """connection.write() is called exactly once per command (SAFE-01 sub-claim B / T-51-04).
 
     Split-write (e.g. send_bytes(body) then send_bytes(b"\\x00")) is forbidden —
@@ -208,7 +207,7 @@ def test_send_json_command_atomic_frame(make_comm, fake_serial, monkeypatch) -> 
     monkeypatch.setattr(fake_serial, "write", _counting_write)
 
     comm = make_comm()
-    comm.send_json_command({"cmd": 2, "value": 42})
+    comm.send_command({"cmd": 2, "memory-size": 42})
 
     assert len(write_calls) == 1, (
         f"Expected exactly 1 write() call (atomic frame), got {len(write_calls)}"
@@ -219,7 +218,7 @@ def test_send_json_command_atomic_frame(make_comm, fake_serial, monkeypatch) -> 
     )
 
 
-def test_send_json_command_version_probe_is_framed(make_comm, fake_serial) -> None:
+def test_send_command_version_probe_is_framed(make_comm, fake_serial) -> None:
     """CMD_FW_VERSION probe is emitted as a COBS frame, NOT as raw JSON (D-04 / T-51-06).
 
     No unframed send_string bypass exists — every command including the version probe
@@ -228,7 +227,7 @@ def test_send_json_command_version_probe_is_framed(make_comm, fake_serial) -> No
     - The write does NOT start with b"{" (not raw JSON text).
     """
     comm = make_comm()
-    comm.send_json_command({"state": COMMAND_FW_VERSION})
+    comm.send_command({"state": COMMAND_FW_VERSION})
 
     fake_serial._buf.seek(0)
     written = fake_serial._buf.read()
@@ -248,14 +247,14 @@ def test_send_json_command_version_probe_is_framed(make_comm, fake_serial) -> No
 
 
 def test_fault_inject_outgoing_none(make_comm, monkeypatch) -> None:
-    """With _fault_inject_outgoing=None (the default), send_json_command emits an
+    """With _fault_inject_outgoing=None (the default), send_command emits an
     unmodified frame.
 
     The trailing byte must be 0x00 (COBS delimiter), and cobs_decode(frame[:-1])
     must yield a payload+CRC where CRC == _crc8_ccitt(payload).
 
     FAILS RED until 53-02 adds the _fault_inject_outgoing attribute to
-    SerialCommunicator.__init__ so it can be inspected via getattr in send_json_command.
+    SerialCommunicator.__init__ so it can be inspected via getattr in send_command.
     This test asserts the attribute exists on the instance by checking that the hook
     path is reachable (i.e., the attribute is declared, not just dynamically set).
     """
@@ -270,7 +269,7 @@ def test_fault_inject_outgoing_none(make_comm, monkeypatch) -> None:
     )
     sent: list = []
     monkeypatch.setattr(comm, "send_bytes", lambda b: sent.append(b) or len(b))
-    comm.send_json_command({"cmd": 1})
+    comm.send_command({"cmd": 1})
 
     assert sent, "send_bytes must have been called"
     frame = sent[0]
@@ -287,7 +286,7 @@ def test_fault_inject_outgoing_corrupt_crc8(make_comm, monkeypatch) -> None:
     Hook: frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\\x00"
 
     FAILS RED until 53-02 adds the _fault_inject_outgoing hook path in
-    send_json_command.
+    send_command.
     """
     comm = make_comm()
     comm._fault_inject_outgoing = (  # type: ignore[attr-defined]  # RED: attribute absent until 53-02
@@ -295,7 +294,7 @@ def test_fault_inject_outgoing_corrupt_crc8(make_comm, monkeypatch) -> None:
     )
     sent: list = []
     monkeypatch.setattr(comm, "send_bytes", lambda b: sent.append(b) or len(b))
-    comm.send_json_command({"cmd": 1})
+    comm.send_command({"cmd": 1})
 
     assert sent, "send_bytes must have been called"
     frame = sent[0]
@@ -311,13 +310,13 @@ def test_fault_inject_outgoing_drop_delimiter(make_comm, monkeypatch) -> None:
     """With a hook returning frame[:-1], the emitted bytes have no trailing 0x00.
 
     FAILS RED until 53-02 adds the _fault_inject_outgoing hook path in
-    send_json_command.
+    send_command.
     """
     comm = make_comm()
     comm._fault_inject_outgoing = lambda f: f[:-1]  # type: ignore[attr-defined]  # RED
     sent: list = []
     monkeypatch.setattr(comm, "send_bytes", lambda b: sent.append(b) or len(b))
-    comm.send_json_command({"cmd": 1})
+    comm.send_command({"cmd": 1})
 
     assert sent, "send_bytes must have been called"
     frame = sent[0]
@@ -363,7 +362,7 @@ def test_find_and_connect_threads_fault_inject_outgoing(monkeypatch) -> None:
     """53-04 fix: find_and_connect MUST forward fault_inject_outgoing to _probe_port.
 
     The outgoing fault has to be armed at connection time (before the setup command's
-    send_json_command), since a READ sends no further framed command. This test pins
+    send_command), since a READ sends no further framed command. This test pins
     the threading seam without opening a real serial port.
     """
     from firestarter.config import ConfigManager
@@ -513,15 +512,13 @@ def test_setup_command_asserts_the_link_is_connected_before_sending(
 
     calls: list = []
 
-    def _fake_send_json_command(self, *args, **kwargs):
+    def _fake_send_command(self, *args, **kwargs):
         calls.append(args[0] if args else kwargs.get("command_to_send"))
 
     def _fake_expect_ack(self, *args, **kwargs):
         return (False, "stub: not ok")
 
-    monkeypatch.setattr(
-        SerialCommunicator, "send_json_command", _fake_send_json_command
-    )
+    monkeypatch.setattr(SerialCommunicator, "send_command", _fake_send_command)
     monkeypatch.setattr(SerialCommunicator, "expect_ack", _fake_expect_ack)
 
     comm = make_comm()

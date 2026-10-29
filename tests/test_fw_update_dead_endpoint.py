@@ -43,11 +43,12 @@ _UP_TO_DATE_WORDING = "already up to date"
 
 def _identified_manager(monkeypatch, *, latest_version=None, download_url=None):
     """A FirmwareManager whose identity seam reports a board, fetch seam stubbed."""
+    monkeypatch.setattr("firestarter.__version__", "3.4.0")
     fm = FirmwareManager(config_manager=None)
     monkeypatch.setattr(
         fm,
         "check_current_firmware",
-        lambda **kw: ("/dev/ttyACM0", "3.1.0", "uno"),
+        lambda **kw: ("/dev/ttyACM0", "3.4.0", "uno"),
     )
     monkeypatch.setattr(
         fm,
@@ -102,11 +103,11 @@ def test_force_flag_with_unresolvable_release_emits_exactly_one_error(
 def test_already_up_to_date_path_still_returns_true_with_no_error(monkeypatch, caplog):
     fm = _identified_manager(
         monkeypatch,
-        latest_version="3.1.0",
+        latest_version="3.4.0",
         download_url="https://example.invalid/firestarter_uno.hex",
     )
     with caplog.at_level(logging.ERROR, logger="Firmware"):
-        result = fm.manage_firmware_update(app_version="3.1.0")
+        result = fm.manage_firmware_update(app_version="3.4.0")
     assert result is True
     assert _error_records(caplog) == []
 

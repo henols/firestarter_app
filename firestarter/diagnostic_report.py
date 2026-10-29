@@ -134,7 +134,7 @@ class TransportHealth:
     so a future phase looking to "fix" them reads why it should not:
 
     `cobs_errors` -- COBS on this link is OUTBOUND ONLY. `cobs_encode` is
-    called from `send_json_command` and the data-chunk path; `cobs_decode`
+    called from `_send_framed` and the data-chunk path; `cobs_decode`
     exists but has zero production call sites, verified tree-wide -- every
     caller is a test module. The inbound path is magic-preamble plus length
     plus CRC8 framing, not COBS, so a COBS decode error is an event the host

@@ -12,6 +12,7 @@ import logging
 import struct
 from typing import Any, List  # noqa: UP035
 
+from firestarter.command_frame import REFUSALS
 from firestarter.constants import (
     COMMAND_NAMES,
     REVISION_0,
@@ -29,6 +30,8 @@ from firestarter.messages import (
     DEBUG_CATALOG,
     MSG_DATA_CHUNK,
     MSG_DEBUG,
+    MSG_ERR_BAD_COMMAND,
+    MSG_ERR_FRAME_VERSION,
     MSG_ERR_VPP_HIGH_MV,
     MSG_INFO_CMD,
     MSG_INFO_HW,
@@ -176,6 +179,10 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
     if msg_id == MSG_INFO_PHYSICAL_HW and len(params) == 1:
         byte = params[0]
         return f"Physical HW: {_REVISION_SILKSCREEN.get(byte, f'Rev{byte}')}"
+
+    if msg_id == MSG_ERR_BAD_COMMAND and len(params) == 1:
+        code = params[0]
+        return f"Command refused: {REFUSALS.get(code, f'reason {code}')}"
 
     if msg_id == MSG_INFO_REGISTERS and len(params) == 5:
         return _render_registers(*params)
@@ -348,15 +355,17 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
 
     # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
     # loop can obtain the chip data without a second read call.
-    chunk_payload = None
+    # MSG_ERR_FRAME_VERSION also carries its parameter bytes, so setup can
+    # compare the firmware's frame version with this host's.
+    payload = None
     if (
         msg_id == MSG_DATA_CHUNK
         and values
         and isinstance(values[0], (bytes, bytearray))
     ):
-        chunk_payload = bytes(values[0])
+        payload = bytes(values[0])
+    elif msg_id == MSG_ERR_FRAME_VERSION:
+        payload = params_bytes
 
     severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-    return LogMessage(
-        severity=severity_label, text=text, id=msg_id, payload=chunk_payload
-    )
+    return LogMessage(severity=severity_label, text=text, id=msg_id, payload=payload)

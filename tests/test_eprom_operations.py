@@ -10,8 +10,6 @@ at ``tests/test_bug_characterization.py::test_eprom_operation_error_not_labeled_
 (flipped to PASSED by Plan 42-01). Happy-path coverage only.
 
 Phase 44 Plan 03 additions (read_timing block):
-    test_read_settling_key_constant — JSON_KEY_READ_SETTLING_DELAY string match
-    test_read_strobe_key_constant — JSON_KEY_READ_STROBE_US string match
     test_consistency_check_emits_read_settling_in_command — settling param flows into JSON
     test_consistency_check_emits_read_strobe_in_command — strobe param flows into JSON
     test_consistency_check_default_params_absent_from_command — no extra keys when 0
@@ -305,54 +303,6 @@ def _make_captured_setup_operation(captured: list):
     return _fake_setup_operation
 
 
-def test_read_timing_settling_key_constant() -> None:
-    """JSON_KEY_READ_SETTLING_DELAY must equal the firmware PROGMEM key string.
-
-    The firmware declares: const char key_read_settling[] PROGMEM = "read-settling-delay";
-    (json_parser.c). If the host string drifts, the firmware silently ignores the param
-    (Pitfall 2 — RESEARCH.md). This test pins the constant to the firmware source of truth.
-
-    Selected by `pytest -k read_timing`.
-    """
-    from firestarter.constants import (
-        JSON_KEY_READ_SETTLING_DELAY,  # type: ignore[attr-defined]
-    )
-
-    assert JSON_KEY_READ_SETTLING_DELAY == "read-settling-delay"
-
-
-def test_read_timing_strobe_key_constant() -> None:
-    """JSON_KEY_READ_STROBE_US must equal the firmware PROGMEM key string.
-
-    The firmware declares: const char key_read_strobe[] PROGMEM = "read-strobe-us";
-    (json_parser.c). If the host string drifts, the firmware silently ignores the param.
-
-    Selected by `pytest -k read_timing`.
-    """
-    from firestarter.constants import (
-        JSON_KEY_READ_STROBE_US,  # type: ignore[attr-defined]
-    )
-
-    assert JSON_KEY_READ_STROBE_US == "read-strobe-us"
-
-
-def test_region_end_key_constant() -> None:
-    """JSON_KEY_REGION_END must equal the firmware PROGMEM key string.
-
-    The firmware declares: const char key_region_end[] PROGMEM = "region-end";
-    (json_parser.c). If the host string drifts, the firmware silently ignores the param
-    (jsmn skips unknown keys) and a partial write silently falls back to a whole-device
-    blank check instead of a region-scoped one.
-
-    Selected by `pytest -k region_end`.
-    """
-    from firestarter.constants import (
-        JSON_KEY_REGION_END,  # type: ignore[attr-defined]
-    )
-
-    assert JSON_KEY_REGION_END == "region-end"
-
-
 def test_write_into_blank_region_of_non_blank_part_succeeds() -> None:
     """BLANK-01 / BLANK-03: before the fake learned the region (this plan),
     this leg passed VACUOUSLY -- `WriteInitPreflightChip._is_blank` compared
@@ -406,7 +356,7 @@ def test_write_into_non_blank_region_is_still_refused() -> None:
 
 def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
     """D-05 / D-07: the command_dict `_setup_operation` returns for
-    COMMAND_WRITE carries JSON_KEY_REGION_END == address + region_length --
+    COMMAND_WRITE carries cf.KEY_REGION_END == address + region_length --
     the wire key BLANK-01's firmware side reads to scope its write-init
     blank check to this write's own region instead of the whole device.
     Captured at the wire boundary (the dict SerialCommunicator.find_and_connect
@@ -414,7 +364,8 @@ def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
 
     Selected by `pytest -k region_end`.
     """
-    from firestarter.constants import COMMAND_WRITE, JSON_KEY_REGION_END
+    from firestarter import command_frame as cf
+    from firestarter.constants import COMMAND_WRITE
 
     captured: dict = {}
 
@@ -435,12 +386,12 @@ def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
             region_length=256,
         )
 
-    assert captured["command_dict"][JSON_KEY_REGION_END] == 0x1000 + 256
+    assert captured["command_dict"][cf.KEY_REGION_END] == 0x1000 + 256
 
 
 # RETIRED 202-01 (D-01/D-02/D-10): `test_region_end_emitted_on_verify` used to
 # live here. It drove `_setup_operation` directly with an explicit
-# COMMAND_VERIFY to prove `_setup_operation` emits JSON_KEY_REGION_END for
+# COMMAND_VERIFY to prove `_setup_operation` emits cf.KEY_REGION_END for
 # that ordinal -- true of the function in isolation, but `verify_eprom` no
 # longer composes COMMAND_VERIFY at all (it drives COMMAND_READ; see
 # `TestVerifyEpromHostSideRead` above), so the test passed while proving
@@ -451,14 +402,14 @@ def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
 # dead in production, kept alive only by the constant staying in
 # `constants.py` pending phase 204's removal. `test_region_end_absent_for_read`
 # immediately below is what actually covers verify's wire shape now (it
-# proves COMMAND_READ never carries JSON_KEY_REGION_END); no replacement
+# proves COMMAND_READ never carries cf.KEY_REGION_END); no replacement
 # test is needed here for verify specifically.
 
 
 def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
     """D-05: the emission is guarded on cmd being COMMAND_WRITE (an
     equality since Phase 204 retired COMMAND_VERIFY, the guard's other
-    former member) -- COMMAND_READ never carries JSON_KEY_REGION_END, so
+    former member) -- COMMAND_READ never carries cf.KEY_REGION_END, so
     the read path's existing `memory-size` narrowing (`:495`) stays
     undisturbed. region_length is passed here too (not merely omitted) to
     prove the guard is on `cmd`, not on the caller happening not to supply
@@ -466,7 +417,8 @@ def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
 
     Selected by `pytest -k region_end`.
     """
-    from firestarter.constants import COMMAND_READ, JSON_KEY_REGION_END
+    from firestarter import command_frame as cf
+    from firestarter.constants import COMMAND_READ
 
     captured: dict = {}
 
@@ -487,7 +439,7 @@ def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
             region_length=256,
         )
 
-    assert JSON_KEY_REGION_END not in captured["command_dict"]
+    assert cf.KEY_REGION_END not in captured["command_dict"]
 
 
 class TestVerifyEpromHostSideRead:
@@ -1810,7 +1762,7 @@ class TestFaultInjectCycle:
         captured: dict = {}
 
         # Capture the hooks by intercepting _operation_context and reading the armed
-        # hook off a throwaway comm via send_json_command behavior is covered in
+        # hook off a throwaway comm via send_command behavior is covered in
         # test_serial_comm; here we assert the hook transforms a sample frame.
         from contextlib import contextmanager
 
@@ -1858,7 +1810,7 @@ class _FakeNakComm:
     def consume_remaining_input(self, *a, **kw) -> None:
         pass
 
-    def send_json_command(self, cmd) -> int:
+    def send_command(self, cmd) -> int:
         self.sends.append(self._fault_inject_outgoing is not None)
         return 1
 

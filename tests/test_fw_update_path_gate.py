@@ -54,7 +54,7 @@ def _probe_with_identity(identity):
     """
     with (
         patch.object(SerialCommunicator, "expect_ack", return_value=(True, "Ready")),
-        patch.object(SerialCommunicator, "send_json_command", return_value=42),
+        patch.object(SerialCommunicator, "send_command", return_value=42),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),
         patch.object(SerialCommunicator, "firmware_identity", identity),
@@ -230,12 +230,13 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
             "firestarter.serial_comm.SerialCommunicator.find_and_connect",
             mock_connect,
         )
+        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(
             fm,
             "fetch_release_info",
             lambda channel="stable", version=None, board="uno", **_kw: (
-                "3.0.0b19",
+                "3.3.0b19",
                 f"https://example.invalid/{board}.hex",
             ),
         )
@@ -267,9 +268,10 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
             "firestarter.serial_comm.SerialCommunicator._list_potential_ports",
             staticmethod(lambda p, **_kw: ["/dev/null"]),
         )
+        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(
-            fm, "fetch_release_info", lambda **kw: ("3.0.0b19", "https://x.invalid/u")
+            fm, "fetch_release_info", lambda **kw: ("3.3.0b19", "https://x.invalid/u")
         )
         monkeypatch.setattr(fm, "_download_firmware_file", lambda url: None)
 

@@ -22,11 +22,26 @@ feature version, and nothing waives it: a stable user gets stable firmware only.
 A pre-release CLI (a b/rc tag, or a dev checkout) installs either.
 
 A stable CLI also refuses a release BELOW its feature version. A stable CLI
-3.2.x runs stable firmware 3.2.y only (`matches_stable_cli`). Nothing waives
+3.3.x runs stable firmware 3.3.y only (`matches_stable_cli`). Nothing waives
 this refusal either. `firmware.fetch_release_info` picks the highest matching
 stable release for a stable CLI, so `fw --install` installs a matching release.
 
-The reverse pairing -- a CLI newer than the firmware -- is NOT gated here.
+Every CLI refuses a release whose feature version is below
+BINARY_FRAME_MIN_FEATURE. Firmware before 3.3 parses JSON commands, and this
+CLI sends only binary command frames, so it cannot drive that firmware. No
+flag waives this refusal: to run older firmware, install a CLI of the same
+feature version, and that CLI installs it. 3.2.x is the JSON line.
+
+The floor holds only because no binary release can carry a lower version:
+tools/release.sh and release.yml in both repos refuse to tag a commit that
+carries the frame below MIN_FEATURE. So every release below the floor is
+JSON-era, and the refusal's 'firestarter=={feature}.*' pin names a JSON-era
+CLI. Until the first 3.3 tag exists, a CLI built from an untagged checkout
+reports the previous line (for example 3.2.7b3.devN) and refuses every
+release; the first 3.3 tag ends that.
+
+Apart from that floor, the reverse pairing -- a CLI newer than the
+firmware -- is NOT gated here.
 `_maybe_auto_route_to_pre` in cli_handlers.py steers channel selection away from
 it. The two checks cover opposite directions and neither replaces the other.
 
@@ -42,7 +57,7 @@ the failed fetch. Turning a GitHub outage into a version-mismatch refusal would
 be a lie. This is the one place the gate looks fail-open and is not.
 
 Escape for the feature-version refusal: `--allow-newer-firmware`. Never an
-environment variable. The pre-release and older-line refusals have no escape.
+environment variable. The floor, pre-release and older-line refusals have no escape.
 
 Unlike the pre-serial gates, the authoritative call runs AFTER the release
 metadata fetch, because the release tag is only known then. It still runs before
@@ -55,7 +70,12 @@ No I/O, no environment reads, no serial access.
 
 from packaging.version import InvalidVersion, Version
 
+from firestarter import command_frame as cf
 from firestarter.exceptions import FirmwareReleaseRefusedError
+
+# The first feature version whose firmware decodes the binary command frame.
+# Generated from command_frame.toml; both release scripts refuse a tag below it.
+BINARY_FRAME_MIN_FEATURE = cf.MIN_FEATURE
 
 _REFUSAL_FORMAT = (
     "Firmware {release} needs a newer CLI. This CLI is {app}. "
@@ -101,6 +121,16 @@ _OLDER_LINE_ON_STABLE_FORMAT = (
     "Refusing to install firmware {release}.\n"
     "Run 'firestarter fw --install' to install the latest stable firmware "
     "{app_feature}.x."
+)
+
+_TOO_OLD_FORMAT = (
+    "Firmware {release} is older than the binary command frame. This CLI is "
+    "{app}, and it cannot operate firmware below {floor}. "
+    "Refusing to install firmware {release}.\n"
+    "Run 'firestarter fw --list', then 'firestarter fw --firmware-version X.Y.Z' "
+    "with a release at {floor} or later.\n"
+    "To use firmware {release}, install a CLI of the same feature version: "
+    "'pip install \"firestarter=={release_feature}.*\"'. That CLI installs it."
 )
 
 _UNREADABLE_TEXT = "an unreadable version"
@@ -159,7 +189,7 @@ def is_refused(app_version: str | None, release_version: str | None) -> bool:
     release = feature_version(release_version)
     if app is None or release is None:
         return True
-    return release > app
+    return release > app or release < BINARY_FRAME_MIN_FEATURE
 
 
 def require_installable_release(
@@ -170,14 +200,25 @@ def require_installable_release(
 ) -> None:
     """Raise FirmwareReleaseRefusedError when this CLI must not flash this release.
 
-    Returns None on pass. `allow_newer` waives the feature-version refusal; it
-    defaults to False so a library caller that does not ask for the waiver does
-    not get it. Nothing waives the pre-release or older-line refusal on a
-    stable CLI.
+    Returns None on pass. `allow_newer` waives the too-new and unreadable
+    refusals; it defaults to False so a library caller that does not ask for
+    the waiver does not get it. Nothing waives the too-old refusal, nor the
+    pre-release or older-line refusal on a stable CLI.
 
     An unreadable version on either side is not judged by the stable-CLI rules.
     The feature-version check refuses it.
     """
+    app = feature_version(app_version)
+    release = feature_version(release_version)
+    if release is not None and release < BINARY_FRAME_MIN_FEATURE:
+        raise FirmwareReleaseRefusedError(
+            _TOO_OLD_FORMAT.format(
+                app=app_version or _UNREADABLE_TEXT,
+                release=release_version,
+                floor=f"{BINARY_FRAME_MIN_FEATURE[0]}.{BINARY_FRAME_MIN_FEATURE[1]}",
+                release_feature=f"{release[0]}.{release[1]}",
+            )
+        )
     if is_prerelease_version(app_version) is False:
         if is_prerelease_version(release_version) is True:
             raise FirmwareReleaseRefusedError(
@@ -185,8 +226,6 @@ def require_installable_release(
                     app=app_version, release=release_version
                 )
             )
-        app = feature_version(app_version)
-        release = feature_version(release_version)
         if app and release and release < app:
             raise FirmwareReleaseRefusedError(
                 _OLDER_LINE_ON_STABLE_FORMAT.format(
@@ -198,8 +237,6 @@ def require_installable_release(
             )
     if allow_newer or not is_refused(app_version, release_version):
         return
-    app = feature_version(app_version)
-    release = feature_version(release_version)
     template = _REFUSAL_FORMAT if (app and release) else _UNREADABLE_FORMAT
     raise FirmwareReleaseRefusedError(
         template.format(

@@ -20,7 +20,8 @@ Response = namedtuple(
 
 # ID-encoded wire frame primitives. MAGIC_PREAMBLE is fixed by the wire
 # protocol; LogMessage is the decoded-frame value type.
-# `payload` carries raw bytes for MSG_DATA_CHUNK; None for all others.
+# `payload` carries raw bytes for MSG_DATA_CHUNK and the parameter bytes of
+# MSG_ERR_FRAME_VERSION; None for all others.
 LogMessage = namedtuple(
     "LogMessage", ["severity", "text", "id", "payload"], defaults=[None]
 )

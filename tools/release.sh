@@ -6,8 +6,8 @@
 #   tools/release.sh 3.2.0     # stable release, marked Latest
 #
 # A plain `git tag X && git push origin X` works too. This script only adds
-# checks first: the shape of the version, a clean and current main, and a
-# version higher than every earlier release tag.
+# checks first: the shape of the version, the binary-frame floor, a clean and
+# current main, and a version higher than every earlier release tag.
 set -euo pipefail
 
 VERSION="${1:-}"
@@ -18,6 +18,21 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 git fetch --quiet --tags origin main
+
+# A commit that carries the binary command frame must not be tagged below its
+# first feature version: a JSON-era CLI of that feature version would install
+# the firmware and then could not drive it. A commit without the frame has no
+# floor. release.yml makes the same check.
+FLOOR=$(git show "origin/main:firestarter/command_frame.py" 2>/dev/null | sed -n 's/^MIN_FEATURE = (\([0-9]*\), \([0-9]*\))$/\1.\2/p' || true)
+if [ -n "$FLOOR" ]; then
+    IFS=. read -r V_MAJOR V_MINOR _ <<<"$VERSION"
+    IFS=. read -r F_MAJOR F_MINOR <<<"$FLOOR"
+    if (( V_MAJOR < F_MAJOR || (V_MAJOR == F_MAJOR && V_MINOR < F_MINOR) )); then
+        echo "error: $VERSION is below $FLOOR, the first version of the binary command frame" >&2
+        echo "       on origin/main. A JSON-era CLI of version $V_MAJOR.$V_MINOR would install it." >&2
+        exit 1
+    fi
+fi
 
 if [ -n "$(git status --porcelain)" ]; then
     echo "error: the working tree is not clean" >&2

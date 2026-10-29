@@ -14,21 +14,23 @@ from click.testing import CliRunner
 
 from firestarter.chip_resolver import resolve_chip
 from firestarter.cli_handlers import cli
+from firestarter.command_frame import REFUSALS
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import ChipNotImplementedError, ProgrammerNotFoundError
-from firestarter.messages import MSG_ERR_BAD_JSON, MSG_ERR_PARSE_CFG
+from firestarter.messages import MSG_ERR_BAD_COMMAND, MSG_ERR_PARSE_CFG
 from firestarter.serial_comm import SerialCommunicator
 
 from .conftest import build_frame, make_app_context
 
 
 def test_setup_command_records_the_refusal_text(make_comm, fake_serial) -> None:
-    fake_serial.feed(build_frame(MSG_ERR_BAD_JSON, b""))
+    reason = next(iter(REFUSALS))
+    fake_serial.feed(build_frame(MSG_ERR_BAD_COMMAND, bytes([reason])))
     comm = make_comm()
     assert comm.setup_command({"cmd": 1}, MagicMock()) is False
-    assert comm.setup_refusal == "Bad JSON"
+    assert comm.setup_refusal == f"Command refused: {REFUSALS[reason]}"
 
 
 def test_probe_port_hands_the_refusal_to_the_caller(monkeypatch) -> None:
@@ -70,7 +72,9 @@ def _walk_with_refusal(monkeypatch, text: str) -> None:
 
 
 def test_named_port_message_names_a_parameter_refusal(monkeypatch) -> None:
-    _walk_with_refusal(monkeypatch, "Bad JSON")
+    _walk_with_refusal(
+        monkeypatch, "Command refused: an address line is outside the bus"
+    )
     with pytest.raises(ProgrammerNotFoundError) as exc:
         SerialCommunicator.find_and_connect(
             {"cmd": 1},
@@ -80,7 +84,7 @@ def test_named_port_message_names_a_parameter_refusal(monkeypatch) -> None:
         )
     text = str(exc.value)
     assert "No compatible programmer answered on /dev/fake0." in text
-    assert "It answered 'Bad JSON'." in text
+    assert "It answered 'Command refused: an address line is outside the bus'." in text
     assert "refused the command parameters" in text
     # The reflash advice stays, as the second explanation.
     assert "fw --board <board> --install" in text

@@ -21,6 +21,7 @@ import click.shell_completion
 from rich.console import Console
 
 from firestarter import __version__ as version
+from firestarter import command_frame as cf
 from firestarter import (
     dip24_2816_erase_gate,
     flash4_erase_gate,
@@ -85,6 +86,7 @@ from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     EpromOperationError,
+    FirmwareFrameVersionError,
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
@@ -238,6 +240,8 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             return f(*args, **kwargs)
         except ChipNotFoundError as e:
             raise click.ClickException(str(e)) from e
+        except FirmwareFrameVersionError as e:
+            raise click.ClickException(f"Command frame version mismatch: {e}") from e
         except FirmwareOutdatedError as e:
             raise click.ClickException(f"Firmware outdated: {e}") from e
         except (SerialError, SerialTimeoutError) as e:
@@ -1053,8 +1057,7 @@ def _address_size_refusal_exit_code(
     """Refuse a negative start address or a size below 1 byte before the
     serial port opens.
 
-    The firmware refuses both at setup, with the same 'Bad JSON' answer that
-    firmware too old for this CLI gives, so without this check the operator
+    The firmware refuses both at setup, so without this check the operator
     sees only "no programmer found". Returns 2 to refuse with, or `None`.
     A malformed string is not refused here: `_setup_operation`'s own parse
     handling still owns that error.
@@ -2276,16 +2279,22 @@ if _DEV_TOOLS_ENABLED:
     @click.option(
         "--read-settling",
         "read_settling_us",
-        type=int,
+        type=click.IntRange(0, cf.READ_TIMING_MAX_US),
         default=0,
-        help="Address-settling delay before /CE assert (µs; 0=firmware default 0µs).",
+        help=(
+            "Address-settling delay before /CE assert "
+            f"(µs, 0..{cf.READ_TIMING_MAX_US}; 0=firmware default 0µs)."
+        ),
     )
     @click.option(
         "--read-strobe",
         "read_strobe_us",
-        type=int,
+        type=click.IntRange(0, cf.READ_TIMING_MAX_US),
         default=0,
-        help="/CE read-strobe pulse width (µs; 0=firmware default 3µs).",
+        help=(
+            "/CE read-strobe pulse width "
+            f"(µs, 0..{cf.READ_TIMING_MAX_US}; 0=firmware default 3µs)."
+        ),
     )
     @click.pass_obj
     @map_typed_errors

@@ -21,6 +21,7 @@ from typing import BinaryIO, Callable, Dict, Tuple  # noqa: UP035
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from firestarter import command_frame as cf
 from firestarter import transport_counters, write_budget
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.compare import (
@@ -48,9 +49,6 @@ from firestarter.constants import (
     FLAG_SKIP_SDP_UNLOCK,
     FLAG_VERBOSE,
     FLAG_VPE_AS_VPP,
-    JSON_KEY_READ_SETTLING_DELAY,
-    JSON_KEY_READ_STROBE_US,
-    JSON_KEY_REGION_END,
 )
 from firestarter.exceptions import (
     EpromOperationError,
@@ -693,7 +691,7 @@ class EpromOperator:
         # own premise expires in Phase 205, which removes the firmware-side
         # write-init blank check this key exists to scope.
         if region_length is not None and region_length > 0 and cmd == COMMAND_WRITE:
-            command_dict[JSON_KEY_REGION_END] = addr + region_length
+            command_dict[cf.KEY_REGION_END] = addr + region_length
 
         # SESS-01 (Phase 206): the lease's second-and-later setup. Taken only
         # when a lease is active AND the held link is still connected --
@@ -1425,9 +1423,9 @@ class EpromOperator:
                     eprom_data_dict
                 )  # shallow copy — never mutate caller's dict
                 if read_settling_us:
-                    eprom_data_dict[JSON_KEY_READ_SETTLING_DELAY] = read_settling_us
+                    eprom_data_dict[cf.KEY_READ_SETTLING_US] = read_settling_us
                 if read_strobe_us:
-                    eprom_data_dict[JSON_KEY_READ_STROBE_US] = read_strobe_us
+                    eprom_data_dict[cf.KEY_READ_STROBE_US] = read_strobe_us
 
             # Run loop: N reads through the production state machine
             results = []  # list of (run_i, sha_hex, bytes_written)
@@ -1727,7 +1725,7 @@ class EpromOperator:
         # Outgoing: the hook is threaded into _operation_context so it corrupts the
         #   SETUP command frame at connection time. This is the ONLY corruptible
         #   host->fw command frame — a READ's MAIN phase emits plaintext acks
-        #   (send_string), never send_json_command, so the previous "set the hook
+        #   (send_string), never send_command, so the previous "set the hook
         #   after setup" wiring never fired -- a false negative. The firmware rejects the
         #   corrupt frame (CRC8-before-parse / inter-byte timeout) -> connection setup
         #   fails with a bounded error == the expected outcome.
@@ -1997,7 +1995,7 @@ class EpromOperator:
             comm.consume_remaining_input()
 
             # 1. Baseline clean command on the open connection.
-            comm.send_json_command(fw_cmd)
+            comm.send_command(fw_cmd)
             baseline_ok, _ = comm.expect_ack()
             comm.consume_remaining_input()
             if not baseline_ok:
@@ -2006,7 +2004,7 @@ class EpromOperator:
                 # 2. One corrupted command frame, timed to the firmware error response.
                 comm._fault_inject_outgoing = hook  # type: ignore[attr-defined]
                 _t0 = time.monotonic()
-                comm.send_json_command(fw_cmd)
+                comm.send_command(fw_cmd)
                 try:
                     corrupt_is_ok, corrupt_msg = comm.expect_ack()
                 except SerialTimeoutError as e:
@@ -2020,7 +2018,7 @@ class EpromOperator:
                 )
 
                 # 3. Recovery: clean command on the SAME open connection.
-                comm.send_json_command(fw_cmd)
+                comm.send_command(fw_cmd)
                 try:
                     recovery_ok, _ = comm.expect_ack()
                 except SerialTimeoutError:
@@ -2994,7 +2992,7 @@ class EpromOperator:
         # region_length here -- it does not call require_page_alignment,
         # which is where that computation already lives on the write path.
         # This value is NOT forwarded to _operation_context as region_length
-        # below: that kwarg only reaches the wire as JSON_KEY_REGION_END for
+        # below: that kwarg only reaches the wire as cf.KEY_REGION_END for
         # cmd == COMMAND_WRITE (_setup_operation's guard, an equality since
         # Phase 204 retired COMMAND_VERIFY -- the write path is now the only
         # composer of that key), and this path composes COMMAND_READ, so

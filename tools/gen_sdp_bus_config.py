@@ -13,7 +13,7 @@ generator's derivation is the HOST'S OWN LIVE CODE PATH — it imports
 `EpromDatabase` from `firestarter.database` and calls `get_eprom()` /
 `convert_to_programmer()` for each chip, then translates the resulting
 programmer dict into `bus_config_t` fields exactly the way
-`firestarter/src/json_parser.c`'s `parse_bus_config` does. It never
+`src/command_decoder.c`'s `apply_memory` in firestarter_fw does. It never
 reimplements `convert_to_programmer` — a reimplementation is a second thing
 that can be wrong, and the whole point of this generator is that the trace
 ground truth is NOT a transcription.
@@ -94,7 +94,7 @@ BANNER = (
 )
 
 
-# 3. DERIVATION -- mirrors src/json_parser.c's parse_bus_config exactly
+# 3. DERIVATION -- mirrors src/command_decoder.c's apply_memory exactly
 
 
 class DerivationError(Exception):
@@ -106,7 +106,8 @@ def derive_row(db, chip_name: str) -> dict:
     EpromDatabase.get_eprom() + convert_to_programmer() path -- never a
     reimplementation of that translation.
 
-    Field derivation mirrors src/json_parser.c:214-243 (parse_bus_config)
+    Field derivation mirrors src/command_decoder.c (apply_memory), which
+    derives the bus fields as the retired JSON parser's parse_bus_config did,
     field-for-field:
       address_lines[j] = bus[j]
       address_mask |= 1 << bus[j]
@@ -144,7 +145,7 @@ def derive_row(db, chip_name: str) -> dict:
 
     address_lines = list(bus)
     if len(bus) < ADDRESS_LINES_SIZE:
-        address_lines.append(0xFF)  # sentinel, mirrors json_parser.c:230
+        address_lines.append(0xFF)  # sentinel: the frame carries 0xFF after the last line
 
     return {
         "chip_name": chip_name,

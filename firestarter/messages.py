@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 89
+Total messages: 91
 """
 
 from dataclasses import dataclass
@@ -95,7 +95,7 @@ MSG_WARN_VCC_IMPLAUSIBLE = 0x88
 MSG_WARN_NOT_CALIBRATED = 0x89
 MSG_WARN_VPP_LOW_MV = 0x8A
 MSG_WARN_VPP_HIGH_MV = 0x8B
-MSG_ERR_BAD_JSON = 0xA0
+MSG_ERR_BAD_FRAME = 0xA0
 MSG_ERR_NO_CMD = 0xA1
 MSG_ERR_SETUP = 0xA2
 MSG_ERR_PARSE_CFG = 0xA3
@@ -129,7 +129,9 @@ MSG_ERR_ENERGY_CAP = 0xBE
 MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_ERR_FL4_PAGE_ALIGN = 0xC0
 MSG_ERR_CALIBRATION = 0xC1
-MSG_ERR_VPP_HIGH_MV = 0xC3
+MSG_ERR_BAD_COMMAND = 0xC2
+MSG_ERR_FRAME_VERSION = 0xC3
+MSG_ERR_VPP_HIGH_MV = 0xC4
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -548,9 +550,9 @@ CATALOG: dict[int, MessageDef] = {
     ),
     0xA0: MessageDef(
         id=0xA0,
-        name="MSG_ERR_BAD_JSON",
+        name="MSG_ERR_BAD_FRAME",
         severity=SEVERITY_ERROR,
-        format="Bad JSON",
+        format="Unsupported command frame",
         params=(),
         param_bytes=0,
         wire_format="id_frame",
@@ -852,8 +854,26 @@ CATALOG: dict[int, MessageDef] = {
         param_bytes=8,
         wire_format="id_frame",
     ),
+    0xC2: MessageDef(
+        id=0xC2,
+        name="MSG_ERR_BAD_COMMAND",
+        severity=SEVERITY_ERROR,
+        format="Command refused, reason %d",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
     0xC3: MessageDef(
         id=0xC3,
+        name="MSG_ERR_FRAME_VERSION",
+        severity=SEVERITY_ERROR,
+        format="Firmware reads command frame version %d",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0xC4: MessageDef(
+        id=0xC4,
         name="MSG_ERR_VPP_HIGH_MV",
         severity=SEVERITY_ERROR,
         format="VPP is high: %u mV > %u mV",
@@ -966,7 +986,7 @@ CATALOG: dict[int, MessageDef] = {
 DBG_FIRESTARTER_STARTED = 0x00
 DBG_FIRMWARE_VERSION = 0x01
 DBG_HARDWARE_REVISION = 0x02
-DBG_PARSE_JSON = 0x03
+DBG_PARSE_COMMAND = 0x03
 DBG_CMD = 0x04
 DBG_SETUP = 0x05
 DBG_CMD_FINISHED = 0x06
@@ -1050,9 +1070,9 @@ DEBUG_CATALOG: dict[int, MessageDef] = {
     ),
     0x03: MessageDef(
         id=0x03,
-        name="DBG_PARSE_JSON",
+        name="DBG_PARSE_COMMAND",
         severity=SEVERITY_DATA,
-        format="Parse JSON",
+        format="Parse command",
         params=(),
         param_bytes=0,
         wire_format="id_frame",

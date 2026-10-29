@@ -562,3 +562,44 @@ class TestDispatchChain:
         assert captured.get("runs") == 3
         assert captured.get("keep_files") is False
         assert captured.get("max_diffs") == 10
+
+    @pytest.mark.parametrize("option", ["--read-settling", "--read-strobe"])
+    def test_read_timing_above_the_frame_limit_is_a_usage_error(
+        self, monkeypatch, capsys, option
+    ):
+        """The frame refuses a read timing above READ_TIMING_MAX_US. Click
+        refuses it first, before the operator creates an output directory or
+        opens a port, so it is never reported as a hardware error."""
+        import sys
+
+        from firestarter import command_frame as cf
+        from firestarter import main as main_mod
+        from firestarter.eprom_operations import EpromOperator
+
+        called = []
+        monkeypatch.setattr(
+            EpromOperator,
+            "consistency_check_eprom",
+            lambda *a, **kw: called.append(True) or 0,
+            raising=False,
+        )
+        argv_saved = sys.argv
+        try:
+            sys.argv = [
+                "firestarter",
+                "-p",
+                "/dev/null",
+                "dev",
+                "consistency-check",
+                "TEST_CHIP",
+                option,
+                str(cf.READ_TIMING_MAX_US + 1),
+            ]
+            with pytest.raises(SystemExit) as exc_info:
+                main_mod.main()
+        finally:
+            sys.argv = argv_saved
+
+        assert exc_info.value.code == 2
+        assert called == []
+        assert f"0<=x<={cf.READ_TIMING_MAX_US}" in capsys.readouterr().err
