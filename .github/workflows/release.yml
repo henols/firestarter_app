@@ -3,12 +3,16 @@ name: Release
 # publishes.
 #
 #   3.2.0b1, 3.2.0rc1  -> GitHub pre-release + PyPI pre-release
-#   3.2.0              -> GitHub release marked Latest + PyPI release
+#   3.2.0              -> GitHub release + PyPI release; marked Latest when it
+#                         is the highest stable version
 #
 # The tag IS the version: setuptools-scm reads it at build time, so no file in
 # the repository holds the version and no bot commits a bump. To release:
 #
 #   git tag 3.2.0b1 <commit-on-main> && git push origin 3.2.0b1
+#
+# A tag goes on a commit on main, or on release/X.Y for a patch to an older
+# line X.Y.
 #
 # or run tools/release.sh, which adds some checks first.
 on:
@@ -27,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       prerelease: ${{ steps.tag.outputs.prerelease }}
+      latest: ${{ steps.tag.outputs.latest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,8 +47,16 @@ jobs:
             echo "::error::tag '$TAG' is not X.Y.Z, X.Y.ZbN or X.Y.ZrcN"
             exit 1
           fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::tag '$TAG' points at a commit that is not on main"
+          # A tag X.Y.Z comes from main, or from release/X.Y: the maintenance
+          # branch of an older line after main has moved on.
+          LINE="${TAG%.*}"
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            SOURCE=main
+          elif git rev-parse -q --verify "origin/release/$LINE" >/dev/null \
+              && git merge-base --is-ancestor "$GITHUB_SHA" "origin/release/$LINE"; then
+            SOURCE="release/$LINE"
+          else
+            echo "::error::tag '$TAG' points at a commit that is not on main or release/$LINE"
             exit 1
           fi
           # tools/release.sh makes the same check. A commit without the binary
@@ -61,8 +74,18 @@ jobs:
           if [[ "$TAG" =~ (b|rc)[0-9]+$ ]]; then
             PRERELEASE=true
           fi
+          # Only the highest stable version is Latest. A patch to an older line
+          # is not.
+          LATEST=false
+          if [ "$PRERELEASE" = false ]; then
+            HIGHEST=$(git tag --list | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+            if [ "$HIGHEST" = "$TAG" ]; then
+              LATEST=true
+            fi
+          fi
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
-          echo "Releasing $TAG (pre-release: $PRERELEASE)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG from $SOURCE (pre-release: $PRERELEASE, latest: $LATEST)" | tee -a "$GITHUB_STEP_SUMMARY"
 
   ci:
     needs: check
@@ -120,7 +143,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: dist/*
           prerelease: ${{ needs.check.outputs.prerelease == 'true' }}
-          make_latest: ${{ needs.check.outputs.prerelease == 'true' && 'false' || 'true' }}
+          make_latest: ${{ needs.check.outputs.latest }}
           generate_release_notes: true
 
   # Uploads the same files that the GitHub release carries.
