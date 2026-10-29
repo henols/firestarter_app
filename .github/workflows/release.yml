@@ -11,9 +11,6 @@ name: Release
 #
 #   git tag 3.2.0b1 <commit-on-main> && git push origin 3.2.0b1
 #
-# A tag goes on a commit on main, or on release/X.Y for a patch to an older
-# line X.Y.
-#
 # or use the release script of the meta repository (RELEASING.md), which adds
 # checks first and verifies the release.
 on:
@@ -48,16 +45,8 @@ jobs:
             echo "::error::tag '$TAG' is not X.Y.Z, X.Y.ZbN or X.Y.ZrcN"
             exit 1
           fi
-          # A tag X.Y.Z comes from main, or from release/X.Y: the maintenance
-          # branch of an older line after main has moved on.
-          LINE="${TAG%.*}"
-          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            SOURCE=main
-          elif git rev-parse -q --verify "origin/release/$LINE" >/dev/null \
-              && git merge-base --is-ancestor "$GITHUB_SHA" "origin/release/$LINE"; then
-            SOURCE="release/$LINE"
-          else
-            echo "::error::tag '$TAG' points at a commit that is not on main or release/$LINE"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag '$TAG' points at a commit that is not on main"
             exit 1
           fi
           # The meta release script makes the same check. A commit without the binary
@@ -75,8 +64,7 @@ jobs:
           if [[ "$TAG" =~ (b|rc)[0-9]+$ ]]; then
             PRERELEASE=true
           fi
-          # Only the highest stable version is Latest. A patch to an older line
-          # is not.
+          # Only the highest stable version is Latest.
           LATEST=false
           if [ "$PRERELEASE" = false ]; then
             HIGHEST=$(git tag --list | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
@@ -86,7 +74,7 @@ jobs:
           fi
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
-          echo "Releasing $TAG from $SOURCE (pre-release: $PRERELEASE, latest: $LATEST)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Releasing $TAG (pre-release: $PRERELEASE, latest: $LATEST)" | tee -a "$GITHUB_STEP_SUMMARY"
 
   ci:
     needs: check

@@ -30,8 +30,7 @@ The second job installs `.[test,py32]`. It imports `pyusb` and records the insta
 it runs `pytest tests/test_pyusb_api_surface.py -q`.
 
 **Only a version tag publishes this package.** A push to a branch never publishes. A push of a tag
-`X.Y.Z`, `X.Y.ZbN` or `X.Y.ZrcN` that points at a commit on `main`, or on `release/X.Y` for a patch
-to an older line, starts `release.yml`:
+`X.Y.Z`, `X.Y.ZbN` or `X.Y.ZrcN` that points at a commit on `main` starts `release.yml`:
 
 1. It runs `ci.yml` as the gate.
 2. It builds the sdist and the wheel once.
