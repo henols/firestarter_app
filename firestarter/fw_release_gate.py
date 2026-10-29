@@ -33,7 +33,7 @@ flag waives this refusal: to run older firmware, install a CLI of the same
 feature version, and that CLI installs it. 3.2.x is the JSON line.
 
 The floor holds only because no binary release can carry a lower version:
-tools/release.sh and release.yml in both repos refuse to tag a commit that
+the meta release script and release.yml in both repos refuse to tag a commit that
 carries the frame below MIN_FEATURE. So every release below the floor is
 JSON-era, and the refusal's 'firestarter=={feature}.*' pin names a JSON-era
 CLI. Until the first 3.3 tag exists, a CLI built from an untagged checkout

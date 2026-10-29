@@ -50,9 +50,9 @@ Commit the regenerated database together with the change.
 
 All work goes to `main` through pull requests. A merge publishes nothing. A release happens only
 when a maintainer pushes a version tag on `main`: `3.2.0b1` publishes a pre-release and `3.2.0` a
-stable release, to GitHub and PyPI. The tag is the version; no file holds it. Run
-`tools/release.sh <version>` to check and push the tag. The
-[release runbook](https://github.com/henols/firestarter/blob/main/RELEASING.md) has the details.
+stable release, to GitHub and PyPI. The tag is the version; no file holds it. The
+[release runbook](https://github.com/henols/firestarter/blob/main/RELEASING.md) tells how to
+make a release.
 
 ## Pull requests
 

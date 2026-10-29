@@ -14,7 +14,8 @@ name: Release
 # A tag goes on a commit on main, or on release/X.Y for a patch to an older
 # line X.Y.
 #
-# or run tools/release.sh, which adds some checks first.
+# or use the release script of the meta repository (RELEASING.md), which adds
+# checks first and verifies the release.
 on:
   push:
     tags: ['[0-9]+.[0-9]+.[0-9]+*']
@@ -59,7 +60,7 @@ jobs:
             echo "::error::tag '$TAG' points at a commit that is not on main or release/$LINE"
             exit 1
           fi
-          # tools/release.sh makes the same check. A commit without the binary
+          # The meta release script makes the same check. A commit without the binary
           # command frame has no floor.
           FLOOR=$(sed -n 's/^MIN_FEATURE = (\([0-9]*\), \([0-9]*\))$/\1.\2/p' firestarter/command_frame.py 2>/dev/null || true)
           if [ -n "$FLOOR" ]; then

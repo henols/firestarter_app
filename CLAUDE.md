@@ -41,14 +41,13 @@ to an older line, starts `release.yml`:
 **The version comes from the tag.** `setuptools-scm` writes `firestarter/_version.py` (gitignored) at
 install and build time. Between tags the version is `<next>.devN+g<sha>`, a PEP 440 pre-release, so
 a dev checkout behaves as a beta build. A checkout with no tags (a shallow clone) builds as
-`0.1.devN`, so CI checks out with `fetch-depth: 0`. `tools/release.sh X.Y.Z` checks the version and
-pushes the tag. It tags `origin/release/X.Y` when that branch exists, otherwise `origin/main`.
-`publish.yml` is a manual re-publish of an existing tag.
+`0.1.devN`, so CI checks out with `fetch-depth: 0`. `publish.yml` is a manual re-publish of an
+existing tag. To make a release, use the `release` skill of the meta repository.
 
 **The binary-frame floor.** A commit that carries the binary command frame cannot be tagged below
-`command_frame.MIN_FEATURE` (`3.3`). `release.sh` and `release.yml` both refuse it, because a
-JSON-era CLI of a lower feature version would install the firmware. `fw_release_gate` refuses to
-install firmware below the same floor.
+`command_frame.MIN_FEATURE` (`3.3`). The meta release script and `release.yml` both refuse it,
+because a JSON-era CLI of a lower feature version would install the firmware. `fw_release_gate`
+refuses to install firmware below the same floor.
 
 **`mypy` is not a CI gate.** Only the local `pre-commit` config runs it. That config runs
 `ruff-check`, then `ruff-format`, then `mypy`.
