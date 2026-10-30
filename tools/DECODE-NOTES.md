@@ -71,7 +71,9 @@ A swap puts 12 V on the wrong pin and can damage the chip.
 
 **Critical:** keep the 32-pin `variant_lo` fork **inside** the `proto_id == 0x08` test. Protocol
 `0x10` rows at `pm_idx` 10 and 13 have `variant_lo` values `0x10` through `0x13`. If the fork moves
-above the protocol test, Intel flash parts get the wrong layout.
+above the protocol test, Intel flash parts get the wrong layout. The `0x10` rows have their own arm
+before the `0x07`/`0x08` arm: map 13 gives `DIP32_SST39SF040`, and every other map gives
+`DIP32_28F020` (§11).
 
 ---
 
@@ -724,9 +726,13 @@ The generator uses the mask in three ways:
   `0x10` chip whose bus holds the line of socket pin 1. Today the rule matches only the SST28SF040
   and SST28LF040/VF040 rows (henols/firestarter#154). Map 13 under `0x10` holds only these rows.
   They are SuperFlash parts with A18 on pin 1 and WE# on pin 31, so the generator gives them
-  `DIP32_SST39SF040`, the same key as the `0x06` rows on map 13. Every other `0x10` row is on
-  `DIP32_STD` with 18 address lines or fewer, and pin 1 is its VPP pin. `DIP32_STD` has no `rw-pin`,
-  so the firmware never drives WE# (pin 31) for `0x10`. That is a separate defect.
+  `DIP32_SST39SF040`, the same key as the `0x06` rows on map 13.
+- **The 0x10 WE# pin.** Every other `0x10` row (maps 5, 7, 9, 10, 11 and 12: the 28F256 to
+  28F020 family) is on `DIP32_28F020`. It has 18 address lines or fewer, VPP on pin 1 and
+  `rw-pin` on pin 31 (WE#). These rows were on `DIP32_STD`, which has no `rw-pin`. There, pin 31 was
+  the unused A18 line, so it stayed low for every read and every status-register poll. With the
+  rw line, the firmware holds WE# high for a read and low only for a command write. All six maps
+  bond pin 31, so the unbonded-pin gate accepts the key.
 
 **`vpp-pin` is exempt from the gate.** Maps 5, 7, 9 and 11 omit pin 1, but the 28F256 to 28F020
 rows on those maps use pin 1 for VPP. So the mask does not describe the VPP pin.

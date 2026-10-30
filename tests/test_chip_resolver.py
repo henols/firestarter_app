@@ -22,7 +22,7 @@ from unittest.mock import patch
 import pytest
 
 from firestarter.chip_resolver import resolve_chip
-from firestarter.database import EpromDatabase
+from firestarter.database import EpromDatabase, pin_conversions
 from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
 
 from .conftest import ADAPTER_REQUIRED_TEST_CHIP, adapter_required_db
@@ -268,6 +268,27 @@ def test_resolve_chip_accepts_an_18_line_intel_28f_chip(db):
     data = resolve_chip("P28F020", db)
     assert data["algorithm"] == 0x10
     assert len(data["bus-config"]["bus"]) == 18
+
+
+def test_every_supported_intel_28f_chip_drives_we_on_pin_31(db):
+    """The 0x10 handler writes commands with WE low and polls the status
+    register with WE high. Without an rw line, pin 31 stays low for every
+    read, so each supported 0x10 row must send pin 31 as its rw line and
+    pin 1 as its VPP line."""
+    rows = [
+        (mfg, chip)
+        for mfg, chips in db.proms.items()
+        for chip in chips
+        if chip["programming"]["algorithm"] == 0x10
+        and chip.get("support_status", "supported") == "supported"
+    ]
+    assert len(rows) == 37
+    for mfg, chip in rows:
+        name = f"{chip['part_number'].split(',')[0]}@{mfg}"
+        bus_config = resolve_chip(name, db)["bus-config"]
+        assert bus_config["rw-pin"] == pin_conversions[32][31], name
+        assert bus_config["vpp-pin"] == pin_conversions[32][1], name
+        assert bus_config["rw-pin"] not in bus_config["bus"], name
 
 
 def test_resolve_chip_accepts_a_bus_that_covers_the_chip(db):

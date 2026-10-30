@@ -115,6 +115,16 @@
             "ce-pin": [22], "oe-pin": [24], "pgm-pin": [31]
         }
     },
+    "DIP32_28F020": {
+        "name": "JEDEC 32-pin 12V flash (28F256 to 28F020 family — VPP on pin 1, WE on pin 31)",
+        "comment": "The Intel 28F command-set flash of protocol 0x10 on infoic.xml pin maps 5, 7, 9, 10, 11 and 12: 28F256, 28F512, 28F010, 28F020, 28F001 and their second sources. Pin 1 is VPP (12V for program and erase), pin 30 is A17 (NC below 28F020) and pin 31 is WE. The parts have 18 address lines or fewer, so pin 31 is never an address line. rw-pin [31] makes the firmware hold WE high for every read and status poll and low only for a command write. On DIP32_STD, pin 31 was the unused A18 line and stayed low. The SST28SF040/LF040/VF040 rows (map 13) are not on this layout: see DIP32_SST39SF040.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
+        }
+    },
     "DIP32_27C301": {
         "name": "Mask-ROM-compatible 32-pin UV-EPROM (27C301 / 27C1000 — OE on pin 2, A16 on pin 24)",
         "comment": "infoic.xml pin map 12 with protocol 0x08 and variant_lo 0x00. Only MBM27C1000, MBM27C2000, HN27C301G, HN27C301AG and M27C1000 carry it; variant_lo 0x01 in the same map is the JEDEC 27C020 layout. Pin functions are from datasheets/MBM27C1000.pdf (page 4-61 pin assignment, page 4-63 pin description): pin 1 VPP, pin 2 OE, pin 22 CE, pin 24 A16, pin 31 PGM, pin 30 NC. one-rom chip-types.json type 27C301 (aliases 27C1000, 27C100) gives the same OE and A16 pins. JEDEC 27C010/27C020 swap pins 2 and 24, so on DIP32_27C020 these parts drive OE high whenever A16 is 1 (henols/firestarter#70). Pin 30 is A17 for the 256K MBM27C2000 row: <maps> index 12 bonds it, and it is the only bonded pin that has no other function on this layout. No MBM27C2000 datasheet is vendored to confirm it.",

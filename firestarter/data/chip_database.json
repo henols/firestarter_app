@@ -649,7 +649,7 @@
         30
       ],
       "part_number": "AM28F256",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -675,7 +675,7 @@
         30
       ],
       "part_number": "AM28F512",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -700,7 +700,7 @@
         30
       ],
       "part_number": "AM28F010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -725,7 +725,7 @@
         30
       ],
       "part_number": "AM28F010A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -747,7 +747,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AM28F020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -769,7 +769,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AM28F020A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -3917,7 +3917,7 @@
         30
       ],
       "part_number": "CAT28F001P-B",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -3942,7 +3942,7 @@
         30
       ],
       "part_number": "CAT28F001P-T",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -3969,7 +3969,7 @@
         30
       ],
       "part_number": "CAT28F256",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -3995,7 +3995,7 @@
         30
       ],
       "part_number": "CAT28F512",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -4020,7 +4020,7 @@
         30
       ],
       "part_number": "CAT28F010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -4042,7 +4042,7 @@
         "vpp_mv": 12000
       },
       "part_number": "CAT28F020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -6216,7 +6216,7 @@
         30
       ],
       "part_number": "MBM28F010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -6668,7 +6668,7 @@
         30
       ],
       "part_number": "HN28F101P,HN28F101FP",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -7828,7 +7828,7 @@
         30
       ],
       "part_number": "M28F256",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -7853,7 +7853,7 @@
         30
       ],
       "part_number": "P28F001BX-T",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -7878,7 +7878,7 @@
         30
       ],
       "part_number": "P28F001BX-B",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -7905,7 +7905,7 @@
         30
       ],
       "part_number": "P28F256A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -7931,7 +7931,7 @@
         30
       ],
       "part_number": "P28F512",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -7956,7 +7956,7 @@
         30
       ],
       "part_number": "P28F010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -7978,7 +7978,7 @@
         "vpp_mv": 12000
       },
       "part_number": "P28F020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -8187,7 +8187,7 @@
         30
       ],
       "part_number": "IS28F010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -8209,7 +8209,7 @@
         "vpp_mv": 12000
       },
       "part_number": "IS28F020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -8856,7 +8856,7 @@
         30
       ],
       "part_number": "MX28F1000P",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -8878,7 +8878,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MX28F2000P",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -8900,7 +8900,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MX28F2000T",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -9951,7 +9951,7 @@
         30
       ],
       "part_number": "M5M28F101,M5M28F101A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -12252,7 +12252,7 @@
         30
       ],
       "part_number": "M28F101",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -12274,7 +12274,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M28F201",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -12301,7 +12301,7 @@
         30
       ],
       "part_number": "M28F256",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -12327,7 +12327,7 @@
         30
       ],
       "part_number": "M28F512,M28F512B,M28F010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -14452,7 +14452,7 @@
         30
       ],
       "part_number": "M28F101",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -14474,7 +14474,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M28F201",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -14501,7 +14501,7 @@
         30
       ],
       "part_number": "M28F256",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -14527,7 +14527,7 @@
         30
       ],
       "part_number": "M28F512,M28F512B,M28F010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -15985,7 +15985,7 @@
         30
       ],
       "part_number": "TMS28F010,TMS28F010A,TMS28F010B",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -16007,7 +16007,7 @@
         "vpp_mv": 12000
       },
       "part_number": "TMS28F020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_28F020",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,

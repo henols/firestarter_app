@@ -831,10 +831,10 @@ class TestThirtyTwoPinVariantLoDispatch:
             (12, 0x02, 0x08, 524288, "DIP32_STD"),
             (12, 0x00, 0x08, 131072, "DIP32_27C301"),
             (12, 0x01, 0x08, 262144, "DIP32_27C020"),
-            (12, 0x10, 0x10, 524288, "DIP32_STD"),
-            (12, 0x11, 0x10, 524288, "DIP32_STD"),
-            (12, 0x12, 0x10, 524288, "DIP32_STD"),
-            (12, 0x13, 0x10, 524288, "DIP32_STD"),
+            (12, 0x10, 0x10, 524288, "DIP32_28F020"),
+            (12, 0x11, 0x10, 524288, "DIP32_28F020"),
+            (12, 0x12, 0x10, 524288, "DIP32_28F020"),
+            (12, 0x13, 0x10, 524288, "DIP32_28F020"),
             (0, 0x00, 0x0E, 131072, "DIP32_SST39SF040"),
         ],
     )
@@ -844,7 +844,7 @@ class TestThirtyTwoPinVariantLoDispatch:
         """Each `(pm_idx, variant_lo, proto_id, mem_size)` tuple pins one row
         of the 182-RESEARCH.md measured 8-row blast radius, the four
         protocol-0x10 points proving the variant_lo fork stays inside the
-        proto_id == 0x08 test (Intel-flash parts did not move), and the
+        proto_id == 0x08 test (Intel-flash parts resolve to DIP32_28F020), and the
         pm_idx=0 SRAM point proving the fork did not touch a sibling arm.
         The final assertion is the self-checking leg: every key this
         dispatch can produce must be a member of VALID_PINOUT_KEYS, so a

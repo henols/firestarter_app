@@ -421,11 +421,17 @@ def resolve_pinout_key(
                 # [VERIFIED: infoic.xml — pm_idx=13 / proto 0x10 is the SST28
                 #  rows only; map 13 bonds chip pins 1 and 31]
                 key = "DIP32_SST39SF040"
+            elif proto_id == 0x10:
+                # Intel 28F command set: VPP on pin 1, WE on pin 31. DIP32_STD
+                # has no WE, so pin 31 stayed low through every read.
+                # [VERIFIED: infoic.xml — proto 0x10 on maps 5/7/9/10/11/12 is
+                #  the 28F256-28F020 family, 18 address lines or fewer]
+                key = "DIP32_28F020"
             elif proto_id == 0x0D:
                 # 5V EEPROM; WE=31, no VPP.
                 # [VERIFIED: infoic.xml <maps> 9/11/13 bond pin 31, not pin 30]
                 key = "DIP32_28C040"
-            elif proto_id in {0x07, 0x08, 0x10}:
+            elif proto_id in {0x07, 0x08}:
                 if proto_id == 0x08 and variant_lo == 0x03:
                     key = "DIP32_27C801"
                 elif proto_id == 0x08 and variant_lo == 0x02:
