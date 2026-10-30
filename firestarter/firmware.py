@@ -34,6 +34,7 @@ from firestarter.constants import (
     FLAG_FORCE,
 )
 from firestarter.exceptions import (
+    FirmwareFrameVersionError,
     FirmwareOperationError,  # wired by the USB DFU install path
     FirmwareOutdatedError,
     ProgrammerNotFoundError,
@@ -243,6 +244,16 @@ class FirmwareManager:
                     f"Failed to read firmware version: Invalid response from programmer: '{msg}'"  # noqa: E501
                 )
                 return None, None, None
+        except FirmwareFrameVersionError as e:
+            if e.firmware >= e.host:
+                raise
+            # Firmware of an older frame version cannot answer this CLI's
+            # version query, and no JSON resend reaches it. It can still be
+            # replaced: avrdude talks to the bootloader. Return the port with
+            # no identity, so manage_firmware_update takes its blind-install
+            # path (--install or --force, with an explicit --board).
+            logger.warning(f"{e} The current firmware version cannot be read.")
+            return e.port, None, None
         except FirmwareOutdatedError:
             raise  # surface lockstep refuse to operator (do NOT swallow)  # noqa: E501
         except (ProgrammerNotFoundError, SerialError) as e:

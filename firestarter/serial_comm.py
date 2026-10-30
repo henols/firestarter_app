@@ -991,13 +991,14 @@ class SerialCommunicator:
         else:
             advice = (
                 "The firmware is older than this CLI. Upgrade the firmware "
-                "using 'firestarter fw --install'."
+                "using 'firestarter fw --board <board> --install'."
             )
         raise FirmwareFrameVersionError(
             f"The firmware on {self.port_name} reads command frame version "
             f"{firmware}, and this CLI sends version {cf.VERSION}. {advice}",
             firmware=firmware,
             host=cf.VERSION,
+            port=self.port_name,
         )
 
     def _recover_from_unsupported_frame(
@@ -1228,19 +1229,16 @@ class SerialCommunicator:
         answered = f" It answered '{refusals[-1]}'." if refusals else ""
         if preferred_port and port_named_this_run:
             # Port was named, so the search was restricted to it. Say which port
-            # failed and name the two causes. Current firmware refuses some
-            # command parameters at setup with an ERROR instead of an ack.
-            # Firmware old enough that it cannot parse the current command
-            # framing answers "Bad JSON" too, so it can never be identified —
-            # but it CAN still be reflashed, because avrdude talks to the
-            # bootloader and not to the firmware.
+            # failed and name the causes that are left: firmware too old for
+            # the binary command frame raised FirmwareOutdatedError before
+            # this point. A board that does not answer can still be
+            # reflashed, because avrdude talks to the bootloader and not to
+            # the firmware.
             raise ProgrammerNotFoundError(
                 f"No compatible programmer answered on {preferred_port}."
                 f"{answered} If a board is attached there, the firmware may "
-                "have refused the command parameters. Or its firmware may "
-                "predate the current command framing, which makes it answer "
-                "'Bad JSON' instead of an ack — every 2.x release, and 3.0.0 "
-                "pre-releases before b8. Such a board can still be reflashed "
+                "have refused the command parameters, or the board may have "
+                "no Firestarter firmware. The board can still be flashed "
                 "directly: "
                 f"firestarter --port {preferred_port} fw --board <board> --install"
             )
@@ -1248,7 +1246,7 @@ class SerialCommunicator:
             raise ProgrammerNotFoundError(
                 "No compatible programmer found on any port. A board answered "
                 f"'{refusals[-1]}'. The firmware may have refused the command "
-                "parameters, or it may be older than this CLI."
+                "parameters."
             )
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
 

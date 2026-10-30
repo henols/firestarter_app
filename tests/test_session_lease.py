@@ -248,9 +248,8 @@ def test_a_leased_setup_runs_the_firmware_and_hardware_gates(monkeypatch) -> Non
     firmware identity (`FirmwareOutdatedError`, raised from `setup_command`
     exactly as the real extracted method does) must still refuse -- the
     gate is never skipped just because the link is already open. Cold-path
-    arm: the identical refusal on a COLD connect is swallowed into the
-    pre-existing `(None, 0)` failed-setup return, never raised -- the
-    contrast is deliberate (D-06) and this test pins both halves of it."""
+    arm: the identical refusal on a COLD connect is raised too, so the
+    caller reports the outdated firmware instead of a failed connection."""
     events: list[tuple[str, str]] = []
     leased_comm = _FakeComm(events, "leased0", fail_setup_on_call=1)
     monkeypatch.setattr(
@@ -273,7 +272,7 @@ def test_a_leased_setup_runs_the_firmware_and_hardware_gates(monkeypatch) -> Non
         assert operator.comm is None, "the gate failure must drop the dead link"
         assert operator._leased is True, "the block is still a lease"
 
-    # Cold-path arm: the SAME refusal, cold, is a silent failed setup.
+    # Cold-path arm: the SAME refusal, cold, is raised the same way.
     def _cold_gate_refusal(command_to_send, config_manager, **kwargs):
         raise FirmwareOutdatedError("simulated: cold connect firmware gate refused")
 
@@ -281,16 +280,10 @@ def test_a_leased_setup_runs_the_firmware_and_hardware_gates(monkeypatch) -> Non
         "firestarter.serial_comm.SerialCommunicator.find_and_connect",
         _cold_gate_refusal,
     )
-    with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE) as (
-        cmd,
-        buf,
-        name,
-    ):
-        assert cmd is None and buf is None and name is None, (
-            "a cold connect-time gate refusal must degrade to a silent failed "
-            "setup, never raise -- the leased arm above is the deliberate "
-            "divergence, not the cold one"
-        )
+    with pytest.raises(FirmwareOutdatedError, match="cold connect"):
+        with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE):
+            pass
+    assert operator.comm is None
 
 
 def test_a_mid_plan_serial_error_drops_the_lease_and_the_plan_continues(

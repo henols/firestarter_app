@@ -1687,8 +1687,23 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
             sys.exit(1)
         if not app.hardware_manager.set_bandgap_mv(bandgap_mv):
             sys.exit(1)
-        click.echo(f"Reference: {before['bandgap_mv']} mV -> {bandgap_mv} mV")
-        _echo_calibration_effect(bandgap_mv)
+        # Read the value back over a new connection, so the report is what the
+        # board stored, not what this host sent.
+        after = app.hardware_manager.read_calibration()
+        if after is None:
+            click.echo(
+                f"Sent {bandgap_mv} mV, but could not read the calibration back. "
+                "Run 'firestarter cal' to check it."
+            )
+            sys.exit(1)
+        if after["bandgap_mv"] != bandgap_mv:
+            click.echo(
+                f"Calibration not stored: the board reports {after['bandgap_mv']} "
+                f"mV, expected {bandgap_mv} mV."
+            )
+            sys.exit(1)
+        click.echo(f"Reference: {before['bandgap_mv']} mV -> {after['bandgap_mv']} mV")
+        _echo_calibration_effect(after["bandgap_mv"])
         sys.exit(0)
 
     current = app.hardware_manager.read_calibration()
