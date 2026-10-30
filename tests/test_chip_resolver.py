@@ -254,6 +254,8 @@ def test_the_0x10_guard_refuses_exactly_the_rows_the_generator_refuses(db):
         flagged = "socket pin 1" in chip.get("unsupported_reason", "")
         chip["support_status"] = "supported"
         chip.pop("unsupported_reason", None)
+        # SST28LF040 is a 3V part; hold VCC at 5V so only the pin-1 rule acts.
+        chip["electrical"]["vcc_mv"] = 5000
         name = f"{chip['part_number'].split(',')[0]}@{mfg}"
         try:
             resolve_chip(name, db)
@@ -262,6 +264,58 @@ def test_the_0x10_guard_refuses_exactly_the_rows_the_generator_refuses(db):
             assert "socket pin 1" in str(exc), name
             refused = True
         assert refused == flagged, name
+
+
+@pytest.mark.parametrize(
+    ("name", "vcc"),
+    [("SST39VF040", "3V"), ("AT28LV64", "3.3V"), ("DS1230W(RW3.3V)", "3.3V")],
+)
+def test_a_3v_part_is_refused(db, name, vcc):
+    """The shield supplies 5V. A part whose VPP byte names a lower VCC is
+    refused, with the voltage in the reason."""
+    raw, _ = db.get_eprom_config(name)
+    assert raw["support_status"] == "protocol-not-implemented"
+    with pytest.raises(ChipNotImplementedError, match=f"VCC is {vcc}, but the shield"):
+        resolve_chip(name, db)
+
+
+def test_a_5v_class_vpp_byte_vcc_keeps_the_row_supported(db):
+    """AT29C040's VPP byte names 4.75V, a 5V-class value: the row stays as it was."""
+    raw, _ = db.get_eprom_config("AT29C040")
+    assert raw["electrical"]["vcc_mv"] == 5000
+    assert resolve_chip("AT29C040", db)["algorithm"] == 0x05
+
+
+def test_resolve_chip_refuses_a_3v_part_that_an_override_marks_supported(db):
+    raw, _ = db.get_eprom_config("SST39VF040")
+    raw["support_status"] = "supported"
+    del raw["unsupported_reason"]
+    with pytest.raises(ChipNotImplementedError, match="shield supplies 5V"):
+        resolve_chip("SST39VF040", db)
+
+
+def test_the_vcc_guard_refuses_exactly_the_rows_the_generator_refuses(db):
+    """The generator and resolve_chip each encode the 4.5V VCC rule. With every
+    row forced to supported, resolve_chip refuses a row on the VCC rule exactly
+    when the generator gave that row the VCC reason, or when the row already
+    had another reason and a VCC below 4.5V (SST28LF040)."""
+    checked = 0
+    for mfg, chips in db.proms.items():
+        for chip in chips:
+            low_vcc = chip["electrical"]["vcc_mv"] < 4500
+            if "shield supplies 5V" in chip.get("unsupported_reason", ""):
+                assert low_vcc, chip["part_number"]
+            chip["support_status"] = "supported"
+            chip.pop("unsupported_reason", None)
+            name = db.qualified_chip_name(chip["part_number"].split(",")[0], chip, mfg)
+            try:
+                resolve_chip(name, db)
+                refused = False
+            except ChipNotImplementedError as exc:
+                refused = "shield supplies 5V" in str(exc)
+            assert refused == low_vcc, name
+            checked += 1
+    assert checked == 749
 
 
 def test_resolve_chip_accepts_an_18_line_intel_28f_chip(db):

@@ -215,6 +215,14 @@ class TestIntel28fVppOnAddressPin:
         for mfg, chip in others:
             assert chip["support_status"] == "supported", f"{mfg}/{chip['part_number']}"
 
+    def test_every_other_intel_28f_row_has_we_on_pin_31(self):
+        """DIP32_STD has no WE, so pin 31 stayed low through every read."""
+        for mfg, chip in _all_chips(_load_db()):
+            if chip["programming"]["algorithm"] == 0x10 and not (
+                _aliases(chip) & self._SST28
+            ):
+                assert chip["pinout"] == "DIP32_28F020", f"{mfg}/{chip['part_number']}"
+
     def test_pin_1_counts_only_inside_the_chip_width_of_a_32_pin_part(self):
         from tools import build_db
 
@@ -237,6 +245,42 @@ class TestIntel28fVppOnAddressPin:
             for pins in (24, 28)
             for line in pin_conversions[pins].values()
         )
+
+
+class TestVppByteVcc:
+    """The low nibble of the VPP byte is a VCC index (DECODE-NOTES.md §9.6). A row
+    whose operating VCC is below 4.5V is refused: the shield supplies 5V."""
+
+    def test_the_nibble_decodes_as_a_vcc_index(self):
+        from tools import build_db
+
+        decode = build_db.vpp_byte_vcc_mv
+        assert decode(0x0001) == 3300
+        assert decode(0x0008) == 3000
+        assert decode(0x0071) == 3300  # VPP index 0x70, VCC index 0x1
+        assert decode(0x000A) == 4750
+        assert decode(0x0000) is None
+        assert decode(0x0070) is None
+        assert decode(0x00F1) is None  # 0xF1 is a whole-byte VPP index (25V)
+
+    def test_a_row_is_refused_exactly_when_its_vcc_is_below_4500(self):
+        for mfg, chip in _all_chips(_load_db()):
+            low = chip["electrical"]["vcc_mv"] < 4500
+            reason = chip.get("unsupported_reason", "")
+            assert ("shield supplies 5V" in reason) == (
+                low and "socket pin 1" not in reason
+            ), f"{mfg}/{chip['part_number']}"
+            if low:
+                assert chip["support_status"] == "protocol-not-implemented"
+
+    def test_a_3v_sram_keeps_its_vcc(self):
+        """The SRAM single-rail rewrite must not replace 3.3V with vdd."""
+        for _, chip in _all_chips(_load_db()):
+            if chip["part_number"] == "DS1230W(RW3.3V)":
+                assert chip["electrical"]["vcc_mv"] == 3300
+                break
+        else:
+            raise AssertionError("DS1230W(RW3.3V) not found")
 
 
 class TestDip24_2816Family:

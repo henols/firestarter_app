@@ -355,7 +355,8 @@ classify()]`. Three lookups read the same 16-bit `voltages` word:
 
 - `_d_vpp_mv` reads the low byte. It first tries an exact match on the two keys with a non-zero low
   nibble, `0xF1` and `0xF2`. Then it masks with `& 0xF0` and looks up `VPP_MV`, with default `0`.
-- `_d_vcc_mv` reads bits 11-8. It looks up `VCC_VOLTAGES`, with default `5000`.
+- `_d_vcc_mv` reads bits 11-8. It looks up `VCC_VOLTAGES`, with default `5000`. A VCC below
+  4.5 V in the low nibble of the VPP byte replaces it (§9.6).
 - `_d_vdd_mv` reads bits 15-12. It looks up `VCC_VOLTAGES`, with default `5000`.
 
 Each table has a `[VERIFIED: minipro <file>#<lines> @ a8efaedc — <array>[]]` marker. The marker
@@ -459,7 +460,9 @@ index would use the same fallback, with no message.
 
 **The `vdd < vcc` predicate.** Decoded vdd below decoded vcc selects exactly 28 rows. 373 rows
 have the two equal, and 366 rows have vdd greater. 28 + 373 + 366 = 767, the full filtered
-population. `build_db.py` does not assert this predicate at build time.
+population. `build_db.py` does not assert this predicate at build time. These counts were measured
+before §9.6. The VPP-byte VCC moves four 3 V rows (28LV64A, M28LV64 and the two M28C64-xxW rows)
+out of the group, so the shipped database has 24 rows with `vdd_mv < vcc_mv`, all at 5500.
 
 ### 9.5 Limits
 
@@ -472,10 +475,8 @@ population. `build_db.py` does not assert this predicate at build time.
   Nobody has examined them yet. Each needs its own datasheet.
 - **The result does not say that the value of a row is correct.** It says what the field is: a
   programmer rail index. It does not say that a decoded or overridden voltage is right for a part.
-- **The option-flag reading of the low nibble is a reading of this generator, not of upstream.**
-  No named constant in `minipro.h` or `database.c` defines the low nibble of the VPP byte as flags.
-  The only support is the `0x00`/`0x01` and `0x70`/`0x71` pairs in the low-byte census: one rail
-  index with the low nibble clear and set.
+- **The low nibble of the VPP byte is not a flag field.** An earlier version of this section read
+  it as option flags. §9.6 shows that it is a VCC index.
 - Upstream names two powerdown bits: `LAST_JEDEC_BIT_IS_POWERDOWN_ENABLE` and
   `POWERDOWN_MODE_DISABLE` `[VERIFIED: minipro.h#L84-L85 @ a8efaedc]`. They are at bits 12 and 13,
   in the **vdd** nibble, not in the VPP byte. Their comment limits them to the ATF20V10C/ATF16V8C
@@ -486,6 +487,58 @@ Sources: `tools/datasheet_overrides.json` entries `FUJITSU/MBM27128`, `FUJITSU/M
 `FUJITSU/MBM27C4001`, `NEC/UPD27128`, `NEC/UPD27256` and the twelve `0x06` entries.
 `database.c#L125-L126`, `database.c#L161-L170`, `database.c#L182-L190` and `minipro.h#L84-L85`,
 all @ a8efaedc.
+
+### 9.6 The low nibble of the VPP byte is a VCC index
+
+**Result:** when the VPP byte is below `0xF0`, its low nibble is an index into
+`xg_vcc_voltages[]`. On a 3 V part it names the operating VCC. The vcc nibble (bits 11-8) does
+not: on most of these rows it is `0x0` (5 V).
+
+**The upstream use.** minipro sends the nibble to the T48/T56 as a byte of its own
+`[VERIFIED: t56.c#L202-L207 @ a8efaedc]`:
+
+```c
+if ((device->voltages.raw_voltages & 0xf0) == 0xf0) {
+        msg[22] = (uint8_t)device->voltages.raw_voltages;
+} else {
+        msg[21] = (uint8_t)device->voltages.raw_voltages & 0x0f;
+        msg[22] = (uint8_t)device->voltages.raw_voltages & 0xf0;
+}
+```
+
+`t48.c#L275-L280` is the same. A VPP byte of `0xF1` or `0xF2` is a whole-byte VPP index, so it has
+no VCC nibble. Upstream gives `msg[21]` no name.
+
+**The evidence.** The census of the nibble over the INFOIC2PLUS `type 1/4` rows:
+
+| Nibble | `VCC_VOLTAGES` | Names that carry it |
+|---|---|---|
+| `0x1` | 3300 | AT28LV/BV, AT29LV/BV, AT49LV/BV, SST29LE/VE/VF, SST39VF, AM27LV, MX27L, DS12xxW "(RW3.3V)", BQ401xLYMA "(RW3.3V)" |
+| `0x6` | 1800 | SST39WF, AT25SL |
+| `0x8` | 3000 | SST39VF040, AT45DB |
+| `0x9` | 1200 | names that end in "(VCC=1.2V)" |
+| `0x4`, `0xa`, `0xb` | 5500, 4750, 5250 | DS1225, AT29C040, W29C040, DS1220: 5 V parts |
+
+The names agree with the index on every 3 V and 1.8 V group. The last row is the counter-evidence:
+on a 5 V part the nibble names a 5 V-class rail, not the operating VCC.
+
+**The decode.** `vpp_byte_vcc_mv()` reads the nibble. If its value is below `SHIELD_MIN_VCC_MV`
+(4500), it replaces the decoded `vcc_mv`. That happens in the decoded view, so a datasheet
+override can still correct it. A 5V-class value leaves `vcc_mv` as decoded. The SRAM single-rail
+rewrite (`vcc_mv = vdd_mv`) does not run on a row whose nibble names a low VCC, so DS1230W keeps
+3300.
+
+**The refusal.** The shield supplies a fixed 5 V. A row whose final `vcc_mv` is below 4500 is
+`protocol-not-implemented`, and the reason names the voltage. `resolve_chip` makes the same check,
+so a user override that marks such a row `supported` is still refused. In the shipped database
+119 rows that were `supported` are refused. 18 of them already decoded 3300 from the vcc nibble
+(HT27LC, NM27LV, MX27L, SST37VF, MB85R256H) and were supported anyway.
+
+**Limits.**
+
+- The nibble is the only evidence for most of these rows. No datasheet is vendored for them.
+- A wide-range part is refused even if it runs at 5 V. Example: Ramtron FM16W08, a wide-voltage
+  (2.7-5.5 V) FRAM. A vendored datasheet and an override entry can restore such a row.
 
 ---
 

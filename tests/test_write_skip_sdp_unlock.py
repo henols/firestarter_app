@@ -43,8 +43,9 @@ from .conftest import make_app_context as _make_app_context
 # test_sdp_honesty.py's fixture chips so both suites exercise the same
 # ground-truth entries. ---
 
-# FRAM -- capability-refused, support_status == "supported" (not adapter-required).
-_FRAM_CHIP = "FM28V020"
+# Unrecognised 28C64-class EEPROM -- capability-refused, support_status == "supported".
+# (The one 0x0D FRAM row, FM28V020, is a 3V part and is refused outright.)
+_UNRECOGNISED_28PIN_CHIP = "X2864AP"
 # Pre-SDP DIP24_2816 generation -- capability-refused, support_status == "supported".
 _PRESDP_DIP2816_CHIP = "2816"
 # Non-0x0D chip -- wrong-protocol, no SDP surface at all.
@@ -232,12 +233,12 @@ def test_no_flag_on_an_allowed_0x0d_part_emits_no_skip_bit_and_no_auto_set_line(
     assert "auto-setting --skip-sdp-unlock" not in result.output
 
 
-@pytest.mark.parametrize("chip", [_FRAM_CHIP, _PRESDP_DIP2816_CHIP])
+@pytest.mark.parametrize("chip", [_UNRECOGNISED_28PIN_CHIP, _PRESDP_DIP2816_CHIP])
 def test_refused_0x0d_part_gets_the_bit_auto_set_with_an_unconditional_report_line(
     runner: CliRunner, tmp_path, make_comm, fake_serial, chip: str
 ) -> None:
-    """v1.22 HOST-04: a capability-refused 0x0D part (one FRAM part, one
-    pre-SDP DIP24_2816 part) gets FLAG_SKIP_SDP_UNLOCK auto-set with an
+    """v1.22 HOST-04: a capability-refused 0x0D part (one unrecognised
+    DIP28_28C64 part, one pre-SDP DIP24_2816 part) gets FLAG_SKIP_SDP_UNLOCK auto-set with an
     unconditional, default-visible report line -- run WITHOUT -v so this leg
     proves default visibility, not verbosity-gated visibility."""
     result, captured = _drive_write(runner, chip, tmp_path, make_comm, fake_serial)
@@ -259,7 +260,7 @@ def test_auto_set_line_is_not_duplicated_when_the_user_passed_the_flag(
     duplicate "on your behalf" line would misreport what happened."""
     result, captured = _drive_write(
         runner,
-        _FRAM_CHIP,
+        _UNRECOGNISED_28PIN_CHIP,
         tmp_path,
         make_comm,
         fake_serial,
@@ -337,7 +338,7 @@ def test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on(
          RETIRE-01's argument actually depends on.
     """
     refused_result, refused_captured = _drive_write(
-        runner, _FRAM_CHIP, tmp_path, make_comm, fake_serial
+        runner, _UNRECOGNISED_28PIN_CHIP, tmp_path, make_comm, fake_serial
     )
     assert refused_result.exit_code == 0, refused_result.output
     assert refused_captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK, (

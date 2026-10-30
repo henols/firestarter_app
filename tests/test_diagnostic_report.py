@@ -2261,11 +2261,11 @@ def test_successful_flash4_carve_discloses_boot_block_exclusion_in_console():
     assert "boot block" in rendered.lower(), rendered
 
 
-@pytest.mark.parametrize("chip_name", ["AT29C256", "AT29C257", "AT29LV256"])
+@pytest.mark.parametrize("chip_name", ["AT29C256", "AT29C257"])
 def test_whole_device_boot_block_fallback_discloses_refusal_not_uv_wording(
     chip_name,
 ):
-    """AT29C256/257/LV256 (real DB entries, protocol 0x05, 32768 B): the
+    """AT29C256/257 (real DB entries, protocol 0x05, 32768 B): the
     two 16 KiB boot blocks cover the ENTIRE device, so derive_plan falls
     back to the small fixed region -- region_policy is `fixed`, not
     `full-device`. The write is never masked (a non-UV chip), so the

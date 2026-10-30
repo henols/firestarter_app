@@ -241,7 +241,8 @@ def test_every_shipped_nor_unlock_row_resolves_erase_capable():
     """The blast radius of 205-CR-01, pinned as a live database property
     rather than a literal count -- the database is generated and the row
     count is expected to move; what must not silently change is that
-    EVERY shipped protocol-0x06 row resolves `FLAG_CAN_ERASE`, which is
+    EVERY shipped supported protocol-0x06 row resolves `FLAG_CAN_ERASE`
+    (a refused row, such as a 3V part, resolves nothing), which is
     exactly what makes 205-VERIFICATION.md's "190 of 190" finding a
     property of the whole family and not an incidental fact about one
     chip. Both sets are derived independently from the shipped database,
@@ -258,7 +259,10 @@ def test_every_shipped_nor_unlock_row_resolves_erase_capable():
                 continue
             name = db.qualified_chip_name(part_number, chip, manufacturer)
             all_part_numbers.add(name)
-            if chip.get("programming", {}).get("algorithm") == NOR_UNLOCK_PROTOCOL_ID:
+            if (
+                chip.get("programming", {}).get("algorithm") == NOR_UNLOCK_PROTOCOL_ID
+                and chip.get("support_status", "supported") == "supported"
+            ):
                 nor_unlock_rows.add(name)
 
     erase_capable_rows: set[str] = set()

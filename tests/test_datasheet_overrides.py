@@ -482,7 +482,7 @@ class TestVddBelowVccPredicate:
     per D-06 and the standing prohibition, this is a test, not a build-time
     assertion."""
 
-    def test_the_28_row_group_is_exact_and_matches_the_5500_rail(self):
+    def test_the_24_row_group_is_exact_and_matches_the_5500_rail(self):
         with open(
             _APP_ROOT / "firestarter" / "data" / "chip_database.json",
             encoding="utf-8",
@@ -493,7 +493,8 @@ class TestVddBelowVccPredicate:
             r for r in rows if r["electrical"]["vdd_mv"] < r["electrical"]["vcc_mv"]
         ]
         at_5500 = [r for r in rows if r["electrical"]["vcc_mv"] == 5500]
-        assert len(below) == 28, len(below)
+        # 24: the 3V 28LV64A, M28LV64 and M28C64-xxW rows now carry 3300.
+        assert len(below) == 24, len(below)
         assert {id(r) for r in below} == {id(r) for r in at_5500}, (
             len(below),
             len(at_5500),

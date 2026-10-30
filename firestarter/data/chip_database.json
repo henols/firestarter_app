@@ -430,7 +430,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "UV-EPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
@@ -448,14 +448,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "UV-EPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
@@ -470,14 +471,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "UV-EPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
@@ -492,14 +494,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 1048576,
         "type": "UV-EPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 6500,
         "vpp_mv": 12000
       },
@@ -514,7 +517,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -1338,7 +1342,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 9000
       },
@@ -1353,7 +1357,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "ANACHIP": [
@@ -2051,7 +2056,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2066,14 +2071,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2088,14 +2094,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2110,7 +2117,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -2399,7 +2407,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2419,7 +2427,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -2524,7 +2533,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2544,14 +2553,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2570,14 +2580,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2593,14 +2604,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2616,7 +2628,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -2801,7 +2814,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2817,14 +2830,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 65536,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2845,14 +2859,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2870,14 +2885,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2896,14 +2912,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2922,14 +2939,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2947,14 +2965,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2969,14 +2988,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -2994,14 +3014,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3019,14 +3040,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3041,14 +3063,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3067,14 +3090,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3092,14 +3116,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3114,14 +3139,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3136,14 +3162,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 65536,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3163,7 +3190,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -3865,7 +3893,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3880,14 +3908,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -3902,7 +3931,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -4230,7 +4260,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4245,7 +4275,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "CHINGIS": [
@@ -4602,7 +4633,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4617,7 +4648,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "DALLAS": [
@@ -4765,7 +4797,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4780,7 +4812,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -4788,7 +4821,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4803,7 +4836,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -4857,7 +4891,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4872,7 +4906,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -4880,7 +4915,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4895,7 +4930,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -4949,7 +4985,7 @@
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4964,7 +5000,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -4972,7 +5009,7 @@
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -4987,7 +5024,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -5041,7 +5079,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -5056,7 +5094,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -5064,7 +5103,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -5079,7 +5118,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "DENSE-PAC": [
@@ -5352,7 +5392,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -5367,7 +5407,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "EXEL": [
@@ -5888,7 +5929,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -6845,7 +6887,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -6867,7 +6910,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -6889,7 +6933,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -6911,7 +6956,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "HYNIX": [
@@ -7371,7 +7417,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -7386,14 +7432,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -7408,7 +7455,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "INTEL": [
@@ -8443,7 +8491,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -8458,14 +8506,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -8480,14 +8529,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -8502,7 +8552,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -8753,7 +8804,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -8775,7 +8827,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -8797,7 +8850,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -8819,7 +8873,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -8841,7 +8896,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -9223,7 +9279,7 @@
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -9238,14 +9294,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -9263,14 +9320,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -9288,14 +9346,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -9310,7 +9369,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "MAXWELL": [
@@ -9828,7 +9888,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "EEPROM",
-        "vcc_mv": 5500,
+        "vcc_mv": 3300,
         "vdd_mv": 3300,
         "vpp_mv": 12000
       },
@@ -9843,7 +9903,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "MITSUBISHI": [
@@ -9997,7 +10058,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -10016,14 +10077,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -10042,14 +10104,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -10067,14 +10130,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -10092,14 +10156,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -10114,14 +10179,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -10136,7 +10202,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -10933,7 +11000,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -10955,7 +11023,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -10977,7 +11046,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -10999,7 +11069,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 100
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -11654,7 +11725,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -11669,7 +11740,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -11700,7 +11772,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -11715,7 +11787,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "SAMSUNG": [
@@ -12222,7 +12295,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "EEPROM",
-        "vcc_mv": 5500,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -12237,7 +12310,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -12737,7 +12811,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -12752,7 +12826,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -12783,7 +12858,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -12798,7 +12873,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -12829,7 +12905,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -12844,7 +12920,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -12875,7 +12952,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -12890,7 +12967,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "SPANSION(1)": [
@@ -13200,7 +13278,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13218,14 +13296,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 50
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13240,14 +13319,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 50
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13262,14 +13342,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 50
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 65536,
         "type": "EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13284,14 +13365,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 50
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13418,7 +13500,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13438,14 +13520,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13464,14 +13547,15 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 65536,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13492,7 +13576,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -13599,7 +13684,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13618,14 +13703,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13643,14 +13729,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13665,14 +13752,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 65536,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13692,7 +13780,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -13717,7 +13806,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 10
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -13739,7 +13829,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 10
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -13761,7 +13852,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 10
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -13787,14 +13879,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 10
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13813,14 +13906,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13838,14 +13932,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13860,14 +13955,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 65536,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -13887,7 +13983,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -13994,7 +14091,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3000,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -14009,7 +14106,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "ST": [
@@ -14422,7 +14520,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "EEPROM",
-        "vcc_mv": 5500,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -14437,7 +14535,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -14544,7 +14643,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "EEPROM",
-        "vcc_mv": 5500,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -14559,7 +14658,8 @@
         "protect_on_after": true,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -14981,7 +15081,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -14996,7 +15096,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -15027,7 +15128,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15042,7 +15143,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -15073,7 +15175,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15088,7 +15190,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -15119,7 +15222,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15134,7 +15237,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "SYNCMOS": [
@@ -15143,7 +15247,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15158,14 +15262,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15180,7 +15285,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -15411,7 +15517,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15430,14 +15536,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15456,14 +15563,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15481,14 +15589,15 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -15506,7 +15615,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "Standard SRAM": [
@@ -16139,7 +16249,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16154,7 +16264,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -16162,7 +16273,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16177,7 +16288,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -16231,7 +16343,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16246,7 +16358,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -16254,7 +16367,7 @@
         "pin_count": 32,
         "size_bytes": 131072,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16269,7 +16382,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -16323,7 +16437,7 @@
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16338,7 +16452,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -16346,7 +16461,7 @@
         "pin_count": 32,
         "size_bytes": 262144,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16361,7 +16476,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -16415,7 +16531,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16430,7 +16546,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -16438,7 +16555,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "SRAM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16453,7 +16570,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     }
   ],
   "TOSHIBA/KIOXIA": [
@@ -16954,7 +17072,7 @@
         "pin_count": 32,
         "size_bytes": 524288,
         "type": "Flash/EEPROM",
-        "vcc_mv": 5000,
+        "vcc_mv": 3300,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -16969,7 +17087,8 @@
         "protect_on_after": false,
         "pulse_duration_us": 0
       },
-      "support_status": "supported"
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: the chip's operating VCC is 3.3V, but the shield supplies 5V. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {

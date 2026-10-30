@@ -192,8 +192,8 @@ def test_is_flash4_fails_open_on_absent_evidence(programmer_data):
 def test_predicate_matches_real_database_algorithm_5_rows_exactly():
     """COUPLING TO THE REAL DATABASE: the set of part numbers for
     which the predicate fires, each driven through `resolve_chip` against
-    the real shipped database, is exactly the set of shipped rows whose
-    `programming.algorithm` is 5. Both sides are derived from the
+    the real shipped database, is exactly the set of shipped supported rows
+    whose `programming.algorithm` is 5. Both sides are derived from the
     database -- no literal count or membership list.
     """
     db = EpromDatabase(skip_local_override=True)
@@ -206,7 +206,10 @@ def test_predicate_matches_real_database_algorithm_5_rows_exactly():
             if not part_number:
                 continue
             all_part_numbers.add(part_number)
-            if chip.get("programming", {}).get("algorithm") == FLASH4_PROTOCOL_ID:
+            if (
+                chip.get("programming", {}).get("algorithm") == FLASH4_PROTOCOL_ID
+                and chip.get("support_status", "supported") == "supported"
+            ):
                 expected.add(part_number)
 
     actual = set()
