@@ -195,16 +195,43 @@ def test_cal_refuses_an_implausible_vcc_before_any_port(vcc: str) -> None:
     hardware.set_bandgap_mv.assert_not_called()
 
 
+def _stored(bandgap_mv):
+    return {"r1": 270000, "r2": 44000, "bandgap_mv": bandgap_mv, "bandgap_adc": 206}
+
+
 def test_cal_stores_the_bandgap_it_back_solves() -> None:
     """5.09 V on a board that counts 206 is a 1024 mV bandgap."""
     hardware = Mock(spec=HardwareManager)
-    hardware.read_calibration.return_value = _calibration(206)
+    hardware.read_calibration.side_effect = [_calibration(206), _stored(1024)]
     hardware.set_bandgap_mv.return_value = True
     app = make_app_context(hardware_manager=hardware)
     result = CliRunner().invoke(cli, ["cal", "--vcc", "5.09"], obj=app)
     assert result.exit_code == 0, result.output
     hardware.set_bandgap_mv.assert_called_once_with(1024)
+    assert hardware.read_calibration.call_count == 2
     assert "Reference: 1100 mV -> 1024 mV" in result.output
+
+
+def test_cal_fails_when_the_board_stored_another_value() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.side_effect = [_calibration(206), _stored(1100)]
+    hardware.set_bandgap_mv.return_value = True
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.09"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "the board reports 1100 mV, expected 1024 mV" in result.output
+    assert "Reference:" not in result.output
+
+
+def test_cal_fails_when_the_value_cannot_be_read_back() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.side_effect = [_calibration(206), None]
+    hardware.set_bandgap_mv.return_value = True
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.09"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "could not read the calibration back" in result.output
+    assert "Reference:" not in result.output
 
 
 def test_cal_refuses_a_result_outside_the_band_without_writing() -> None:

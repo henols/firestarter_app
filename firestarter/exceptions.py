@@ -44,10 +44,13 @@ class FirmwareFrameVersionError(FirmwareOutdatedError):
     surfaces this one too.
     """
 
-    def __init__(self, *args: object, firmware: int, host: int) -> None:
+    def __init__(
+        self, *args: object, firmware: int, host: int, port: str | None = None
+    ) -> None:
         super().__init__(*args)
         self.firmware = firmware
         self.host = host
+        self.port = port
 
 
 class HardwareRevisionUnsupportedError(SerialError):

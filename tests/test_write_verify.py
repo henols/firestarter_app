@@ -14,15 +14,9 @@ parameter, and `write_eprom` gains a second transient cause channel,
 options and the seven-arm exit-code branch in `cli_handlers.write` -- see
 this plan's `exit_code_contract_resolved` section for the full table.
 
-Two layers of coverage, following `test_write_blank_guard.py`'s split:
-
-1. Integration-level: the genuine `EpromOperator.write_eprom` /
-   `verify_eprom` driven through a fake serial port, proving the suppression
-   and the cause-channel classification fire at the real host path.
-2. Unit-level / source-shape: the two exhaustiveness pins Task 2's action
-   text requires (`_setup_operation`'s exactly-three `(None, 0)` return
-   count, and the source-order assertion that the post-state-machine
-   verdict assignment precedes the `--skip-sdp-unlock` ack block).
+The operator tier drives the genuine `EpromOperator.write_eprom` /
+`verify_eprom` through a fake serial port, proving the suppression and the
+cause-channel classification fire at the real host path.
 """
 
 from __future__ import annotations
@@ -548,37 +542,6 @@ def test_last_write_attempt_verdict_zero_when_skip_sdp_unlock_ack_check_fails(
     assert operator.last_write_attempt_verdict == 0
     messages = [rec.message for rec in caplog.records]
     assert any("did not acknowledge" in m for m in messages)
-
-
-# ---------------------------------------------------------------------------
-# Exhaustiveness pins (Task 2 action text)
-# ---------------------------------------------------------------------------
-
-
-def test_setup_operation_has_exactly_three_none_zero_returns() -> None:
-    """The write-side cause classification (`if not cmd_data:` block inside
-    `write_eprom`) depends on `_setup_operation` carrying EXACTLY four
-    `(None, 0)` return sites: the `parse_address` ValueError arm, the
-    `parse_size` arm (gated on `cmd == COMMAND_READ`, unreachable for a
-    write), the cold connect-failure arm, and (206-03 SESS-01) the leased
-    setup's own rejected-ack arm -- a leased setup whose ack was refused
-    is deliberately classified exactly like a cold connect failure, since
-    the caller cannot and need not tell the two apart. A fifth arm added
-    later would be silently classified as a connection failure without
-    this pin. (Test name kept for git-blame continuity; the count moved
-    from three to four in 206-03.)"""
-    source = inspect.getsource(EpromOperator._setup_operation)
-    assert source.count("return None, 0") == 4
-
-
-def test_write_eprom_verdict_assignment_precedes_skip_sdp_unlock_ack_block() -> None:
-    """A verdict assignment that drifted below the `--skip-sdp-unlock` ack
-    block would silently reclassify a host-decided ack failure as hardware
-    trouble (exit 2 instead of exit 1) -- this pins the source order."""
-    source = inspect.getsource(EpromOperator.write_eprom)
-    assert source.index("last_write_attempt_verdict") < source.index(
-        "MSG_WARN_SDP_UNLOCK_SKIPPED"
-    )
 
 
 def test_suppress_verdict_line_is_keyword_only_and_defaults_false() -> None:

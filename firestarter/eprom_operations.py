@@ -53,6 +53,7 @@ from firestarter.constants import (
 from firestarter.exceptions import (
     EpromOperationError,
     FirmwareOutdatedError,
+    HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
     ProtocolNotImplementedError,
     SerialError,
@@ -756,6 +757,12 @@ class EpromOperator:
                 f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"  # noqa: E501
             )
             return command_dict, buffer_size
+        except (FirmwareOutdatedError, HardwareRevisionUnsupportedError):
+            # Typed refusals of this host, not transport failures: the caller
+            # must see them as such (the CLI maps them to their own message,
+            # and `dev test` stops the run on them).
+            self._disconnect_programmer()
+            raise
         except (ProgrammerNotFoundError, SerialError) as e:
             logger.error(f"Failed to setup operation {operation} for {eprom_name}: {e}")
             self._disconnect_programmer()  # Ensure comm is None if setup fails
