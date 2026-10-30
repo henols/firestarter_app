@@ -31,7 +31,6 @@ from firestarter.messages import (
     MSG_DATA_CHUNK,
     MSG_DEBUG,
     MSG_ERR_BAD_COMMAND,
-    MSG_ERR_FRAME_VERSION,
     MSG_ERR_VPP_HIGH_MV,
     MSG_INFO_CMD,
     MSG_INFO_HW,
@@ -52,7 +51,7 @@ _REGISTER_VIEW_REG_FIRESTARTER = 1
 _REGISTER_VIEW_ADDR = 2
 
 
-def _volts(mv: int) -> str:
+def volts(mv: int) -> str:
     """`'12.449 V'` for a millivolt value: every millivolt the firmware sent."""
     return f"{mv / 1000:.3f} V"
 
@@ -83,13 +82,6 @@ def _render_registers(msb: int, lsb: int, ctrl: int, remapped: int, view: int) -
         lines += _register_table("CTRL", ctrl & 0xFF, 8)
     return "\n".join(lines)
 
-
-# Older, shorter forms of fixed-width acks that the host still accepts. The
-# values are the legacy param-region lengths; the decoder reads only the
-# leading catalog params that fit in one. MSG_OK_CFG gained the u16 bandgap in
-# 3.1.0b4 (11 bytes; 3.1.0 stable still sends 9) and the u16 bandgap count in
-# 3.3 (13 bytes).
-_LEGACY_PARAM_BYTES = {MSG_OK_CFG: (9, 11)}
 
 # REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
 # Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
@@ -123,15 +115,10 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
       (the override is in effect; the second field is what the board detected)
 
     P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8,
-                       params[3]=bandgap_mv u16 (absent on firmware before 3.1.0b4),
-                       params[4]=bandgap_adc u16 (absent on firmware before 3.3)
-      override==0xFF → "R1: {r1}, R2: {r2}, Bandgap: {n} mV"
-      override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}, Bandgap: {n} mV"
-      With the count, ", Bandgap count: {c}" follows. `cal --vcc` reads it.
-      The Bandgap clause is always present when the ack carries the field:
-      HardwareManager.read_calibration keys on it. The 9-byte form from older
-      firmware has no bandgap, so it renders without the Bandgap clause, and
-      read_calibration reports that firmware as too old.
+                       params[3]=bandgap_mv u16, params[4]=bandgap_adc u16
+      override==0xFF → "R1: {r1}, R2: {r2}, Bandgap: {n} mV, Bandgap count: {c}"
+      override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str},
+                        Bandgap: {n} mV, Bandgap count: {c}"
       Override clause now routes through
       _REVISION_SILKSCREEN so the same byte that surfaces as "Rev 2.0-class"
       via MSG_OK_REV no longer surfaces as "Rev2" on the adjacent ack line.
@@ -154,7 +141,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
         eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
         return f"{eff_str}, Detected HW: {phys_str}"
 
-    if msg_id == MSG_OK_CFG and len(params) in (3, 4, 5):
+    if msg_id == MSG_OK_CFG and len(params) == 5:
         r1, r2, override = params[0], params[1], params[2]
         head = f"R1: {r1}, R2: {r2}"
         if override != 0xFF:
@@ -164,15 +151,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
             # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
             override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
             head += f", Override HW: {override_str}"
-        if len(params) == 3:
-            # Firmware before 3.1.0b4 sends no bandgap field.
-            return head
-        # v1.43 appended the calibrated reference. Rendered last so the
-        # override clause keeps the position every prior release put it in.
-        head += f", Bandgap: {params[3]} mV"
-        if len(params) == 5:
-            head += f", Bandgap count: {params[4]}"
-        return head
+        return f"{head}, Bandgap: {params[3]} mV, Bandgap count: {params[4]}"
 
     # Silkscreen-aware rendering for the two
     # boot-time INFO surfaces that carry the same revision byte as
@@ -200,7 +179,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
             measured, expected = params
             relation = "<" if msg_id == MSG_WARN_VPP_LOW_MV else ">"
             state = "low" if msg_id == MSG_WARN_VPP_LOW_MV else "high"
-            return f"VPP is {state}: {_volts(measured)} {relation} {_volts(expected)}"
+            return f"VPP is {state}: {volts(measured)} {relation} {volts(expected)}"
 
     if msg_id == MSG_INFO_CMD and len(params) == 1:
         cmd = params[0]
@@ -310,27 +289,18 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
     # entries carry param_bytes == -1 in the catalog; for those we
     # cannot pre-validate, but _decode_param will surface any overrun
     # via IndexError below.
-    legacy_lens = _LEGACY_PARAM_BYTES.get(msg_id)
-    is_legacy = legacy_lens is not None and len(params_bytes) in legacy_lens
-    if (
-        entry.param_bytes >= 0
-        and len(params_bytes) != entry.param_bytes
-        and not is_legacy
-    ):
+    if entry.param_bytes >= 0 and len(params_bytes) != entry.param_bytes:
         logger.warning(
             f"Param shape mismatch for ID 0x{msg_id:02x} ({entry.name}): "
             f"expected {entry.param_bytes} bytes, got {len(params_bytes)}"
         )
         return None
 
-    # Decode each param per the catalog grammar. A legacy short form stops
-    # at the end of its shorter param region.
+    # Decode each param per the catalog grammar.
     values: List[Any] = []  # noqa: UP006
     cursor = 0
     try:
         for ptype, _prender in entry.params:
-            if is_legacy and cursor >= len(params_bytes):
-                break
             value, cursor = _decode_param(ptype, params_bytes, cursor)
             values.append(value)
     except (IndexError, struct.error, ValueError) as exc:
@@ -361,8 +331,6 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
 
     # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
     # loop can obtain the chip data without a second read call.
-    # MSG_ERR_FRAME_VERSION also carries its parameter bytes, so setup can
-    # compare the firmware's frame version with this host's.
     payload = None
     if (
         msg_id == MSG_DATA_CHUNK
@@ -370,8 +338,12 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
         and isinstance(values[0], (bytes, bytearray))
     ):
         payload = bytes(values[0])
-    elif msg_id == MSG_ERR_FRAME_VERSION:
-        payload = params_bytes
 
     severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-    return LogMessage(severity=severity_label, text=text, id=msg_id, payload=payload)
+    return LogMessage(
+        severity=severity_label,
+        text=text,
+        id=msg_id,
+        payload=payload,
+        params=tuple(values),
+    )

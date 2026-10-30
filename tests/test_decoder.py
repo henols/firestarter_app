@@ -83,7 +83,9 @@ class TestIdFrameDecoder:
         # Direct _decode_id_frame path — body = [id, crc] = [0x01, 0x07].
         body = bytes([MSG_OK_READY, _crc8_ccitt(bytes([MSG_OK_READY]))])
         decoded = comm._decode_id_frame(frame_len=2, body=body)
-        assert decoded == LogMessage(severity="OK", text="Ready", id=MSG_OK_READY)
+        assert decoded == LogMessage(
+            severity="OK", text="Ready", id=MSG_OK_READY, params=(b"",)
+        )
 
     def test_u32_param_renders_via_format_string(self, fake_serial, make_comm):
         """LHOST-01/02: u32 param renders via printf format substitution."""
@@ -197,7 +199,9 @@ class TestIdFrameDecoder:
         second = next(gen)
 
         assert first == Response(type="INFO", message="Boot")
-        assert second == Response(type="OK", message="Ready", id=MSG_OK_READY)
+        assert second == Response(
+            type="OK", message="Ready", id=MSG_OK_READY, params=(b"",)
+        )
 
     def test_data_progress_u32_pair(self, fake_serial, make_comm):
         """Extra: MSG_DATA_PROGRESS (id 0xE0, two u32 params) — exercises
@@ -402,9 +406,11 @@ class TestIdFrameDecoder:
         adjacent MSG_OK_CFG ack."""
         comm = make_comm()
         # params: u32 r1=10000, u32 r2=4700, u8 override=0x02 (REVISION_2_0),
-        # u16 bandgap_mv=1100 (v1.43 appended the calibrated reference)
+        # u16 bandgap_mv=1100, u16 bandgap count=206
         params = (
-            struct.pack(">II", 10000, 4700) + bytes([0x02]) + struct.pack(">H", 1100)
+            struct.pack(">II", 10000, 4700)
+            + bytes([0x02])
+            + struct.pack(">HH", 1100, 206)
         )
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
@@ -414,7 +420,8 @@ class TestIdFrameDecoder:
         assert response.type == "OK"
         assert (
             response.message
-            == "R1: 10000, R2: 4700, Override HW: Rev 2.0-class, Bandgap: 1100 mV"
+            == "R1: 10000, R2: 4700, Override HW: Rev 2.0-class, Bandgap: 1100 mV, "
+            "Bandgap count: 206"
         )
 
     def test_ok_cfg_p03_no_override_decodes(self, fake_serial, make_comm):
@@ -423,7 +430,9 @@ class TestIdFrameDecoder:
         comm = make_comm()
         # params: u32 r1=10000, u32 r2=4700, u8 override=0xFF (sentinel = no override)
         params = (
-            struct.pack(">II", 10000, 4700) + bytes([0xFF]) + struct.pack(">H", 1100)
+            struct.pack(">II", 10000, 4700)
+            + bytes([0xFF])
+            + struct.pack(">HH", 1100, 206)
         )
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
@@ -431,7 +440,10 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "R1: 10000, R2: 4700, Bandgap: 1100 mV"
+        assert response.message == (
+            "R1: 10000, R2: 4700, Bandgap: 1100 mV, Bandgap count: 206"
+        )
+        assert response.params == (10000, 4700, 0xFF, 1100, 206)
 
     def test_ok_cfg_p03_with_unknown_override_decodes(self, fake_serial, make_comm):
         """P-03: MSG_OK_CFG with override=0x99 (unknown byte) falls back to
@@ -439,7 +451,9 @@ class TestIdFrameDecoder:
         fallback shape). Per Phase 35 D-04 + WR-02 close."""
         comm = make_comm()
         params = (
-            struct.pack(">II", 10000, 4700) + bytes([0x99]) + struct.pack(">H", 1019)
+            struct.pack(">II", 10000, 4700)
+            + bytes([0x99])
+            + struct.pack(">HH", 1019, 200)
         )
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
@@ -449,7 +463,8 @@ class TestIdFrameDecoder:
         assert response.type == "OK"
         assert (
             response.message
-            == "R1: 10000, R2: 4700, Override HW: Rev153, Bandgap: 1019 mV"
+            == "R1: 10000, R2: 4700, Override HW: Rev153, Bandgap: 1019 mV, "
+            "Bandgap count: 200"
         )
 
     def test_info_hw_silkscreen_known_rev_decodes(self, fake_serial, make_comm):

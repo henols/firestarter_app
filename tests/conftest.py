@@ -165,6 +165,24 @@ def build_frame(msg_id: int, params: bytes) -> bytes:
     return MAGIC_PREAMBLE_REF + struct.pack(">H", length) + body + bytes([crc, 0x0A])
 
 
+def decoded_response(msg_id: int, params: bytes):
+    """The Response the host builds for one id frame, through the real decoder."""
+    from firestarter.codec import decode_id_frame
+    from firestarter.frame_parser import Response
+
+    body = bytes([msg_id]) + params
+    body += bytes([_ref_crc8_ccitt(body)])
+    decoded = decode_id_frame(len(body), body)
+    assert decoded is not None, f"id 0x{msg_id:02x} did not decode"
+    return Response(
+        type=decoded.severity,
+        message=decoded.text,
+        payload=decoded.payload,
+        id=decoded.id,
+        params=decoded.params,
+    )
+
+
 class _FakeSerial:
     """BytesIO-backed stand-in for a `serial.Serial` instance.
 

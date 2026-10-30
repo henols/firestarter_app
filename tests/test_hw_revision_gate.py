@@ -41,6 +41,7 @@ from firestarter.constants import (
 )
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import HardwareRevisionUnsupportedError
+from firestarter.frame_parser import Response
 from firestarter.messages import MSG_OK_READY
 from firestarter.serial_comm import SerialCommunicator
 
@@ -265,7 +266,11 @@ def test_exactly_two_pinouts_emit_the_gated_vpp_line():
 
 def _probe(command, revision):
     with (
-        patch.object(SerialCommunicator, "expect_ack", return_value=(True, "Ready")),
+        patch.object(
+            SerialCommunicator,
+            "expect_ack_response",
+            return_value=Response(type="OK", message="Ready"),
+        ),
         patch.object(SerialCommunicator, "send_command", return_value=42),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),

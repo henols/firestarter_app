@@ -126,7 +126,7 @@ def test_a_refused_command_is_not_taken_for_old_firmware(make_comm, fake_serial)
     assert not comm.setup_command(
         {"state": COMMAND_FW_VERSION}, MagicMock(), allow_outdated_firmware=True
     )
-    assert comm.last_ack_error_id == MSG_ERR_BAD_COMMAND
+    assert "Command refused" in comm.setup_refusal
     assert len(sent) == 1
 
 

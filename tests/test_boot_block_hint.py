@@ -31,6 +31,8 @@ from firestarter.eprom_operations import _boot_block_hint_message
 from firestarter.frame_parser import Response
 from firestarter.messages import MSG_ERR_FL4_VERIFY_TIMEOUT
 
+from .conftest import decoded_response
+
 # Helpers
 
 _PROTO_FLASH4 = 5  # protocol 0x05 (FLASH_AMD_STD)
@@ -38,20 +40,10 @@ _MEM_SIZE_W29C040 = 524288  # 512 KB
 
 
 def _make_timeout_response(failing_addr: int) -> Response:
-    """Build a synthetic MSG_ERR_FL4_VERIFY_TIMEOUT Response.
-
-    Format: "Timeout verifying 0x%02x at 0x%06lx (got 0x%02x)"
-    (expected_byte, address, observed_byte).
-
-    We synthesise the decoded text directly to match what codec.decode_id_frame
-    would produce — avoiding a real wire frame and serial path.
-    """
-    message = f"Timeout verifying 0x00 at 0x{failing_addr:06x} (got 0x00)"
-    return Response(
-        type="ERROR",
-        message=message,
-        payload=None,
-        id=MSG_ERR_FL4_VERIFY_TIMEOUT,
+    """A decoded MSG_ERR_FL4_VERIFY_TIMEOUT: expected byte, address, read byte."""
+    return decoded_response(
+        MSG_ERR_FL4_VERIFY_TIMEOUT,
+        bytes([0x00]) + failing_addr.to_bytes(3, "big") + bytes([0x00]),
     )
 
 
@@ -149,12 +141,7 @@ def test_boot_block_hint_non_timeout_id_no_hint() -> None:
     """
     from firestarter.messages import MSG_ERR_VERIFY
 
-    resp = Response(
-        type="ERROR",
-        message="Timeout verifying 0x00 at 0x000000 (got 0x00)",
-        payload=None,
-        id=MSG_ERR_VERIFY,
-    )
+    resp = decoded_response(MSG_ERR_VERIFY, bytes(5))
     hint = _boot_block_hint_message(resp, _PROTO_FLASH4, _MEM_SIZE_W29C040)
     assert hint is None, (
         "FIX-01b: boot-block hint must NOT be returned for non-timeout error IDs"

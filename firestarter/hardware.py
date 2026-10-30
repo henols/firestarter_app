@@ -7,11 +7,11 @@ Hardware Management Module
 """
 
 import logging
-import re
 import statistics
 import time
 from typing import NamedTuple, Tuple, TypedDict  # noqa: UP035
 
+from firestarter.codec import volts
 from firestarter.config import ConfigManager
 from firestarter.constants import (
     BANDGAP_ADC_FULL_SCALE,
@@ -33,7 +33,15 @@ from firestarter.exceptions import (
     SerialError,
     SerialTimeoutError,
 )
-from firestarter.messages import CATALOG, MSG_WARN_VCC_IMPLAUSIBLE
+from firestarter.frame_parser import Response
+from firestarter.messages import (
+    CATALOG,
+    MSG_DATA_ADC_RAW,
+    MSG_DATA_VPE_MV,
+    MSG_DATA_VPP_MV,
+    MSG_OK_CFG,
+    MSG_WARN_VCC_IMPLAUSIBLE,
+)
 from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Hardware")
@@ -49,8 +57,8 @@ class Calibration(TypedDict):
     r1: int
     r2: int
     bandgap_mv: int
-    # None from firmware before 3.3; 0 on a board without calibration.
-    bandgap_adc: int | None
+    # 0 on a board without calibration (py32f071).
+    bandgap_adc: int
 
 
 def bandgap_from_measured_vcc(vcc_mv: int, bandgap_adc: int) -> int | None:
@@ -87,12 +95,6 @@ def _config_value_refusal(
         return f"R2 {r2_val} is outside {CONFIG_R2_MIN}-{CONFIG_R2_MAX} ohm."
     return None
 
-
-# The rendered MSG_DATA_VPP_MV / MSG_DATA_VPE_MV text, e.g.
-# "VPP: 12449 mV, Internal VCC: 5012 mV". The frame payload does not reach
-# the caller (Response.payload is filled only for MSG_DATA_CHUNK), so the
-# values come back from the text.
-_VOLTAGE_RE = re.compile(r"(\d+) mV, Internal VCC: (\d+) mV")
 
 # Plausible internal-VCC band, in millivolts. USB VBUS is specified
 # 4.75-5.25 V (USB 2.0 section 7.2.2) and the board derives VCC from it
@@ -349,30 +351,15 @@ class HardwareManager:
             success, _ = self._execute_simple_command(command, "Hardware configuration")
             return success
 
-    # Deliberately field-by-field, not one whole-line pattern. The middle of
-    # this message has two renderings: codec.py replaces the raw "Cfg: N" with
-    # a silkscreen-aware "Override HW: Rev 2.0-class" when an override is set,
-    # and drops the field entirely when it is not. A single pattern spanning
-    # them matched only the raw form and broke the moment codec.py did its job.
-    # One pattern per field, so wording drift around a field cannot break it.
-    _CFG_R1_RE = re.compile(r"R1:\s*(\d+)")
-    _CFG_R2_RE = re.compile(r"R2:\s*(\d+)")
-    _CFG_BANDGAP_RE = re.compile(r"Bandgap:\s*(\d+)")
-    _CFG_BANDGAP_ADC_RE = re.compile(r"Bandgap count:\s*(\d+)")
-
     def read_calibration(self, flags: int = 0) -> Calibration | None:
         """Read r1, r2, the calibrated bandgap and the raw bandgap count.
 
         `bandgap_adc` is the count that `bandgap_from_measured_vcc` needs. It
-        is None when the firmware does not send it (before 3.3), and 0 on a
-        board that takes no calibration (py32f071).
+        is 0 on a board that takes no calibration (py32f071). The revision
+        override is not returned: `firestarter hw` is where to read it.
 
-        The revision override is deliberately not returned: codec.py renders it
-        as a silkscreen name rather than the raw byte, so it cannot be read back
-        as an integer from this line. `firestarter hw` is where to read it.
-
-        Returns None on any transport error, or when the reply has no bandgap
-        field -- which means the firmware predates calibration support.
+        Returns None on any transport error, or when the reply is not a
+        MSG_OK_CFG.
         """
         command: dict[str, int] = {"state": COMMAND_CONFIG}
         if flags:
@@ -380,21 +367,15 @@ class HardwareManager:
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(command, self.config)
-            is_ok, msg = comm.expect_ack()
-            if not is_ok:
+            response = comm.expect_ack_response()
+            if response.type != "OK" or response.id != MSG_OK_CFG:
                 return None
-            text = msg or ""
-            r1_m = self._CFG_R1_RE.search(text)
-            r2_m = self._CFG_R2_RE.search(text)
-            bg_m = self._CFG_BANDGAP_RE.search(text)
-            adc_m = self._CFG_BANDGAP_ADC_RE.search(text)
-            if r1_m is None or r2_m is None or bg_m is None:
-                return None
+            r1, r2, _override, bandgap_mv, bandgap_adc = response.params
             return {
-                "r1": int(r1_m.group(1)),
-                "r2": int(r2_m.group(1)),
-                "bandgap_mv": int(bg_m.group(1)),
-                "bandgap_adc": int(adc_m.group(1)) if adc_m else None,
+                "r1": r1,
+                "r2": r2,
+                "bandgap_mv": bandgap_mv,
+                "bandgap_adc": bandgap_adc,
             }
         except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
             logger.debug(f"Failed to read calibration: {e}")
@@ -469,14 +450,14 @@ class HardwareManager:
                 message = response.message
 
                 if response_type == "DATA":
-                    reading = self._parse_voltage_frame(message)
+                    reading = self._parse_voltage_frame(response)
                     if reading is not None:
                         rail_mv, vcc_mv = reading
                         if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
                             vcc_warned = True
                         message = (
-                            f"{voltage_type_str}: {rail_mv / 1000:.3f} V, "
-                            f"Internal VCC: {vcc_mv / 1000:.3f} V"
+                            f"{voltage_type_str}: {volts(rail_mv)}, "
+                            f"Internal VCC: {volts(vcc_mv)}"
                         )
                     print(f"\r{message}    ", end="", flush=True)
 
@@ -539,18 +520,18 @@ class HardwareManager:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)
 
-    def _parse_voltage_frame(self, message: str | None) -> tuple[int, int] | None:
+    def _parse_voltage_frame(self, response: Response) -> tuple[int, int] | None:
         """
         Returns `(rail_mv, vcc_mv)` from a MSG_DATA_VPP_MV / MSG_DATA_VPE_MV
-        message, e.g. "VPP: 12449 mV, Internal VCC: 5012 mV" -> (12449, 5012).
+        frame.
 
-        Returns None (honest fallback, never a fabricated 0) if the message
-        does not match -- e.g. no message, garbage, or an unexpected format.
+        Returns None (honest fallback, never a fabricated 0) for any other
+        response, e.g. a text line or another message id.
         """
-        match = _VOLTAGE_RE.search(message or "")
-        if not match:
+        if response.id not in (MSG_DATA_VPP_MV, MSG_DATA_VPE_MV):
             return None
-        return int(match.group(1)), int(match.group(2))
+        rail_mv, vcc_mv = response.params
+        return rail_mv, vcc_mv
 
     def _sample_one_voltage(self, state: int, n: int = 3, flags: int = 0) -> int | None:
         """
@@ -598,7 +579,7 @@ class HardwareManager:
                     response = comm.get_response()
                 if response.type != "DATA":
                     break
-                reading = self._parse_voltage_frame(response.message)
+                reading = self._parse_voltage_frame(response)
                 if reading is not None:
                     rail_mv, vcc_mv = reading
                     samples.append(rail_mv)
@@ -622,11 +603,6 @@ class HardwareManager:
                 comm.disconnect()
 
         return int(statistics.median(samples)) if samples else None
-
-    _ADC_RAW_RE = re.compile(
-        r"ADC mode (\d+): divider (\d+), bandgap (\d+), V (\d+) mV, "
-        r"VCC (\d+) mV, R1 (\d+), R2 (\d+)"
-    )
 
     def read_adc_raw(self, flags: int = 0) -> list[dict[str, int]] | None:
         """Read the raw ADC diagnostic frames (dev-gated CMD_DEV_ADC).
@@ -656,12 +632,9 @@ class HardwareManager:
                 response = comm.get_response()
                 if response.type != "DATA":
                     break
-                match = self._ADC_RAW_RE.search(response.message or "")
-                if match is None:
+                if response.id != MSG_DATA_ADC_RAW:
                     continue
-                mode, divider, bandgap, voltage_mv, vcc_mv, r1, r2 = (
-                    int(g) for g in match.groups()
-                )
+                mode, divider, bandgap, voltage_mv, vcc_mv, r1, r2 = response.params
                 frames.append(
                     {
                         "mode": mode,

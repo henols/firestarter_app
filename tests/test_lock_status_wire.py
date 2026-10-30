@@ -20,8 +20,6 @@ Six legs:
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
 from firestarter import command_frame
@@ -39,14 +37,6 @@ from firestarter.protection_readability import GATE_TOKEN_READ_PERMITTED
 from firestarter.serial_comm import SerialTimeoutError
 
 from .conftest import build_frame
-
-# `MSG_DATA_PROTECTION_STATUS`'s catalog format string is
-# "Lock status probe: raw=0x%02X decode=%u" (messages.py). `Response.payload`
-# is populated only for MSG_DATA_CHUNK (W-04); every other id-frame's decoded
-# param values reach the caller only as already-rendered prose -- the same
-# text-extraction idiom `_TIMEOUT_ADDR_RE`/`_PULSE_WIDTH_RE`/`_LOCK_STATUS_RE`
-# already use in `eprom_operations.py`.
-_LOCK_STATUS_MESSAGE_RE = re.compile(r"raw=0x([0-9A-Fa-f]{2}) decode=(\d+)")
 
 
 def test_outgoing_command_carries_command_lock_status_constant(
@@ -88,10 +78,7 @@ def test_response_parse_both_definite_decodes_preserve_raw_byte(
     assert response.type == "DATA"
     assert response.id == MSG_DATA_PROTECTION_STATUS
 
-    match = _LOCK_STATUS_MESSAGE_RE.search(response.message or "")
-    assert match is not None, response.message
-    assert bytes.fromhex(match.group(1))[0] == raw
-    assert int(match.group(2)) == decode_byte
+    assert response.params == (raw, decode_byte)
 
 
 def test_raw_byte_survives_an_unrecognised_decode_unmasked(
@@ -110,12 +97,10 @@ def test_raw_byte_survives_an_unrecognised_decode_unmasked(
     )
 
     response = comm.get_response(timeout=1.0)
-    match = _LOCK_STATUS_MESSAGE_RE.search(response.message or "")
-    assert match is not None, response.message
-    recovered_raw = bytes.fromhex(match.group(1))[0]
+    recovered_raw, decode = response.params
     assert recovered_raw == raw  # unmasked, unshifted, unnormalised
 
-    payload = bytes([recovered_raw, int(match.group(2))])
+    payload = bytes([recovered_raw, decode])
     token, _reason = classify_protection_response(
         GATE_TOKEN_READ_PERMITTED, payload, forced=False
     )
