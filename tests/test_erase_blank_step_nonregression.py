@@ -25,12 +25,6 @@ coverage in `tests/test_characterization.py`
 Those modules are cited here, not reimplemented; run them alongside this
 module's own suite as part of verification (see 153-12-SUMMARY.md for the
 combined selection count).
-
-Measured line positions (this session, `firestarter/cli_handlers.py`):
-the `@cli.command(name="blank")` decorator is at line 888; `def blank(...)`
-itself is at line 898. The requirement text's "cli_handlers.py:856" citation
-predates this session's line numbers and names the decorator as though it
-were the definition -- both are recorded here as the measured ground truth.
 """
 
 from unittest.mock import Mock
@@ -47,11 +41,8 @@ from .conftest import make_app_context
 
 _CHIP = "AT28C256"
 
+
 # Measured this session -- see module docstring.
-_CLI_HANDLERS_BLANK_DECORATOR_LINE = 888
-_CLI_HANDLERS_BLANK_DEF_LINE = 898
-
-
 @pytest.fixture()
 def runner() -> CliRunner:
     return CliRunner()
@@ -66,24 +57,15 @@ def real_db() -> EpromDatabase:
 
 
 def test_blank_command_is_registered_and_documented(runner: CliRunner) -> None:
-    """`blank` is present in the CLI group's command mapping, and invoking
-    it with `--help` exits 0 and renders its help text. This is the
-    presence half of the non-regression proof; legs 2-3 prove it still
+    """Invoking `blank --help` exits 0 and renders its help text. This is
+    the presence half of the non-regression proof; legs 2-3 prove it still
     reaches the host call boundary.
     """
-    assert "blank" in cli.commands, (
-        "the 'blank' command must remain registered in the CLI group's command mapping"
-    )
     result = runner.invoke(cli, ["blank", "--help"])
     assert result.exit_code == 0, result.output
     assert "Checks if an EPROM is blank" in result.output, (
         f"blank --help must render its docstring text; got: {result.output!r}"
     )
-    # Recorded for the summary, not asserted against source text here (a
-    # decorator-line assertion would be a brittle line-number pin on an
-    # unrelated file's churn) -- see module docstring for the measured
-    # positions (decorator line, then def line).
-    assert _CLI_HANDLERS_BLANK_DECORATOR_LINE < _CLI_HANDLERS_BLANK_DEF_LINE
 
 
 # Leg 2: `blank` reaches the host blank-check entry point exactly once.

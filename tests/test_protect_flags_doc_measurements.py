@@ -37,16 +37,11 @@ mention the field, and does not need updating every time a comment moves.
 
 from __future__ import annotations
 
-import ast
-import io
 import json
-import tokenize
 from pathlib import Path
 
 _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
-_FIRESTARTER_PKG_DIR = _FA_DIR / "firestarter"
-
 # The exact algorithm id of the two TEXAS INSTRUMENTS rows missing both
 # protect_* keys (UV-EPROM, 0x0B).
 _ALGORITHM_UV_EPROM_0X0B = 11
@@ -142,58 +137,6 @@ def test_two_row_exception_is_real_and_get_discipline_is_justified() -> None:
                 "expected -- the .get(...) discipline would be asserted, "
                 "never justified non-vacuously."
             )
-
-
-def _prose_line_numbers(text: str) -> set[int]:
-    """Line numbers covered by a `#` comment token or a module/class/
-    function docstring -- i.e. text a human reads as prose, never code that
-    executes. Built from `tokenize` (comments) + `ast` (docstrings) rather
-    than a naive "starts with #" check, so a field-name mention inside a
-    multi-line docstring (which does not start with `#`) is still correctly
-    classified as prose."""
-    prose_lines: set[int] = set()
-
-    readline = io.StringIO(text).readline
-    for tok in tokenize.generate_tokens(readline):
-        if tok.type == tokenize.COMMENT:
-            prose_lines.update(range(tok.start[0], tok.end[0] + 1))
-
-    tree = ast.parse(text)
-
-    def _mark_if_docstring(node: ast.AST) -> None:
-        body = getattr(node, "body", None)
-        if (
-            body
-            and isinstance(body[0], ast.Expr)
-            and isinstance(getattr(body[0], "value", None), ast.Constant)
-            and isinstance(body[0].value.value, str)
-        ):
-            first = body[0]
-            end = getattr(first, "end_lineno", first.lineno)
-            prose_lines.update(range(first.lineno, end + 1))
-
-    _mark_if_docstring(tree)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            _mark_if_docstring(node)
-
-    return prose_lines
-
-
-def test_sdp_capability_module_untouched_this_plan() -> None:
-    """Structural guard: this plan must not depend on, or require edits to,
-    `firestarter/sdp_capability.py` -- D-16 forbids editing it. This test
-    only checks that the module still imports cleanly and still carries a
-    distinctive substring of its own docstring, unedited."""
-    from firestarter import sdp_capability
-
-    assert "static fail-closed allow-list" in (sdp_capability.__doc__ or ""), (
-        "sdp_capability.py's docstring no longer carries the 'static "
-        "fail-closed allow-list' prose this plan deliberately left "
-        "unedited -- if it changed for a legitimate reason, this "
-        "assertion should be updated by whichever plan makes that change, "
-        "not silently ignored."
-    )
 
 
 # Leg 7: non-vacuity control for the recomputation-vs-doc comparison

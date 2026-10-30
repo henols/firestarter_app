@@ -27,8 +27,6 @@ case the ambient shell already has `FIRESTARTER_DEV_TOOLS` set.
 
 from __future__ import annotations
 
-import inspect
-
 import pytest
 
 from firestarter import channel
@@ -149,8 +147,26 @@ def test_beta_only_dev_commands_matches_measured_baseline() -> None:
     )
 
 
-def test_channel_module_source_contains_no_open_call() -> None:
-    """A partial, file-scoped CHAN-07 proof; plan 136-03 covers cli_handlers.py too."""
-    source = inspect.getsource(channel)
+def test_channel_decisions_open_no_file(monkeypatch) -> None:
+    """CHAN-07: the channel gate decides from the build and the environment
+    alone. Every file open fails here, and every decision still answers."""
+    import builtins
+    import io
+    import pathlib
 
-    assert "open(" not in source
+    def _no_file(*_args, **_kwargs):
+        raise AssertionError("the channel gate opened a file")
+
+    monkeypatch.setattr(builtins, "open", _no_file)
+    monkeypatch.setattr(io, "open", _no_file)
+    monkeypatch.setattr(pathlib.Path, "open", _no_file)
+    monkeypatch.setattr(pathlib.Path, "read_text", _no_file)
+    monkeypatch.setattr(pathlib.Path, "read_bytes", _no_file)
+
+    channel.is_prerelease_build()
+    channel.is_board_available("uno")
+    channel.available_boards(("uno", "py32f071"))
+    channel.beta_only_message("py32f071")
+    channel.dev_tools_enabled_by_env()
+    channel.is_dev_tools_enabled()
+    channel.dev_command_gate_message("addr")

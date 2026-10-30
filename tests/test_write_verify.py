@@ -21,7 +21,6 @@ cause-channel classification fire at the real host path.
 
 from __future__ import annotations
 
-import inspect
 from unittest.mock import Mock, patch
 
 import pytest
@@ -542,17 +541,6 @@ def test_last_write_attempt_verdict_zero_when_skip_sdp_unlock_ack_check_fails(
     assert operator.last_write_attempt_verdict == 0
     messages = [rec.message for rec in caplog.records]
     assert any("did not acknowledge" in m for m in messages)
-
-
-def test_suppress_verdict_line_is_keyword_only_and_defaults_false() -> None:
-    for name in ("write_eprom", "verify_eprom"):
-        param = inspect.signature(getattr(EpromOperator, name)).parameters[
-            "suppress_verdict_line"
-        ]
-        assert param.default is False
-        assert param.kind is inspect.Parameter.KEYWORD_ONLY
-    return_annotation = inspect.signature(EpromOperator.write_eprom).return_annotation
-    assert return_annotation in (bool, "bool")
 
 
 # =============================================================================

@@ -24,37 +24,28 @@ which is exactly why a missing `[py32]` extra surfaces there as a hard
 collection error rather than a quiet pass: `collect_ignore` does not
 suppress a path named directly on the command line.
 
-Plan 127-08 (HOST-03/HOST-04, C-6) adds the fake-vs-real comparison below:
-`tests/test_py32_dfu.py`'s `_FakeUsbDevice` -- the *only* device model the
-58 DFU sequencing tests run against -- is compared against the real
-`usb.core.Device.ctrl_transfer` pinned above. This module is the one place
-the real signature is available to compare against, which is why the
-comparison could not be written in Plan 127-06 (it would have been red
-until 127-08 aligned the fake).
+The DFU download sequence also runs here against a device whose every
+`ctrl_transfer` call is bound to the installed pyusb's real method through an
+autospec, so a call the real method would refuse fails here too. This module
+is the one place the real method is available.
 
-**Claim ceiling.** Enumerating USB devices and pinning `ctrl_transfer`'s
-signature proves pyusb imports and that its API is shaped as expected. It
-proves NOTHING about a PY32F071 -- no PCB exists, and no DFU device is
+**Claim ceiling.** Enumerating USB devices and binding calls to the real
+`ctrl_transfer` proves pyusb imports and accepts the calls `py32_dfu` makes.
+It proves NOTHING about a PY32F071 -- no PCB exists, and no DFU device is
 present in CI.
 """
 
 from __future__ import annotations
 
 import importlib.metadata
-import inspect
+from unittest import mock
 
+import pytest
 import usb.core
 
-from tests.test_py32_dfu import _FakeUsbDevice
-
-_CTRL_TRANSFER_PARAMS = [
-    "self",
-    "bmRequestType",
-    "bRequest",
-    "wValue",
-    "wIndex",
-    "data_or_wLength",
-]
+from firestarter import py32_dfu
+from firestarter.py32_dfu import Py32DfuFlasher
+from tests.test_py32_dfu import _FakeUsbDevice, _interface
 
 
 def test_pyusb_genuinely_imports_and_meets_the_declared_floor() -> None:
@@ -120,90 +111,45 @@ def test_no_backend_error_is_a_value_error() -> None:
     )
 
 
-def test_ctrl_transfer_parameter_order_is_pinned() -> None:
-    """`ctrl_transfer`'s first six parameter names, in order, are pinned.
+class _InstalledSignatureDevice:
+    """The fake DFU device, with every ctrl_transfer call first bound to the
+    INSTALLED pyusb's `Device.ctrl_transfer` through an autospec. A call the
+    real method would not accept raises TypeError here, as it would on a
+    real device."""
 
-    Read from the INSTALLED pyusb via `inspect.signature`, compared against
-    the independent literal `_CTRL_TRANSFER_PARAMS` above.
-    """
-    signature = inspect.signature(usb.core.Device.ctrl_transfer)
-    observed = list(signature.parameters.keys())[: len(_CTRL_TRANSFER_PARAMS)]
-    assert observed == _CTRL_TRANSFER_PARAMS, (
-        f"usb.core.Device.ctrl_transfer's parameter order changed.\n"
-        f"  expected: {_CTRL_TRANSFER_PARAMS}\n"
-        f"  observed: {observed}\n"
-        "A pyusb upgrade is the likely cause -- every production call-site "
-        "in firestarter/py32_dfu.py passes these arguments positionally."
+    def __init__(self, fake: _FakeUsbDevice) -> None:
+        self.fake = fake
+        self.spec = mock.create_autospec(usb.core.Device, instance=True)
+
+    def ctrl_transfer(self, *args, **kwargs):
+        self.spec.ctrl_transfer(*args, **kwargs)
+        return self.fake.ctrl_transfer(*args, **kwargs)
+
+
+@pytest.mark.parametrize("dfuse", [True, False])
+def test_a_dfu_flash_calls_ctrl_transfer_as_installed_pyusb_accepts(
+    monkeypatch, tmp_path, dfuse
+) -> None:
+    """The DFU download sequence runs against the real `ctrl_transfer`
+    signature: every call binds, including the ones that omit `timeout`."""
+    device = _InstalledSignatureDevice(_FakeUsbDevice())
+    interface = _interface(device, dfuse=dfuse)
+    monkeypatch.setattr(
+        py32_dfu, "find_dfu_interfaces", lambda vid=None, pid=None: [interface]
     )
+    monkeypatch.setattr(py32_dfu, "_sleep", lambda _seconds: None)
+    image = tmp_path / "fw.bin"
+    image.write_bytes(bytes(range(130)))
+
+    assert Py32DfuFlasher().flash(str(image)) is True
+    assert device.fake.calls, "the flash made no ctrl_transfer call"
+    assert device.spec.ctrl_transfer.call_count == len(device.fake.calls)
 
 
-def test_ctrl_transfer_timeout_is_optional() -> None:
-    """`timeout` exists in the real signature and carries a default.
-
-    The in-repo fake lacks a `timeout` parameter entirely (C-6); Plan 127-08
-    reconciles that gap. This test records the real shape only.
-    """
-    signature = inspect.signature(usb.core.Device.ctrl_transfer)
-    assert "timeout" in signature.parameters, (
-        "usb.core.Device.ctrl_transfer no longer declares a `timeout` parameter"
-    )
-    timeout_param = signature.parameters["timeout"]
-    assert timeout_param.default is not inspect.Parameter.empty, (
-        "usb.core.Device.ctrl_transfer's `timeout` parameter no longer has "
-        "a default -- it would become a required argument"
-    )
-
-
-def test_fake_ctrl_transfer_signature_matches_the_real_one() -> None:
-    """`_FakeUsbDevice.ctrl_transfer`'s signature matches the real one.
-
-    `tests/test_py32_dfu.py`'s `_FakeUsbDevice` is the *only* device model
-    the 58 DFU sequencing tests run against. A silent divergence from the
-    real `usb.core.Device.ctrl_transfer` would make all of them agree with
-    each other and with nothing real -- Plan 127-08 / C-6.
-    """
-    real_signature = inspect.signature(usb.core.Device.ctrl_transfer)
-    fake_signature = inspect.signature(_FakeUsbDevice.ctrl_transfer)
-    real_names = list(real_signature.parameters.keys())
-    fake_names = list(fake_signature.parameters.keys())
-
-    # 1. Order-sensitive comparison over the full overlapping prefix,
-    #    including data_or_wLength and timeout.
-    overlap = min(len(real_names), len(fake_names))
-    assert fake_names[:overlap] == real_names[:overlap], (
-        "_FakeUsbDevice.ctrl_transfer's parameter order no longer matches "
-        "the real usb.core.Device.ctrl_transfer.\n"
-        f"  real: {real_names}\n"
-        f"  fake: {fake_names}\n"
-        "Reconcile per Plan 127-08 / C-6."
-    )
-
-    # 2. Every parameter the real signature defaults, the fake also
-    #    defaults -- a production call omitting an argument against the
-    #    real device would also be legal against the fake.
-    for name in real_names:
-        real_param = real_signature.parameters[name]
-        if real_param.default is inspect.Parameter.empty:
-            continue
-        assert name in fake_signature.parameters, (
-            f"real ctrl_transfer's defaulted parameter {name!r} is absent "
-            "from the fake's signature entirely"
-        )
-        fake_param = fake_signature.parameters[name]
-        assert fake_param.default is not inspect.Parameter.empty, (
-            f"real ctrl_transfer defaults {name!r}, but the fake's "
-            f"{name!r} is required -- a production call that omits it "
-            "would be legal against the real device but not the fake"
-        )
-
-    # 3. Non-vacuity guard: both signatures were actually obtained, and
-    #    each carries more than two parameters -- otherwise the comparison
-    #    above would be vacuously true.
-    assert len(real_names) > 2, (
-        f"real ctrl_transfer signature has only {len(real_names)} "
-        "parameters -- the comparison above would be vacuously true"
-    )
-    assert len(fake_names) > 2, (
-        f"fake ctrl_transfer signature has only {len(fake_names)} "
-        "parameters -- the comparison above would be vacuously true"
-    )
+def test_a_call_the_installed_pyusb_would_refuse_is_refused() -> None:
+    """The control: the autospec does check the signature."""
+    device = _InstalledSignatureDevice(_FakeUsbDevice())
+    with pytest.raises(TypeError):
+        device.ctrl_transfer(0x21, 1, 0, 0, None, 1000, "extra")
+    with pytest.raises(TypeError):
+        device.ctrl_transfer(0x21, 1, data_length=None)

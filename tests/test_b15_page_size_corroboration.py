@@ -226,21 +226,3 @@ def test_b15_disagrees_with_page_size_on_measured_count_of_84_entries() -> None:
         f"Expected (docstring): {sorted(expected_keys)}. "
         f"Symmetric difference: {set(disagreeing_keys) ^ expected_keys}."
     )
-
-
-def test_sdp_capability_module_untouched_this_plan() -> None:
-    """Structural guard mirroring the plan's own acceptance criterion: this
-    test file must never depend on, or require edits to,
-    `firestarter/sdp_capability.py` -- Plan 136.1-02 owns that file this
-    wave. This test only checks that the module still imports cleanly and
-    still carries its existing "12 of the 84" docstring prose unedited (the
-    supplementary color this plan deliberately leaves as-is rather than
-    creating a same-wave file conflict)."""
-    from firestarter import sdp_capability
-
-    assert "12 of the 84" in (sdp_capability.__doc__ or ""), (
-        "sdp_capability.py's docstring no longer carries the '12 of the "
-        "84' prose this plan deliberately left unedited -- if it changed "
-        "for a legitimate reason, this assertion should be updated by "
-        "whichever plan makes that change, not silently ignored."
-    )

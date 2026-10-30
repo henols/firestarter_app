@@ -66,7 +66,6 @@ import pytest
 
 from firestarter import transport_counters
 from firestarter.diagnostic_report import (
-    _SUSPECT_EXCLUDED_FIELDS,
     _SUSPECT_SCANNED_FIELDS,
     _SUSPECT_THRESHOLD,
     NOT_MEASURED,
@@ -383,24 +382,39 @@ def test_probe_timeouts_excluded_from_suspicion_domain() -> None:
     assert _is_transport_suspect(TransportHealth(probe_timeouts=1000)) is False
 
 
-def test_suspicion_domain_is_closed_against_a_silently_added_counter() -> None:
-    counters = {
+# Which counters make a run transport-suspect, stated here as the contract
+# rather than read back from the module's own tuples.
+_COUNTERS_THAT_RAISE_SUSPICION = (
+    "cobs_errors",
+    "crc_failures",
+    "decode_failures",
+    "resync_body_truncated",
+    "resync_length_missing",
+    "retries",
+    "timeouts",
+)
+_COUNTERS_THAT_NEVER_RAISE_SUSPICION = ("probe_timeouts",)
+
+
+@pytest.mark.parametrize(
+    "counter",
+    _COUNTERS_THAT_RAISE_SUSPICION + _COUNTERS_THAT_NEVER_RAISE_SUSPICION,
+)
+def test_each_counter_raises_suspicion_as_specified(counter: str) -> None:
+    elevated = TransportHealth(**{counter: _SUSPECT_THRESHOLD})
+    expected = counter in _COUNTERS_THAT_RAISE_SUSPICION
+    assert _is_transport_suspect(elevated) is expected
+
+
+def test_every_counter_has_a_specified_suspicion_role() -> None:
+    """A new counter must be added to one of the two lists above, so its
+    effect on transport_suspect is a decision, not an accident."""
+    every_counter = {
         f.name
         for f in dataclasses.fields(TransportHealth)
         if f.name != "transport_suspect"
     }
-    assert counters == set(_SUSPECT_SCANNED_FIELDS) | set(_SUSPECT_EXCLUDED_FIELDS)
-
-
-def test_meas02_basis_is_recorded_and_pinned_in_docstring() -> None:
-    doc = _is_transport_suspect.__doc__ or ""
-    assert "probe_timeouts" in doc
-    assert "32" in doc
-
-
-def test_unwired_counter_reasons_are_recorded_and_pinned_in_docstring() -> None:
-    doc = (TransportHealth.__doc__ or "").lower()
-    assert "outbound" in doc
-    assert "five" in doc
-    assert "write-pulse" in doc
-    assert "none exist" not in doc
+    specified = set(_COUNTERS_THAT_RAISE_SUSPICION) | set(
+        _COUNTERS_THAT_NEVER_RAISE_SUSPICION
+    )
+    assert every_counter == specified

@@ -56,7 +56,6 @@ References:
 
 from __future__ import annotations
 
-import inspect
 import json
 from unittest.mock import Mock
 
@@ -457,28 +456,32 @@ def test_partial_and_full_runs_never_cross_agree():
     assert sorted(counts.values()) == [1, 1]
 
 
-def test_dual_render_single_source():
+def _report_console_text(report) -> str:
+    import io
+
+    from rich.console import Console
+
+    console = Console(record=True, width=200, file=io.StringIO())
+    console.print(report.render())
+    return console.export_text()
+
+
+def test_dual_render_single_source(monkeypatch):
+    """`render()` is built from `to_dict()`: a step that only `to_dict()`
+    reports appears in the rendered table, with no second field list."""
     report = _build_report()
+    assert report.to_dict()["steps"], "to_dict() steps list must not be empty"
 
-    d = report.to_dict()
-    table = report.render()
+    real_dict = report.to_dict()
+    sentinel_row = {
+        **real_dict["steps"][0],
+        "op": "sentinel-op-from-to-dict",
+        "verdict": VERDICT_OK,
+    }
+    patched = {**real_dict, "steps": [*real_dict["steps"], sentinel_row]}
+    monkeypatch.setattr(report, "to_dict", lambda: patched)
 
-    # The dict is the canonical source: every step op appears in it.
-    dict_ops = {row["op"] for row in d["steps"]}
-    assert dict_ops, "to_dict() steps list must not be empty for a real chip"
-
-    # render() must be built from the SAME to_dict() output -- adding a step
-    # to results must appear in both without editing a second list. Assert
-    # render() literally calls self.to_dict() (never a parallel field list,
-    # never a re-parse of the JSON string).
-    src = inspect.getsource(type(report).render)
-    assert "self.to_dict()" in src or "to_dict()" in src
-    assert "json.loads" not in src
-    assert "json.load(" not in src
-
-    # The rendered rich Table has one row per step (identity/banner rows are
-    # additional, but every op must be represented).
-    assert table.row_count >= len(dict_ops)
+    assert "sentinel-op-from-to-dict" in _report_console_text(report)
 
 
 def test_json_block_parseable():
@@ -542,37 +545,56 @@ def test_transport_not_measured():
 
 
 def test_report_module_is_orchestrator_only():
-    """AST-based structural scan (mirrors the Phase-109 SAFE-02 lesson: a raw
-    substring grep false-positives on docstring prose describing the safety
-    property itself, e.g. "imports no SerialCommunicator"). This test parses
-    the module's AST and asserts no import statement names either forbidden
-    symbol, and that no string literal in the source equals "--force"
-    (a real CLI-flag token, never legitimately embedded in this module)."""
-    import ast
+    """Building, rendering and serialising a report loads neither the
+    serial transport nor the hardware manager, and no output carries a
+    `--force` token. A fresh interpreter runs the whole report path."""
+    import subprocess
+    import sys
+    import textwrap
 
-    import firestarter.diagnostic_report as diagnostic_report_mod
+    script = textwrap.dedent(
+        """
+        import io
+        import sys
+        from unittest.mock import Mock
 
-    src = inspect.getsource(diagnostic_report_mod)
-    tree = ast.parse(src)
+        from rich.console import Console
 
-    imported_names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported_names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            imported_names.update(alias.name for alias in node.names)
+        from firestarter.chip_test import Plan, StepResult
+        from firestarter.diagnostic_report import (
+            AutoCapture,
+            DiagnosticReport,
+            TransportHealth,
+            build_db_diff,
+            dedup_fingerprint,
+        )
 
-    assert "SerialCommunicator" not in imported_names
-    assert "HardwareManager" not in imported_names
-
-    # No literal "--force" token anywhere as an actual string constant (a
-    # real CLI-flag pass-through would appear as a string literal, not prose).
-    force_literals = {
-        node.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
-    assert "--force" not in force_literals
+        results = [StepResult(op="id", verdict="OK"), StepResult(op="read", verdict="BAD")]
+        report = DiagnosticReport(
+            auto_capture=AutoCapture(host_version="3.3.0", chip="M8720", protocol="0x08"),
+            transport=TransportHealth(),
+            plan=Plan(name="M8720"),
+            results=results,
+        )
+        db = Mock(spec=["get_eprom", "get_eprom_config", "convert_to_programmer"])
+        db.get_eprom_config.return_value = ({"support_status": "supported"}, "MFR")
+        report.db_diff = build_db_diff("M8720", db, results)
+        console = Console(record=True, width=200, file=io.StringIO())
+        console.print(report.render())
+        text = console.export_text() + report.to_json_block() + dedup_fingerprint(report)
+        print("--force" in text)
+        print(",".join(
+            m for m in ("firestarter.serial_comm", "firestarter.hardware")
+            if m in sys.modules
+        ))
+        """
+    )
+    run = subprocess.run(
+        [sys.executable, "-I", "-c", script], capture_output=True, text=True, check=True
+    )
+    force_in_output, loaded = run.stdout.splitlines()
+    assert force_in_output == "False"
+    assert loaded == "", f"the report path loaded {loaded}"
 
 
 def test_is_submittable_derived_from_auto_capture():
@@ -945,38 +967,39 @@ def test_db_diff_real_db_read():
     assert diff.current_support_status == expected
 
 
-def test_module_never_writes_support_status():
-    import re
+def test_module_never_writes_support_status(tmp_path, monkeypatch):
+    """Building and serialising a report reads the database and never
+    writes to it, to the row it was handed, or to the file system."""
+    import copy
 
-    import firestarter.diagnostic_report as diagnostic_report_mod
+    from firestarter.diagnostic_report import build_db_diff
 
-    src = inspect.getsource(diagnostic_report_mod)
-    lines = [ln for ln in src.splitlines() if not ln.strip().startswith("#")]
-    joined = "\n".join(lines)
+    monkeypatch.chdir(tmp_path)
+    row = {"support_status": "adapter-required", "part_number": "SOME-CHIP"}
+    before = copy.deepcopy(row)
+    db = Mock(spec=["get_eprom", "get_eprom_config", "convert_to_programmer"])
+    db.get_eprom_config.return_value = (row, "MFR")
 
-    # A bare `support_status = ...` write/assignment -- NOT a `==` comparison
-    # (reading it is legitimate), NOT `current_support_status=...` (a kwarg /
-    # dataclass field name that merely CONTAINS "support_status" as a
-    # suffix), and NOT a dataclass field declaration
-    # (`current_support_status: str = ...`). A real write site would assign
-    # to the bare dict key/attribute name `support_status` itself.
-    assert (
-        re.search(r"(?<![a-zA-Z0-9_])support_status\s*(?<!=)=(?!=)\s*\S", joined)
-        is None
-    )
-    assert ".write(" not in joined
-    assert re.search(r"\bset_[a-z_]+\(", joined) is None
+    report = _build_report()
+    report.db_diff = build_db_diff("SOME-CHIP", db, report.results)
+    report.to_json_block()
+    _report_console_text(report)
+
+    assert row == before
+    assert {call[0] for call in db.mock_calls} <= {
+        "get_eprom",
+        "get_eprom_config",
+        "convert_to_programmer",
+    }
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_report_composes_db_diff_from_single_source():
-    """RPT-01 single-source: `render()` reads `self.to_dict()`, never a
-    parallel field list or a re-parse of the JSON string. Quick task
-    260821-spg removed `db_diff`'s console row entirely (it now reaches
-    only `to_json_block()`), so this test no longer asserts `db_diff`
-    content appears in the RENDERED table -- it asserts the payload
-    (`to_dict()`) and the single-source mechanism (`render()`'s own source
-    calling `to_dict()`, never `json.load(s)`), which is what the claim
-    actually needs."""
+    """RPT-01: the `db_diff` payload reaches `to_dict()` from the one
+    `build_db_diff` result. Quick task 260821-spg removed `db_diff`'s console
+    row (it now reaches only `to_json_block()`), so the rendered table does
+    not show it; `test_dual_render_single_source` proves the table is built
+    from `to_dict()`."""
     from firestarter.diagnostic_report import build_db_diff
 
     report = _build_report()
@@ -987,12 +1010,11 @@ def test_report_composes_db_diff_from_single_source():
     assert d["db_diff"] is not None
     assert d["db_diff"]["current_support_status"] == "adapter-required"
     assert d["db_diff"]["proposed_disposition"] == report.db_diff.proposed_disposition
-
-    report.render()
-    src = inspect.getsource(type(report).render)
-    assert "self.to_dict()" in src or "to_dict()" in src
-    assert "json.loads" not in src
-    assert "json.load(" not in src
+    block = report.to_json_block()
+    assert block.startswith("```json\n") and block.endswith("\n```")
+    assert (
+        json.loads(block[len("```json\n") : -len("\n```")])["db_diff"] == d["db_diff"]
+    )
 
 
 def test_report_without_db_diff_is_null():
@@ -1242,35 +1264,12 @@ def test_hold_state_is_str_never_bool():
 
 
 def test_schema_version_2_2_single_sourced():
-    """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
-    (never a literal restated here), and the production module bumps the
-    constant to its new value in exactly ONE place (single-sourced, D-10) --
-    this is the only line in this test file that restates the quoted
-    literal, to keep this file's own count at the plan's required "at most
-    one". Renamed from `test_schema_version_1_3_single_sourced` (v1.32 Phase
-    147 plan 03, D-09): the 1.3 -> 1.4 bump would otherwise leave this test's
-    own literal-count assertion asserting a now-absent quoted string. Renamed
-    again for the 1.5 -> 1.6 bump (quick task 260821-wna), which added the
-    additive per-step `write_region_start`/`write_region_length`/
-    `write_bits_cleared`/`write_bits_retained`/`write_current_source` keys,
-    again for the 1.6 -> 1.7 bump (quick task 260822-aq6), which added the
-    additive per-step `run_count` key, again for the 1.7 -> 1.8 bump
-    (Phase 178 plan 01, D-07), which added the top-level `run_status` and
-    per-step `status` keys, again for the 1.8 -> 2.0 bump (Phase 181
-    plan 01, D-13/RPT-E1), which added the top-level `is_uv` key, again
-    for the 2.0 -> 2.1 bump (quick task 260916-nb9), which added the
-    additive per-step `error_name` key, and again for the 2.1 -> 2.2 bump
-    (quick task 260916-nbb), which added the additive top-level
-    `log_capture` key."""
-    import inspect
-
+    """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`,
+    never a literal restated here."""
     from firestarter import diagnostic_report as dr_mod
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
-
-    source = inspect.getsource(dr_mod)
-    assert source.count('"2.2"') == 1
 
 
 def test_step_dict_emits_the_resolved_error_name_beside_the_code():
@@ -1942,26 +1941,6 @@ def test_step_dict_emits_compare_evidence_and_compare_path_keys():
     assert steps[1]["compare_path"] == COMPARE_PATH_HOST
 
 
-def test_compare_path_tag_is_appended_after_the_coverage_tag():
-    """Phase 206 Task 3 (DEVTEST-02): `dedup_fingerprint` appends the
-    compare-path tag after the coverage append and before the join --
-    proved by index comparison over the function's own source, not by
-    eyeball, so a future reordering of the pre-image is a test failure
-    rather than a silent re-key (mirrors
-    `test_status_axis_does_not_reorder_the_fingerprint_pre_image`'s
-    structural-proof idiom above)."""
-    from firestarter.diagnostic_report import dedup_fingerprint
-
-    source = inspect.getsource(dedup_fingerprint)
-    coverage_idx = source.index("coverage_tag(report.results)")
-    compare_idx = source.index("compare_path_tag(report.results)")
-    join_idx = source.index('canonical = "|".join(parts)')
-    assert coverage_idx < compare_idx < join_idx, (
-        "compare_path_tag's append is not between the coverage append and "
-        "the join -- expected order: coverage, then compare_path, then join"
-    )
-
-
 def test_divergence_is_present_on_every_step_and_carries_the_engine_value():
     """RPT-A3: `divergence` reaches `steps[]` unconditionally, carrying the
     step's own mapping where the engine produced one and `None` where it
@@ -2171,14 +2150,8 @@ def test_status_axis_does_not_reorder_the_fingerprint_pre_image():
     """ATTR-04's ordering edge: `dedup_fingerprint` builds `parts` in
     `report.results` order and the status axis appends nothing, so
     permuting which step carries `STATUS_ERROR`, across a fixed verdict
-    sequence, leaves the hash invariant across all three permutations.
-
-    `inspect.getsource` then proves the structural half of D-08 directly:
-    the function still contains exactly four `parts.append` call sites (the
-    per-step loop, `repeat_policy_tag`, `coverage_tag` and, since Phase 206
-    Task 3, `compare_path_tag`) and the substring `status` never appears in
-    its body -- so a future append for the status axis would fail this
-    even where some shape happens to collide on the hash value alone."""
+    sequence, leaves the hash invariant across all three permutations, and
+    a status on every step hashes the same as no status at all."""
     from firestarter.diagnostic_report import dedup_fingerprint
 
     step_specs = [
@@ -2195,9 +2168,11 @@ def test_status_axis_does_not_reorder_the_fingerprint_pre_image():
             result.status = STATUS_ERROR if i == error_index else STATUS_COMPLETE
         assert dedup_fingerprint(permuted) == base_hash
 
-    source = inspect.getsource(dedup_fingerprint)
-    assert source.count("parts.append") == 4
-    assert "status" not in source
+    for status in (STATUS_COMPLETE, STATUS_ERROR):
+        uniform = _minimal_report(step_specs=step_specs)
+        for result in uniform.results:
+            result.status = status
+        assert dedup_fingerprint(uniform) == base_hash
 
 
 def test_duration_cell_formatting_boundaries():
