@@ -153,6 +153,11 @@ _BONDED_PIN_FIELDS = ("ce-pin", "oe-pin", "rw-pin", "pgm-pin", "data-bus-pins")
 # pin_conversions.
 SHIELD_CE_OE_PINS = {24: (18, 20), 28: (20, 22), 32: (22, 24)}
 
+# Chip pins the 0x10 (Intel 28F) handler reserves on a 32-pin part: it routes
+# VPP to pin 1 (CTRL_VPP_P1_ENABLE), and pin 31 is WE#. That leaves 18 address
+# lines, so a 0x10 row that needs either pin as an address line has no VPP pin.
+INTEL_28F_RESERVED_PINS = (1, 31)
+
 # 4. PROCESSING FUNCTIONS
 
 
@@ -930,6 +935,25 @@ def main():
                         f"{_map_lines} address lines, which reach {1 << _map_lines} "
                         f"of the chip's {mem_size} bytes. The programmer implements "
                         f"no way to reach the rest."
+                    )
+
+                # The 0x10 handler puts 12V on pin 1. A 0x10 row that needs pin 1
+                # or pin 31 as an address line (A18 on the SST28SF040 family)
+                # would take 12V on that line. resolve_chip refuses the row.
+                _vpp_on_address = [
+                    p
+                    for p in _PINOUTS[pinout_key]["pins"].get("address-bus-pins", [])[
+                        : address_width(mem_size)
+                    ]
+                    if p in INTEL_28F_RESERVED_PINS
+                ]
+                if _support_status == "supported" and proto_id == 0x10 and _vpp_on_address:
+                    _support_status = "protocol-not-implemented"
+                    _unsupported_reason = (
+                        f"protocol not implemented: algorithm 0x10 puts 12V on pin 1 "
+                        f"and uses pin 31 as WE, but this chip needs pins "
+                        f"{_vpp_on_address} as address lines. The programmer "
+                        f"implements no write or erase for it."
                     )
 
                 chip_entry = {

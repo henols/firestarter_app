@@ -18,6 +18,11 @@ from firestarter.exceptions import (
 
 _NON_ZERO_WIRE_FIELDS = ("memory-size", "pin-count", "vpp_mv")
 
+# The 0x10 (Intel 28F) handler puts 12V on pin 1 and uses pin 31 as WE, which
+# leaves a 32-pin part 18 address lines.
+_INTEL_28F_ALGORITHM = 0x10
+_INTEL_28F_ADDRESS_LINES = 18
+
 
 def _qualified_choices(name: str, db: EpromDatabase) -> list[str]:
     """The row `name` selects first, then each other row it selects that
@@ -147,5 +152,17 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
             f"{name}: its pin map has {len(bus)} address lines, which reach "
             f"{1 << len(bus)} of its {data['memory-size']} bytes. The programmer "
             "cannot address the rest of the chip."
+        )
+    # A 0x10 chip that needs a 19th address line has it on pin 1 or pin 31
+    # (A18 on the SST28SF040 family), so the handler would put 12V on it.
+    if (
+        bus
+        and algorithm == _INTEL_28F_ALGORITHM
+        and len(bus) > _INTEL_28F_ADDRESS_LINES
+    ):
+        raise ChipNotImplementedError(
+            f"{name}: algorithm 0x10 puts 12V on pin 1 and uses pin 31 as WE, "
+            f"which leaves {_INTEL_28F_ADDRESS_LINES} address lines, but the chip "
+            f"needs {len(bus)}. The programmer would put 12V on an address line."
         )
     return data

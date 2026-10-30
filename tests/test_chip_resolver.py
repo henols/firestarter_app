@@ -204,5 +204,32 @@ def test_resolve_chip_refuses_an_address_line_on_a_ce_or_oe_pin(db, name):
         resolve_chip(name, db)
 
 
+@pytest.mark.parametrize("name", ["SST28SF040", "SST28LF040", "SST28VF040"])
+def test_the_sst28_rows_are_not_supported(db, name):
+    """Algorithm 0x10 puts 12V on pin 1, which is A18 on these parts
+    (henols/firestarter#154). The generator gives the rows a status that says
+    so, and resolve_chip refuses them on it."""
+    raw, _ = db.get_eprom_config(name)
+    assert raw["support_status"] == "protocol-not-implemented"
+    with pytest.raises(ChipNotImplementedError, match="12V on pin 1"):
+        resolve_chip(name, db)
+
+
+def test_resolve_chip_refuses_an_intel_28f_chip_wider_than_18_lines(db):
+    """A local override can mark an SST28SF040 row supported. The 0x10 guard
+    still refuses it before any wire."""
+    raw, _ = db.get_eprom_config("SST28SF040")
+    raw["support_status"] = "supported"
+    del raw["unsupported_reason"]
+    with pytest.raises(ChipNotImplementedError, match="needs 19"):
+        resolve_chip("SST28SF040", db)
+
+
+def test_resolve_chip_accepts_an_18_line_intel_28f_chip(db):
+    data = resolve_chip("P28F020", db)
+    assert data["algorithm"] == 0x10
+    assert len(data["bus-config"]["bus"]) == 18
+
+
 def test_resolve_chip_accepts_a_bus_that_covers_the_chip(db):
     assert len(resolve_chip("AM27C010", db)["bus-config"]["bus"]) == 17

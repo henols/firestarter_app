@@ -177,6 +177,38 @@ class TestProtocolNotImplementedInclusion:
             )
 
 
+class TestIntel28fVppOnAddressPin:
+    """henols/firestarter#154: algorithm 0x10 puts 12V on pin 1. A row that
+    needs pin 1 or pin 31 as an address line is protocol-not-implemented."""
+
+    _SST28 = {"SST28SF040", "SST28LF040", "SST28VF040"}
+
+    def test_the_sst28_rows_are_not_implemented(self):
+        found = [
+            (mfg, chip)
+            for mfg, chip in _all_chips(_load_db())
+            if _aliases(chip) & self._SST28
+        ]
+        assert len(found) == 2
+        for mfg, chip in found:
+            assert chip["support_status"] == "protocol-not-implemented", (
+                f"{mfg}/{chip['part_number']}"
+            )
+            assert chip["programming"]["algorithm"] == 0x10
+            assert chip["unsupported_reason"].startswith("protocol not implemented")
+
+    def test_every_other_intel_28f_row_stays_supported(self):
+        others = [
+            (mfg, chip)
+            for mfg, chip in _all_chips(_load_db())
+            if chip["programming"]["algorithm"] == 0x10
+            and not _aliases(chip) & self._SST28
+        ]
+        assert others
+        for mfg, chip in others:
+            assert chip["support_status"] == "supported", f"{mfg}/{chip['part_number']}"
+
+
 class TestDip24_2816Family:
     """The 24-pin 5V EEPROM family on DIP24_2816 is supported on 0x0D.
 
