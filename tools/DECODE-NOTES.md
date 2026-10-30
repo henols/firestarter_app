@@ -716,6 +716,17 @@ The generator uses the mask in three ways:
 - **The width warning.** If the chip's address width, `(code_memory_size - 1).bit_length()`, is
   greater than the key's address lines, the generator prints a WARN. Today: the three 27011 rows
   (page-addressed; henols/firestarter#136) and XICOR X88C64P (not dispatchable).
+- **The 0x10 VPP-pin rule.** The `0x10` handler of the firmware routes VPP to socket pin 1
+  (`CTRL_VPP_P1_ENABLE`). A smaller part sits bottom-aligned in the socket, so socket pin 1 is chip
+  pin 1 only on a 32-pin part. If a `0x10` row uses chip pin 1 of a 32-pin part as an address line
+  inside its address width, the generator makes the row `protocol-not-implemented`
+  (`intel28f_vpp_conflict_pins()`). `resolve_chip` does the same check on the bus: it refuses a
+  `0x10` chip whose bus holds the line of socket pin 1. Today the rule matches only the SST28SF040
+  and SST28LF040/VF040 rows (henols/firestarter#154). Map 13 under `0x10` holds only these rows.
+  They are SuperFlash parts with A18 on pin 1 and WE# on pin 31, so the generator gives them
+  `DIP32_SST39SF040`, the same key as the `0x06` rows on map 13. Every other `0x10` row is on
+  `DIP32_STD` with 18 address lines or fewer, and pin 1 is its VPP pin. `DIP32_STD` has no `rw-pin`,
+  so the firmware never drives WE# (pin 31) for `0x10`. That is a separate defect.
 
 **`vpp-pin` is exempt from the gate.** Maps 5, 7, 9 and 11 omit pin 1, but the 28F256 to 28F020
 rows on those maps use pin 1 for VPP. So the mask does not describe the VPP pin.

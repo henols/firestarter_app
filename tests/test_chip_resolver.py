@@ -16,6 +16,7 @@ assert specific chip data is forbidden — it would merge
 ~/.firestarter/database.json if present, causing CI/bench divergence.
 """
 
+import copy
 from unittest.mock import patch
 
 import pytest
@@ -202,6 +203,71 @@ def test_resolve_chip_refuses_an_address_line_on_a_ce_or_oe_pin(db, name):
     del raw["unsupported_reason"]
     with pytest.raises(ChipNotImplementedError, match="drives as CE or OE"):
         resolve_chip(name, db)
+
+
+@pytest.mark.parametrize("name", ["SST28SF040", "SST28LF040", "SST28VF040"])
+def test_the_sst28_rows_are_not_supported(db, name):
+    """Algorithm 0x10 puts 12V on socket pin 1, which is A18 on these parts
+    (henols/firestarter#154). The generator gives the rows a status that says
+    so, and resolve_chip refuses them on it."""
+    raw, _ = db.get_eprom_config(name)
+    assert raw["support_status"] == "protocol-not-implemented"
+    with pytest.raises(ChipNotImplementedError, match="12V on socket pin 1"):
+        resolve_chip(name, db)
+
+
+def test_resolve_chip_refuses_an_intel_28f_chip_with_a_bus_line_on_pin_1(db):
+    """A local override can mark an SST28SF040 row supported. The 0x10 guard
+    still refuses it before any wire."""
+    raw, _ = db.get_eprom_config("SST28SF040")
+    raw["support_status"] = "supported"
+    del raw["unsupported_reason"]
+    with pytest.raises(ChipNotImplementedError, match="uses pin 1 as an address"):
+        resolve_chip("SST28SF040", db)
+
+
+def test_resolve_chip_refuses_pin_1_inside_an_18_line_bus(db):
+    """The guard checks which pins the bus uses, not how many lines it has:
+    an override map that puts A17 on pin 1 is refused for an 18-line chip."""
+    pins = copy.deepcopy(db.pin_maps["DIP32_STD"]["pins"])
+    pins["address-bus-pins"][17] = 1
+    del pins["vpp-pin"]
+    db.pin_maps["TEST_A17_ON_PIN_1"] = {"pins": pins}
+    raw, _ = db.get_eprom_config("P28F020")
+    raw["pinout"] = "TEST_A17_ON_PIN_1"
+    with pytest.raises(ChipNotImplementedError, match="uses pin 1 as an address"):
+        resolve_chip("P28F020", db)
+
+
+def test_the_0x10_guard_refuses_exactly_the_rows_the_generator_refuses(db):
+    """The generator and resolve_chip each encode the 0x10 pin-1 rule. With
+    every 0x10 row forced to supported, resolve_chip refuses a row on the
+    pin-1 rule exactly when the generator gave that row the pin-1 reason."""
+    rows = [
+        (mfg, chip)
+        for mfg, chips in db.proms.items()
+        for chip in chips
+        if chip["programming"]["algorithm"] == 0x10
+    ]
+    assert rows
+    for mfg, chip in rows:
+        flagged = "socket pin 1" in chip.get("unsupported_reason", "")
+        chip["support_status"] = "supported"
+        chip.pop("unsupported_reason", None)
+        name = f"{chip['part_number'].split(',')[0]}@{mfg}"
+        try:
+            resolve_chip(name, db)
+            refused = False
+        except ChipNotImplementedError as exc:
+            assert "socket pin 1" in str(exc), name
+            refused = True
+        assert refused == flagged, name
+
+
+def test_resolve_chip_accepts_an_18_line_intel_28f_chip(db):
+    data = resolve_chip("P28F020", db)
+    assert data["algorithm"] == 0x10
+    assert len(data["bus-config"]["bus"]) == 18
 
 
 def test_resolve_chip_accepts_a_bus_that_covers_the_chip(db):

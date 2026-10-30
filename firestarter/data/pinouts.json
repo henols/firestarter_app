@@ -97,7 +97,7 @@
     },
     "DIP32_SST39SF040": {
         "name": "JEDEC 32-pin 5V Flash (SST39SF040/AM29F040 family)",
-        "comment": "Per piersfinlayson/one-rom (datasheet-verified): SST39SF040 and same-family 4Mbit/8Mbit 5V flash chips have A18 at pin 1 (NOT VPP) and WE at pin 31 (NOT address bus). Distinct from DIP32_STD (UV-EPROM 27C040 layout) where pins 1 and 31 are swapped. Covers ~47 chips at (pin_count=32, pm_idx=13, protocol_id=0x06): AM29F040, SST39SF040, A29040, EN29F040, MX29F040, etc. — all 5V single-supply flash.",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): SST39SF040 and same-family 4Mbit/8Mbit 5V flash chips have A18 at pin 1 (NOT VPP) and WE at pin 31 (NOT address bus). Distinct from DIP32_STD (UV-EPROM 27C040 layout) where pins 1 and 31 are swapped. Covers ~47 chips at (pin_count=32, pm_idx=13, protocol_id=0x06): AM29F040, SST39SF040, A29040, EN29F040, MX29F040, etc. — all 5V single-supply flash. The SST28SF040/LF040/VF040 SuperFlash rows (pm_idx=13, protocol_id=0x10) also use this layout.",
         "pins": {
             "vcc-pin": [32], "gnd-pin": [16],
             "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 1],
