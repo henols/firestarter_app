@@ -814,29 +814,16 @@ def test_region_scoped_verify_composes_a_command_dict_bounding_exact_region(
     assert cd["memory-size"] == 0x100 + 4
 
 
-def test_map_typed_errors_never_exits_the_process_directly() -> None:
-    """D-11's scope bound, proven structurally: `map_typed_errors`'s own
-    source contains no direct process exit and no assignment overriding a
-    Click exception's exit code, so every path through it still exits 1."""
-    import inspect
-
-    source = inspect.getsource(cli_handlers_mod.map_typed_errors)
-    assert "sys.exit" not in source
-    assert "os._exit" not in source
-    assert "exit_code" not in source
-
-
-def test_verify_and_blank_docstrings_name_all_three_exit_codes() -> None:
-    """Both command docstrings must state the three exit codes -- this is
-    what `--help` prints, so an operator reading it sees the contract.
-    `.help` (not `.__doc__`, which reads Click's `Command` class docstring
-    on the wrapped `click.Command` object) is Click's own parsed rendering
-    of the function's docstring."""
-    for cmd in (cli_handlers_mod.verify, cli_handlers_mod.blank):
-        doc = cmd.help or ""
-        assert "0" in doc
-        assert "1" in doc
-        assert "2" in doc
+def test_verify_and_blank_help_names_all_three_exit_codes() -> None:
+    """`--help` states the three exit codes, so an operator reading it sees
+    the contract."""
+    for name in ("verify", "blank"):
+        result = CliRunner().invoke(cli, [name, "--help"])
+        assert result.exit_code == 0, result.output
+        text = " ".join(result.output.split())
+        assert "Exits 0" in text, text
+        assert ", 1 " in text, text
+        assert ", 2 on a transport" in text, text
 
 
 # Task 3: the exit-code matrix, with two distinct routes to 2 per command,

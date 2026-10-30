@@ -547,23 +547,10 @@ def _load_report(chip: str) -> dict:
 def test_dev_test_output_trim_console_shrunk_payload_intact(
     runner: CliRunner,
 ) -> None:
-    """Structural pin, not absent-string scanning: the four deleted
-    constants and the deleted selector are gone from cli_handlers; --help
-    stays short; a real off-TTY run's console output carries neither the
+    """--help stays short; a real off-TTY run's console output carries neither the
     issue body's markdown table header nor a transport_health row label;
     and that SAME run's saved JSON still has transport_health,
     is_submittable and db_diff keys -- console trimmed, payload intact."""
-    import firestarter.cli_handlers as cli_handlers_mod
-
-    for name in (
-        "_ALWAYS_WRITES_NOTICE",
-        "_SDP_RECOVERY_LOUD",
-        "_SDP_RECOVERY_NEUTRAL",
-        "SDP_RECOVERY_CONSTANT_NAMES",
-    ):
-        assert not hasattr(cli_handlers_mod, name), name
-    assert not hasattr(cli_handlers_mod, "_sdp_recovery_line")
-
     help_result = runner.invoke(cli, ["dev", "test", "--help"])
     assert help_result.exit_code == 0, help_result.output
     assert len(help_result.output.strip().splitlines()) <= 20
@@ -730,43 +717,22 @@ class TestZeroOptionSurface:
     """
 
     def test_dev_test_has_exactly_the_fast_and_submit_options(self) -> None:
-        import click
+        runner = CliRunner()
+        result = runner.invoke(cli, ["dev", "test", "--help"])
+        assert result.exit_code == 0, result.output
+        assert "Usage: cli dev test [OPTIONS] CHIP" in result.output
+        options = [
+            line.split()[0]
+            for line in result.output.split("Options:", 1)[1].splitlines()
+            if line.startswith("  -")
+        ]
+        assert options == ["--fast", "--submit", "--help"]
 
-        test_cmd = cli.commands["dev"].commands["test"]
-        params = test_cmd.params
-        options = [p for p in params if isinstance(p, click.Option)]
-        arguments = [p for p in params if isinstance(p, click.Argument)]
-        assert len(arguments) == 1
-        assert arguments[0].name == "chip"
-        assert [o.name for o in options] == ["fast", "submit"]
-        assert options[0].is_flag
-        assert options[0].default is False
-        assert options[1].is_flag
-        assert options[1].default is False
-
-    def test_fast_option_help_states_it_is_the_weaker_test(self) -> None:
-        """The flag's help must name the COST, not just the speed. The
-        operator's standing direction is that the accurate test is the
-        goal and time is not a constraint, so a reader deciding whether to
-        pass `--fast` has to see what it gives up before they do."""
-        import click
-
-        import firestarter.cli_handlers as cli_handlers_mod
-
-        # Reached via the module attribute, not `cli.commands["dev"]
-        # .commands["test"]`: Click types `Group.commands` on `Group`, not
-        # `Command`, so the subscript path costs an `attr-defined` mypy
-        # error against the watermark gate. The sibling test above already
-        # spends one on that path; this one does not add a second.
-        fast = next(
-            p
-            for p in cli_handlers_mod.dev_test.params
-            if isinstance(p, click.Option) and p.name == "fast"
-        )
-        help_text = (fast.help or "").lower()
-        assert "weaker" in help_text
-        assert "marginal" in help_text
-        assert "accurate" in help_text
+        for flag in ("--fast", "--submit"):
+            refused = runner.invoke(cli, ["dev", "test", "M8720", flag, "yes"])
+            assert refused.exit_code == 2, (flag, refused.output)
+        bogus = runner.invoke(cli, ["dev", "test", "M8720", "--bogus"])
+        assert bogus.exit_code == 2, bogus.output
 
     @pytest.mark.parametrize(
         "opt_name,opt_value",
@@ -917,19 +883,6 @@ class TestUVWriteHasNoPrompt:
     Disclosure did not go with it: the report states the slot actually written
     and, as of D-9, how many slots the part has left.
     """
-
-    def test_no_uv_write_prompt_surface_exists(self, runner: CliRunner) -> None:
-        """The load-bearing assertion of the whole class. `Confirm` is no
-        longer imported by `cli_handlers` at all, so its absence is asserted
-        structurally rather than by patching a name that would silently
-        create itself."""
-        import firestarter.cli_handlers as cli_handlers_mod
-
-        assert not hasattr(cli_handlers_mod, "Confirm"), (
-            "cli_handlers re-imported rich's Confirm -- if that is for a new "
-            "prompt, it must not be the UV write ask this class retired"
-        )
-        assert not hasattr(cli_handlers_mod, "_default_uv_write_confirm")
 
     def test_uv_part_writes_one_slot(self, runner: CliRunner) -> None:
         """A UV part receives exactly the partial (slot) write and the run

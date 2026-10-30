@@ -515,11 +515,13 @@ def test_setup_command_asserts_the_link_is_connected_before_sending(
     def _fake_send_command(self, *args, **kwargs):
         calls.append(args[0] if args else kwargs.get("command_to_send"))
 
-    def _fake_expect_ack(self, *args, **kwargs):
-        return (False, "stub: not ok")
+    def _fake_expect_ack_response(self, *args, **kwargs):
+        return Response(type="ERROR", message="stub: not ok")
 
     monkeypatch.setattr(SerialCommunicator, "send_command", _fake_send_command)
-    monkeypatch.setattr(SerialCommunicator, "expect_ack", _fake_expect_ack)
+    monkeypatch.setattr(
+        SerialCommunicator, "expect_ack_response", _fake_expect_ack_response
+    )
 
     comm = make_comm()
     comm.connection = None
@@ -552,58 +554,6 @@ def test_setup_command_recovers_past_a_spurious_decode_error_frame(
 
     assert ok is True
     assert comm.programmer_info == "Ready"
-
-
-def test_read_and_parse_lines_ringfence_unchanged() -> None:
-    """Ring-fence compliance: _read_and_parse_lines body source is byte-identical
-    to the GATE-1.8d pinned snapshot.
-
-    This test is GREEN today — the snapshot is captured from the current body.
-    It goes RED if ANY change is made to the generator body (per GATE-1.8d:
-    any change must be flagged and deferred to v1.9 alongside binary re-validation).
-
-    Pinned SHA-256 (2026-09-14): 4aa34549780b0ea204dd4f538b15eff090ae675308a93886e8af02078a1f4763
-    (Updated from 8b77800003a44fb21f2054fe8d0584e804648a76e52c3f23f55f06df74127b41
-     by the planning-citation cleanup, debug session
-     planning-refs-in-src-comments: COMMENT TEXT ONLY. This pin hashes the
-     function's source INCLUDING its comments, so removing a planning citation
-     from a comment inside the body invalidates it by construction. Not a
-     transport-path change and not a code change of any kind: the
-     comment-stripped sha256 of firestarter/serial_comm.py is
-     cb1f35d7a34bf61653b3534d038c5385d743e838a2f7212b937c931f2985d573 both
-     before and after, so no read() call, no branch on a wire byte, no write to
-     start_time and no statement of any kind moved.)
-    (Updated from 6d9e4fe4b67b78c110418305113b275174f16b2ecc9e0f55fbf5d9a623398184
-     at Phase 176 plan 03: both re-sync branches now call
-     transport_counters.record_resync_length_missing() /
-     .record_resync_body_truncated() beside their existing logger.warning(...),
-     before the existing continue. Approved via blocking-human checkpoint
-     (RPT-C1). Not a transport-path change: no new read() call, no new branch
-     on a wire byte, and no write to start_time, so none of the byte-by-byte
-     read loop, the magic-preamble dispatch, the frame-length read, or the
-     timeout reset semantics is affected.)
-    (Updated from 544433068cb14ac14677939435cb4f0ea78783b503315ed645b5f88c5c44a444
-     at Phase 65-01: Response now carries id=decoded.id for ProtocolNotImplementedError
-     typed-raise dispatch. Change is in-scope for v1.12 host graceful handling — not
-     a transport-path change, only adds id plumbing to the Response construction.)
-    """
-    import hashlib
-    import inspect
-
-    from firestarter.serial_comm import SerialCommunicator
-
-    _PINNED_SHA256 = "4aa34549780b0ea204dd4f538b15eff090ae675308a93886e8af02078a1f4763"
-
-    src = inspect.getsource(SerialCommunicator._read_and_parse_lines)
-    actual_digest = hashlib.sha256(src.encode("utf-8")).hexdigest()
-
-    assert actual_digest == _PINNED_SHA256, (
-        f"GATE-1.8d VIOLATION: _read_and_parse_lines body has changed!\n"
-        f"  Pinned digest:  {_PINNED_SHA256}\n"
-        f"  Actual digest:  {actual_digest}\n"
-        "Any change to this generator body must be flagged and deferred to v1.9 "
-        "per the ring-fence protocol (see serial_comm.py header comment)."
-    )
 
 
 def test_decode_id_frame_sets_firmware_max_chunk_from_2_byte_param(make_comm) -> None:

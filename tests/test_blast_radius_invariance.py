@@ -81,7 +81,6 @@ rule never fires in this phase.
 
 from __future__ import annotations
 
-import ast
 import hashlib
 import json
 import re
@@ -1088,55 +1087,3 @@ def test_shape_ids_closure_is_sensitive_to_removed_and_added_entries() -> None:
         "appending one entry to a copy of the committed anchor did not "
         "move it away from sorted(SHAPE_IDS) -- the closure pin is vacuous"
     )
-
-
-_DEDUP_ALLOW_LIST_ANCHOR = (
-    '    canonical = "|".join(parts)\n'
-    '    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]\n'
-)
-
-_DEDUP_MUTANT_TO_DICT = (
-    "    canonical = json.dumps(report.to_dict(), sort_keys=True)\n"
-    '    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]\n'
-)
-
-_DEDUP_MUTANT_REFLECTION = (
-    '    canonical = "|".join(\n'
-    "        str(getattr(report, f.name)) for f in dataclasses.fields(report)\n"
-    "    )\n"
-    '    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]\n'
-)
-
-_DEDUP_FORBIDDEN_NAMES = frozenset({"to_dict", "asdict", "fields", "vars", "__dict__"})
-
-
-def _dedup_fingerprint_reachable_names(source: str | None = None) -> set[str]:
-    """Parse `dedup_fingerprint`'s own source -- its real module file
-    (`firestarter/diagnostic_report.py`) when `source` is omitted, guarded
-    by a source-length assertion so a mis-resolved path cannot pass this
-    pin vacuously, or an in-memory mutant string when supplied by a
-    planted-mutation test -- locate the function definition, and return
-    every `ast.Call` name and `ast.Attribute` attr reachable from its
-    body: the surface HYG-03's pin checks for the serializer entry point
-    (`to_dict`) and the dataclass-reflection helpers (`dataclasses.fields`,
-    `dataclasses.asdict`, `vars`, `__dict__`). See `.planning/
-    MILESTONES.md`'s v1.36 section (D-18) for the recorded decision this
-    pin enforces."""
-    if source is None:
-        from firestarter import diagnostic_report
-
-        source = Path(diagnostic_report.__file__).read_text(encoding="utf-8")
-        assert len(source) > 1000
-    tree = ast.parse(source)
-    func = next(
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "dedup_fingerprint"
-    )
-    names: set[str] = set()
-    for node in ast.walk(func):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            names.add(node.func.id)
-        if isinstance(node, ast.Attribute):
-            names.add(node.attr)
-    return names

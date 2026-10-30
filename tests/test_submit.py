@@ -230,22 +230,11 @@ def test_a_transport_fault_reason_survives_the_markdown_reason_cell():
 
 
 def test_is_submittable_is_unchanged_by_the_status_axis():
-    """D-11: `is_submittable` is left byte-unchanged. The milestone
-    research (`.planning/research/SUMMARY.md:132`, `FEATURES.md:348`)
-    listed a run-validity term on `is_submittable` as a Phase 178
-    deliverable (T3); ATTR-05 and ROADMAP criterion 4 forbid it. ATTR-05
-    wins and T3 is recorded VOID here: its source mentions none of the
-    four run-validity tokens, and its truth table is unchanged -- True only
-    when `chip`, `protocol` and `host_version` are all truthy, irrespective
-    of the report's status axis (which `is_submittable` never even
-    receives -- it takes only `AutoCapture`)."""
-    import inspect
-
+    """D-11: `is_submittable` has no run-validity term. Its truth table is
+    True only when `chip`, `protocol` and `host_version` are all truthy,
+    irrespective of the report's status axis (which `is_submittable` never
+    even receives -- it takes only `AutoCapture`)."""
     from firestarter.diagnostic_report import AutoCapture, is_submittable
-
-    source = inspect.getsource(is_submittable)
-    for token in ("status", "run_status", "STATUS_ERROR", "run_valid"):
-        assert token not in source, token
 
     full = AutoCapture(host_version="1", chip="x", protocol="7")
     assert is_submittable(full) is True

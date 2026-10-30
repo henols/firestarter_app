@@ -79,8 +79,6 @@ from firestarter.sdp_capability import split_part_number_tokens
 # and test_protection_table_citations.py:27-29.
 _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
-_MODULE_FILE = _FA_DIR / "firestarter" / "protection_readability.py"
-
 _ALL_GATE_TOKENS = frozenset(
     {
         GATE_TOKEN_NO_MECHANISM,

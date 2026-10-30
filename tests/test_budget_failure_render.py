@@ -76,10 +76,6 @@ Decisions this module pins:
   explanation the operator needs.
 """
 
-import io
-import tokenize
-from pathlib import Path
-
 import pytest
 
 from firestarter.eprom_operations import _raise_for_error_response
@@ -91,8 +87,7 @@ from firestarter.messages import (
     MSG_ERR_PULSE_TOO_WIDE,
 )
 
-_HERE = Path(__file__).resolve().parent
-_EPROM_OPERATIONS_PATH = _HERE.parent / "firestarter" / "eprom_operations.py"
+from .conftest import decoded_response
 
 # Representative values, reused across every builder below so every test
 # reads the same failing address / pulse counts / refused width.
@@ -102,51 +97,30 @@ _ENERGY_PULSES_COUNT = 100
 _REFUSED_WIDTH_US = 60000
 
 
-# Synthetic response builders -- text matches the catalog's own format
-# string applied to representative params (verified this session via
-# `firestarter.messages.CATALOG[id].format % params`, byte for byte). Built
-# directly, per tests/test_boot_block_hint.py's own precedent: this avoids a
-# real wire frame and a serial path entirely.
+# Response builders: real decoded frames, so the hints read the same params
+# that the firmware sends.
 
 
 def _make_max_pulses_response() -> Response:
-    """Synthetic MSG_ERR_MAX_PULSES (0xBD) response.
-
-    Catalog format: "Byte at 0x%06x failed to program within %d pulses".
-    """
-    message = (
-        f"Byte at 0x{_ADDR:06x} failed to program within {_MAX_PULSES_COUNT} pulses"
+    """MSG_ERR_MAX_PULSES (0xBD): failing address, pulse count."""
+    return decoded_response(
+        MSG_ERR_MAX_PULSES, _ADDR.to_bytes(3, "big") + bytes([_MAX_PULSES_COUNT])
     )
-    return Response(type="ERROR", message=message, payload=None, id=MSG_ERR_MAX_PULSES)
 
 
 def _make_energy_cap_response() -> Response:
-    """Synthetic MSG_ERR_ENERGY_CAP (0xBE) response.
-
-    Catalog format: "Byte at 0x%06x exhausted its per-byte program-energy
-    budget after %d pulses".
-    """
-    message = (
-        f"Byte at 0x{_ADDR:06x} exhausted its per-byte program-energy budget "
-        f"after {_ENERGY_PULSES_COUNT} pulses"
+    """MSG_ERR_ENERGY_CAP (0xBE): failing address, pulse count."""
+    return decoded_response(
+        MSG_ERR_ENERGY_CAP, _ADDR.to_bytes(3, "big") + bytes([_ENERGY_PULSES_COUNT])
     )
-    return Response(type="ERROR", message=message, payload=None, id=MSG_ERR_ENERGY_CAP)
 
 
 def _make_pulse_too_wide_response() -> Response:
-    """Synthetic MSG_ERR_PULSE_TOO_WIDE (0xAE) response.
-
-    Catalog format: "Pulse width %lu us exceeds this protocol's per-byte
-    program-energy budget". Unlike the other two builders, this id names a
-    refused WIDTH, never an address -- D-16: it is a pre-flight refusal
-    raised before any byte is touched.
-    """
-    message = (
-        f"Pulse width {_REFUSED_WIDTH_US} us exceeds this protocol's "
-        "per-byte program-energy budget"
-    )
-    return Response(
-        type="ERROR", message=message, payload=None, id=MSG_ERR_PULSE_TOO_WIDE
+    """MSG_ERR_PULSE_TOO_WIDE (0xAE): the refused width. Unlike the other
+    two, this id names a WIDTH, never an address -- D-16: it is a pre-flight
+    refusal raised before any byte is touched."""
+    return decoded_response(
+        MSG_ERR_PULSE_TOO_WIDE, _REFUSED_WIDTH_US.to_bytes(4, "big")
     )
 
 
@@ -287,55 +261,24 @@ def test_energy_cap_and_pulse_too_wide() -> None:
 
 # Test 3
 
-_NEEDLE_A = "re" + "try"
-_NEEDLE_B = "re" + "trying"
-_NEEDLE_C = "try" + " again"
-_NEEDLE_D = "re" + "sume"
-_NEEDLE_E = "re" + "suming"
-_NEEDLE_F = "continue" + " from"
-_NEEDLE_G = "re-run" + " this block"
 
-_FORBIDDEN_NEEDLES = (
-    _NEEDLE_A,
-    _NEEDLE_B,
-    _NEEDLE_C,
-    _NEEDLE_D,
-    _NEEDLE_E,
-    _NEEDLE_F,
-    _NEEDLE_G,
+_FORBIDDEN_PHRASES = (
+    "re" + "try",
+    "try" + " again",
+    "re" + "sume",
+    "continue" + " from",
+    "re-run" + " this block",
 )
 
 
-def _strip_py_comments(text: str) -> str:
-    """Strip Python `#` comments only, replacing each comment span with
-    whitespace of the SAME SHAPE (spaces; every newline is left exactly
-    where it was) so every line number in the result matches the original
-    file exactly -- the same discipline
-    firestarter/tests/test_hv_routing_source_contract_v142.py's own
-    `_strip_comments` applies to C++ `//`/`/* */` comments, adapted to
-    Python's single-comment-kind grammar via the stdlib `tokenize` module
-    rather than a naive line-scan.
-
-    A naive `#`-to-end-of-line scan would be WRONG on this specific scan
-    target: `eprom_operations.py` builds its COBS wire frame with
-    `frame = b"#" + body + b"\\x00"` (the literal `#` marker byte, inside a
-    bytes literal) -- a naive scanner would mistake that `#` for a comment
-    start and truncate the rest of the line. `tokenize` is a real Python
-    lexer, so it never emits a COMMENT token for a `#` inside a string or
-    bytes literal; only genuine comments are stripped. Verified directly
-    against this exact line before this module was written.
-    """
-    lines = text.splitlines(keepends=True)
-    try:
-        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        tokens = []
-    for tok in tokens:
-        if tok.type == tokenize.COMMENT:
-            (start_row, start_col), (end_row, end_col) = tok.start, tok.end
-            if start_row == end_row and 1 <= start_row <= len(lines):
-                line = lines[start_row - 1]
-                lines[start_row - 1] = (
-                    line[:start_col] + (" " * (end_col - start_col)) + line[end_col:]
-                )
-    return "".join(lines)
+@pytest.mark.parametrize(
+    "build", [_make_max_pulses_response, _make_energy_cap_response]
+)
+def test_an_abort_hint_never_promises_a_continuation(build) -> None:
+    """The firmware has no mechanism to pick up a write where it stopped, so
+    the hint for an abort must not suggest one."""
+    hint = _hint_for(build())
+    assert hint is not None
+    lowered = hint.lower()
+    for phrase in _FORBIDDEN_PHRASES:
+        assert phrase not in lowered, (phrase, hint)

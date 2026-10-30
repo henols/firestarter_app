@@ -40,6 +40,7 @@ import pytest
 
 from firestarter.exceptions import FirmwareOutdatedError
 from firestarter.firmware import FirmwareManager
+from firestarter.frame_parser import Response
 from firestarter.serial_comm import SerialCommunicator
 
 # Helpers
@@ -53,7 +54,11 @@ def _probe_with_identity(identity):
     rather than imported so this file states its own preconditions.
     """
     with (
-        patch.object(SerialCommunicator, "expect_ack", return_value=(True, "Ready")),
+        patch.object(
+            SerialCommunicator,
+            "expect_ack_response",
+            return_value=Response(type="OK", message="Ready"),
+        ),
         patch.object(SerialCommunicator, "send_command", return_value=42),
         patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
         patch.object(SerialCommunicator, "disconnect", return_value=None),

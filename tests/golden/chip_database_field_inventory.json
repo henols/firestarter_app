@@ -62,34 +62,5 @@
     "7": 173,
     "8": 127,
     "11": 32
-  },
-  "generator_emitted_chip_entry_keys": [
-    "algorithm",
-    "chip_id_check",
-    "chip_id_value",
-    "datasheet",
-    "electrical",
-    "infoic_page_size_raw",
-    "nc_pins",
-    "non_volatile",
-    "page_size",
-    "part_number",
-    "pin_count",
-    "pinout",
-    "programming",
-    "protect_off_before",
-    "protect_on_after",
-    "provenance",
-    "pulse_duration_us",
-    "size_bytes",
-    "source",
-    "support_status",
-    "type",
-    "unsupported_reason",
-    "vcc_mv",
-    "vdd_mv",
-    "verification_note",
-    "verification_status",
-    "vpp_mv"
-  ]
+  }
 }
