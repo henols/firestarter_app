@@ -77,7 +77,6 @@ run, is committed at
 
 from __future__ import annotations
 
-import ast
 import dataclasses
 
 import firestarter.chip_test as chip_test
@@ -993,39 +992,3 @@ def test_uv_policy_violations_flags_both_directions():
     assert violations[0][2] == "a non-UV plan claimed the uv-slot region policy", (
         violations
     )
-
-
-def _scope_selector_names(source: str, target: str) -> set[str]:
-    """Parse `source`, locate `derive_plan`, find the single `ast.Assign`
-    whose target name is `target`, and return the set of `ast.Name` ids
-    reachable from its value expression.
-
-    Extraction is unambiguous because each name is assigned exactly once
-    inside `derive_plan`.
-    """
-    tree = ast.parse(source)
-    fn = next(
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "derive_plan"
-    )
-    assigns = [
-        n
-        for n in ast.walk(fn)
-        if isinstance(n, ast.Assign)
-        and len(n.targets) == 1
-        and isinstance(n.targets[0], ast.Name)
-        and n.targets[0].id == target
-    ]
-    assert len(assigns) == 1, (target, len(assigns))
-    return {n.id for n in ast.walk(assigns[0].value) if isinstance(n, ast.Name)}
-
-
-_WRITE_OP_ANCHOR = (
-    "    write_op = OP_WRITE_PARTIAL if write_scope == "
-    "_WRITE_SCOPE_PARTIAL else OP_WRITE\n"
-)
-_WRITE_OP_IS_UV_FORM = (
-    "    write_op = OP_WRITE_PARTIAL if write_scope == "
-    "_WRITE_SCOPE_PARTIAL or is_uv else OP_WRITE\n"
-)

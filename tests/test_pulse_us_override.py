@@ -529,12 +529,10 @@ def test_flag_is_write_only(runner: CliRunner, tmp_path) -> None:
     nothing to override (mirrors the reasoning that kept
     ``--skip-sdp-unlock`` on ``write`` alone, v1.22 D-17/D-18).
 
-    Two independent proofs: (a) a runtime ``CliRunner`` invocation of each
-    of the other four commands with ``--pulse-us`` exits 2 as an
-    unrecognised option -- no serial fixture needed, since Click refuses
-    before the handler runs; (b) a source-level check of the Click
-    ``Command`` objects' own registered parameter names, which survives a
-    future change to Click's error wording.
+    Two proofs: (a) each of the other four commands with ``--pulse-us``
+    exits 2 as an unrecognised option -- no serial fixture needed, since
+    Click refuses before the handler runs; (b) ``--help`` lists the option
+    for ``write`` and for no other of the five commands.
     """
     app = make_app_context()
     other_commands = {
@@ -555,17 +553,10 @@ def test_flag_is_write_only(runner: CliRunner, tmp_path) -> None:
             f"option; output:\n{result.output}"
         )
 
-    param_names = {
-        name: {p.name for p in cmd.params}
-        for name, cmd in cli.commands.items()
-        if name in ("write", "read", "verify", "blank", "erase")
-    }
-    assert "pulse_us" in param_names["write"], (
-        "D-18: write's own Click Command object must register a "
-        f"'pulse_us' parameter; got {param_names['write']}"
-    )
-    for name in ("read", "verify", "blank", "erase"):
-        assert "pulse_us" not in param_names[name], (
-            f"D-18: {name}'s Click Command object must NOT register a "
-            f"'pulse_us' parameter; got {param_names[name]}"
+    for name in ("write", "read", "verify", "blank", "erase"):
+        help_result = runner.invoke(cli, [name, "--help"])
+        assert help_result.exit_code == 0, help_result.output
+        assert ("--pulse-us" in help_result.output) is (name == "write"), (
+            f"D-18: only write's --help may list --pulse-us; {name}:\n"
+            f"{help_result.output}"
         )

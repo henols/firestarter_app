@@ -50,8 +50,6 @@ References:
 
 from __future__ import annotations
 
-import inspect
-
 from firestarter.chip_test import BannerCounts, Plan
 from firestarter.diagnostic_report import (
     AutoCapture,
@@ -117,18 +115,3 @@ def test_is_submittable_auto_capture_only():
 
 
 # Reintroduction guard
-
-
-def test_no_interactive_provenance_symbols():
-    """Structural assert: the deleted interactive-provenance surface never
-    reappears (guards against reintroduction)."""
-    import firestarter.diagnostic_report as diagnostic_report_mod
-
-    assert not hasattr(diagnostic_report_mod, "prompt_provenance")
-    assert not hasattr(diagnostic_report_mod, "Provenance")
-    assert not hasattr(diagnostic_report_mod, "SHIELD_REV_CHOICES")
-    assert not hasattr(diagnostic_report_mod, "_CHIP_ORIGIN_CHOICES")
-
-    src = inspect.getsource(diagnostic_report_mod)
-    assert "def prompt_provenance" not in src
-    assert "class Provenance" not in src

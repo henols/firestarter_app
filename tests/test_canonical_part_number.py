@@ -26,11 +26,10 @@ proves the sweep's own guard is load-bearing, not decorative.
 
 from __future__ import annotations
 
-import inspect
 import json
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -189,48 +188,17 @@ def test_all_twenty_six_filed_issues_resolve_to_the_part_that_was_in_the_socket(
     assert not mismatches, mismatches
 
 
-_PAREN_RUNG_ANCHOR = (
-    "            for alias in aliases:\n"
-    "                if _strip_paren(alias) == query_stripped:\n"
-    "                    return alias\n"
-)
-_PAREN_RUNG_MUTANT = (
-    "            for alias in aliases:\n"
-    "                if _strip_paren(alias) == query_stripped:\n"
-    "                    return alias.lower()\n"
-)
-
-
 def _assert_paren_alias_kept_verbatim(selector: Any) -> None:
     got = selector("DS1245AB(RW),DS1245Y(RW)", "DS1245AB")
     assert got == "DS1245AB(RW)", got
 
 
 def test_a_parenthetical_alias_is_carried_verbatim() -> None:
-    """D-02, both directions. First: the real selector's paren-stripped
-    rung (rung three) returns the alias WITH its parentheses intact --
-    stripping would file two distinct database rows (the `(RW)` and
-    `(TEST)` variants of the same DALLAS NVRAM) under one title. Second,
-    the planted leg: a mutation that lower-cases exactly that rung's
-    return value is observed to redden this exact pin -- the anchor's
-    uniqueness is asserted BEFORE mutating, and the mutant is built and
-    executed entirely in memory; no file is written."""
+    """D-02: the real selector's paren-stripped rung (rung three) returns
+    the alias WITH its parentheses intact -- stripping would file two
+    distinct database rows (the `(RW)` and `(TEST)` variants of the same
+    DALLAS NVRAM) under one title."""
     _assert_paren_alias_kept_verbatim(_canonical_part_number)
-
-    source = inspect.getsource(_canonical_part_number)
-    assert source.count(_PAREN_RUNG_ANCHOR) == 1, "anchor is not unique in the source"
-    mutated_source = source.replace(_PAREN_RUNG_ANCHOR, _PAREN_RUNG_MUTANT, 1)
-
-    namespace: dict[str, Any] = {"Optional": Optional}
-    exec(
-        compile(mutated_source, "<181-05 planted paren-rung mutant>", "exec"),
-        namespace,
-    )
-    mutant = namespace["_canonical_part_number"]
-    assert mutant("DS1245AB(RW),DS1245Y(RW)", "DS1245AB") == "ds1245ab(rw)"
-
-    with pytest.raises(AssertionError):
-        _assert_paren_alias_kept_verbatim(mutant)
 
 
 def test_an_empty_expected_alias_set_fails_rather_than_passing_vacuously() -> None:

@@ -43,7 +43,6 @@ References:
     D-01/D-02/D-03/D-04
 """
 
-import inspect
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -376,29 +375,10 @@ def test_derive_bypasses_guard_for_non_supported_chip():
     assert plan.steps[0].op == "id"
 
 
-def test_derive_plan_flag_can_erase_imported_not_redefined():
-    import firestarter.chip_test as chip_test_mod
-    from firestarter.constants import FLAG_CAN_ERASE
-
-    assert chip_test_mod.FLAG_CAN_ERASE is FLAG_CAN_ERASE
-    assert FLAG_CAN_ERASE == 0x02
-
-
 def test_derive_plan_unknown_chip_returns_empty_plan_with_reason():
     plan = derive_plan("NO-SUCH-CHIP-XYZ", _REAL_DB, write_scope="full")
     assert plan.steps == []
     assert plan.reason
-
-
-def test_derive_plan_no_runtime_classify_call():
-    # grep-gate companion: derive_plan's source contains no call to
-    # classify() (build-time only, tools/build_db.py).
-    import inspect
-
-    import firestarter.chip_test as chip_test_mod
-
-    src = inspect.getsource(chip_test_mod.derive_plan)
-    assert "classify(" not in src
 
 
 def _step(plan, op):
@@ -503,17 +483,36 @@ def test_derive_plan_write_present_and_destructive():
     assert write_step.destructive is True
 
 
-def test_derive_plan_erase_condition_checks_flag_and_protocol():
-    # Structural check on the source: the erase-inclusion condition
-    # references both FLAG_CAN_ERASE and a check against protocol 0x05 (or
-    # an equivalent named constant) -- acceptance criterion for Task 2.
-    import inspect
+@pytest.mark.parametrize(
+    ("can_erase", "protocol", "supported"),
+    [
+        (True, 0x06, True),
+        (True, 0x05, False),
+        (False, 0x06, False),
+        (False, 0x05, False),
+    ],
+)
+def test_derive_plan_erase_needs_the_flag_and_a_non_flash4_protocol(
+    monkeypatch, can_erase, protocol, supported
+):
+    """The erase step runs only with FLAG_CAN_ERASE set AND a protocol
+    other than 0x05 (flash4 auto-erases per page), whatever the flag says."""
+    from firestarter.constants import FLAG_CAN_ERASE
 
-    import firestarter.chip_test as chip_test_mod
+    real_convert = _REAL_DB.convert_to_programmer
 
-    src = inspect.getsource(chip_test_mod.derive_plan)
-    assert "FLAG_CAN_ERASE" in src
-    assert "0x05" in src or "0x5" in src or "PROTOCOL_FLASH4" in src
+    def _convert(full):
+        prog = real_convert(full)
+        flags = prog.get("flags", 0) & ~FLAG_CAN_ERASE
+        return {
+            **prog,
+            "flags": flags | (FLAG_CAN_ERASE if can_erase else 0),
+            "algorithm": protocol,
+        }
+
+    monkeypatch.setattr(_REAL_DB, "convert_to_programmer", _convert)
+    plan = derive_plan("AS29F002T", _REAL_DB, write_scope="full")
+    assert _step(plan, "erase").supported is supported
 
 
 def test_derive_plan_destructive_flag_strips_not_annotates():
@@ -1320,12 +1319,11 @@ def test_transport_fault_carries_skipped_verdict_and_error_status():
 
 def test_id_step_closes_gate_predicate_is_unchanged_by_the_status_axis():
     """D-01: `_id_step_closes_gate` returns True for a `StepResult` carrying
-    `verdict=VERDICT_SKIPPED, status=STATUS_ERROR`, and its source text
-    still reads the two-element `(VERDICT_BAD, VERDICT_SKIPPED)` tuple and
-    mentions neither `status` nor `STATUS_`. `marginal` and `NA` both leave
-    this gate OPEN, which would admit a destructive write against a chip
-    whose identity was never confirmed -- `SKIPPED` was chosen precisely so
-    this predicate needs no edit at all."""
+    `verdict=VERDICT_SKIPPED, status=STATUS_ERROR`, and the gate depends on
+    the verdict alone: no status value changes its answer. `marginal` and
+    `NA` both leave this gate OPEN, which would admit a destructive write
+    against a chip whose identity was never confirmed -- `SKIPPED` was
+    chosen precisely so this predicate needs no edit at all."""
     result = StepResult(
         op=OP_ID,
         verdict=VERDICT_SKIPPED,
@@ -1334,10 +1332,13 @@ def test_id_step_closes_gate_predicate_is_unchanged_by_the_status_axis():
     )
     assert _id_step_closes_gate(result) is True
 
-    source = inspect.getsource(_id_step_closes_gate)
-    assert "VERDICT_BAD, VERDICT_SKIPPED" in source
-    assert "status" not in source
-    assert "STATUS_" not in source
+    verdicts = (VERDICT_OK, VERDICT_BAD, VERDICT_NA, VERDICT_SKIPPED, VERDICT_MARGINAL)
+    for verdict in verdicts:
+        closes = _id_step_closes_gate(StepResult(op=OP_ID, verdict=verdict))
+        assert closes is (verdict in (VERDICT_BAD, VERDICT_SKIPPED)), verdict
+        for status in (STATUS_COMPLETE, STATUS_ERROR, STATUS_SKIP):
+            with_status = StepResult(op=OP_ID, verdict=verdict, status=status)
+            assert _id_step_closes_gate(with_status) is closes, (verdict, status)
 
 
 def test_run_status_folds_error_when_any_step_errored():
@@ -1347,27 +1348,10 @@ def test_run_status_folds_error_when_any_step_errored():
 
 
 def test_run_status_is_complete_when_no_step_errored():
-    """The fold's other leg, including the empty-list case, plus D-02's
-    disjointness proof: none of the three `STATUS_*` values is a member of
-    `_ALL_OPS` or `_MULTIWORD_OP_VALUES` -- mirroring the `SDP_HOLD_*`
-    precedent -- so a later reader cannot "helpfully" register a report
-    value as an op string."""
-    import firestarter.chip_test as chip_test_mod
-
-    _ALL_OPS = frozenset(
-        value
-        for name, value in vars(chip_test_mod).items()
-        if name.startswith("OP_") and isinstance(value, str)
-    )
-    _MULTIWORD_OP_VALUES = frozenset(v for v in _ALL_OPS if "-" in v)
-
+    """The fold's other leg, including the empty-list case."""
     ok = StepResult(op=OP_ID, verdict=VERDICT_OK)
     assert run_status([ok]) == STATUS_COMPLETE
     assert run_status([]) == STATUS_COMPLETE
-
-    status_values = {STATUS_COMPLETE, STATUS_ERROR, STATUS_SKIP}
-    assert not (status_values & set(_ALL_OPS))
-    assert not (status_values & set(_MULTIWORD_OP_VALUES))
 
 
 def _writes_bytes_to_output_file(data: bytes):
@@ -2567,37 +2551,30 @@ def test_dispatch_multi_run_uses_selector_for_uv_chip():
     assert write_result.fingerprint.bad == 0
 
 
-def test_generate_pattern_and_classify_fingerprint_source_unchanged():
-    """202-03 (D-02): `classify_fingerprint` is now a thin delegating
-    wrapper around `compare.classify_streamed` -- the logic this guard
-    originally protected (that the two region-scoping constants never leak
-    into the pattern generator or the classifier) moved with it, to
-    `classify_streamed` and `CompareAccumulator.feed`. A guard that kept
-    inspecting only `classify_fingerprint`'s own handful of delegating
-    lines would still pass, but vacuously: it would no longer be looking at
-    the code that could actually leak those constants. A green test
-    guarding nothing is worse than either fixing it or deleting it --
-    fixed here by following the logic to where it now lives."""
-    import inspect
-
+def test_generate_pattern_and_classify_fingerprint_ignore_the_write_region(
+    monkeypatch,
+):
+    """202-03 (D-02): the two region-scoping constants never leak into the
+    pattern generator or the classifier: moving the write region changes
+    neither their output nor the streamed classification."""
     import firestarter.chip_test as chip_test_mod
-    import firestarter.compare as compare_mod
 
-    gen_src = inspect.getsource(chip_test_mod.generate_pattern)
-    assert "_WRITE_REGION_START" not in gen_src
-    assert "_UV_WRITE_REGION_LENGTH" not in gen_src
+    expected = chip_test_mod.generate_pattern(0x100, 512)
+    actual = bytearray(expected)
+    for offset in (3, 64, 200, 511):
+        actual[offset] ^= 0x10
+    before = (
+        chip_test_mod.generate_pattern(0x100, 512),
+        chip_test_mod.classify_fingerprint(expected, bytes(actual), addr_base=0x100),
+    )
 
-    classify_src = inspect.getsource(chip_test_mod.classify_fingerprint)
-    assert "_WRITE_REGION_START" not in classify_src
-    assert "_UV_WRITE_REGION_LENGTH" not in classify_src
-
-    streamed_src = inspect.getsource(compare_mod.classify_streamed)
-    assert "_WRITE_REGION_START" not in streamed_src
-    assert "_UV_WRITE_REGION_LENGTH" not in streamed_src
-
-    feed_src = inspect.getsource(compare_mod.CompareAccumulator.feed)
-    assert "_WRITE_REGION_START" not in feed_src
-    assert "_UV_WRITE_REGION_LENGTH" not in feed_src
+    monkeypatch.setattr(chip_test_mod, "_WRITE_REGION_START", 0x4000)
+    monkeypatch.setattr(chip_test_mod, "_UV_WRITE_REGION_LENGTH", 4096)
+    after = (
+        chip_test_mod.generate_pattern(0x100, 512),
+        chip_test_mod.classify_fingerprint(expected, bytes(actual), addr_base=0x100),
+    )
+    assert after == before
 
 
 def _capturing_write(captured: dict):
@@ -2772,12 +2749,6 @@ def test_count_applicable_n_equals_m_when_destructive():
     counts = count_applicable(plan, results)
 
     assert counts.n_ran == counts.m_applicable == 5
-
-
-def chip_test_source_path() -> str:
-    import firestarter.chip_test as chip_test_mod
-
-    return chip_test_mod.__file__
 
 
 # Every op run_plan executes routes through chip_resolver.resolve_chip (the

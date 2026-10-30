@@ -63,8 +63,6 @@ from firestarter.firmware import FirmwareManager
 from .conftest import make_app_context
 
 _APP_DIR = Path(__file__).parent.parent
-_CLI_HANDLERS_PATH = _APP_DIR / "firestarter" / "cli_handlers.py"
-
 # Every version string used by this module's tests is a literal below, not
 # read from `firestarter.__version__` -- the point is to simulate a channel,
 # not observe whichever one this checkout currently is.

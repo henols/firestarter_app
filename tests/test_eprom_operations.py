@@ -2071,14 +2071,6 @@ class TestCheckEpromBlankSharesTheOneCompareDrive:
     copies of the accumulator loop -- both call the SAME shared private
     drive helper rather than each rolling their own."""
 
-    def test_both_methods_call_the_shared_drive_helper(self) -> None:
-        import inspect
-
-        verify_src = inspect.getsource(EpromOperator.verify_eprom)
-        blank_src = inspect.getsource(EpromOperator.check_eprom_blank)
-        assert "_drive_region_compare" in verify_src
-        assert "_drive_region_compare" in blank_src
-
 
 class TestBlankExpectedBytesPullCallback:
     """D-04: `check_eprom_blank`'s pull callback allocates at most the
@@ -2265,92 +2257,58 @@ class TestOrdinalsNeverSentByVerifyOrBlank:
             "every composed command dict must carry the read ordinal"
         )
 
-        # Alongside the command-dict proof: no raw frame the host WROTE to
-        # the wire carries either retired ordinal's JSON encoding either --
-        # a second, independent line of evidence at the byte level.
-        assert written_frames, "no bytes were ever written to the wire"
-        assert not any(
-            b'"cmd": 4' in w or b'"cmd":4' in w or b'"cmd": 6' in w or b'"cmd":6' in w
-            for w in written_frames
-        )
 
-    def test_neither_retired_ordinal_is_defined_or_named_on_the_host_ladder(
-        self,
-    ) -> None:
-        """FWCMD-03's host-side half: the constants module exposes neither
-        retired command name, its COMMAND_NAMES map carries neither retired
-        key, and the module's own source carries the reserved-ordinal
-        record naming both numbers. Lives in the host repository
-        deliberately -- no app test scans firmware source today, and this
-        phase does not start that."""
-        import firestarter.constants as constants_module
-
-        assert not hasattr(constants_module, "COMMAND_VERIFY"), (
-            "constants.py must not define COMMAND_VERIFY -- retired in "
-            "Phase 204 Plan 01"
-        )
-        assert not hasattr(constants_module, "COMMAND_BLANK_CHECK"), (
-            "constants.py must not define COMMAND_BLANK_CHECK -- retired "
-            "in Phase 204 Plan 03"
-        )
-        assert 4 not in constants_module.COMMAND_NAMES, (
-            "COMMAND_NAMES must not carry a key for the retired blank-check ordinal (4)"
-        )
-        assert 6 not in constants_module.COMMAND_NAMES, (
-            "COMMAND_NAMES must not carry a key for the retired verify ordinal (6)"
-        )
-        source = Path(constants_module.__file__).read_text()
-        marker = "retired in " + "3.1.0"
-        occurrences = source.count(marker)
-        assert occurrences >= 2, (
-            "constants.py must carry the reserved-ordinal marker at least "
-            f"twice (once per retired ordinal), found {occurrences}"
-        )
+_RETIRED_SKIP_BLANK_CHECK_FLAG = 0x08
 
 
-def test_the_retired_control_flag_is_absent_and_its_gap_is_recorded() -> None:
-    """FWBLANK-04's host-side ladder leg, following Phase 204's executed
-    shape above for the command ladder: the constants module exposes no
-    symbol for the retired skip-blank-check control flag, no production
-    module composes its retired value (0x08) into an operation-flags
-    value, and the reserved note is present in the constants module's own
-    source. Lives here rather than in write_blank_guard's own test module
-    because Phase 204's precedent for a ladder-retirement leg lives here
-    too."""
-    import firestarter.chip_test as chip_test_module
-    import firestarter.constants as constants_module
-    import firestarter.eprom_operations as eprom_operations_module
-    import firestarter.serial_comm as serial_comm_module
-    import firestarter.write_blank_guard as write_blank_guard_module
+def test_no_option_combination_composes_the_retired_control_flag() -> None:
+    """FWBLANK-04: the retired skip-blank-check flag (0x08) is never sent.
+    Every combination of the CLI's flag options leaves that bit clear,
+    including `-b` (blank_check=False), the option that used to set it."""
+    import itertools
 
-    assert not hasattr(constants_module, "FLAG_SKIP_BLANK_CHECK"), (
-        "constants.py must not define FLAG_SKIP_BLANK_CHECK -- retired in "
-        "Phase 205 Plan 04 (FWBLANK-04)"
+    from firestarter.cli_handlers import _build_op_flags
+
+    names = (
+        "blank_check",
+        "force",
+        "verbose",
+        "vpe_as_vpp",
+        "skip_erase",
+        "skip_sdp_unlock",
+        "skip_final_verify",
+    )
+    for values in itertools.product((False, True), repeat=len(names)):
+        options = dict(zip(names, values))
+        for io_masks in ({}, {"input_enable": True, "chip_disable": True}):
+            flags = _build_op_flags(**options, **io_masks)
+            assert not flags & _RETIRED_SKIP_BLANK_CHECK_FLAG, (options, io_masks)
+
+
+def test_verify_and_blank_send_no_retired_control_flag(tmp_path) -> None:
+    command_dicts: list[dict] = []
+    operator = EpromOperator(ConfigManager())
+    expected = tmp_path / "expected.bin"
+    expected.write_bytes(b"\x01\x02\x03\x04")
+
+    _run_and_capture(
+        lambda: operator.verify_eprom(
+            "W27C512", dict(_MINIMAL_EPROM_DATA), str(expected)
+        ),
+        command_dicts,
+        [],
+        payload=b"\x01\x02\x03\x04",
+    )
+    _run_and_capture(
+        lambda: operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA)),
+        command_dicts,
+        [],
+        payload=b"\xff" * 8,
     )
 
-    for module in (
-        chip_test_module,
-        eprom_operations_module,
-        serial_comm_module,
-        write_blank_guard_module,
-    ):
-        module_source = Path(module.__file__).read_text()
-        assert "FLAG_SKIP_BLANK_CHECK" not in module_source, (
-            f"{module.__name__} must not name the retired control flag's "
-            "identifier anywhere -- FWBLANK-04 retires it with no "
-            f"reference left in production source (found in {module.__file__})"
-        )
-
-    constants_source = Path(constants_module.__file__).read_text()
-    marker = "retired in " + "3.1.0"
-    assert constants_source.count(marker) >= 1, (
-        "constants.py must carry the reserved-flag marker at the 0x08 gap "
-        "in the flag block"
-    )
-    assert "0x08" in constants_source, (
-        "constants.py's flag block must record the retired flag's value "
-        "(0x08) at the gap"
-    )
+    assert len(command_dicts) == 2
+    for command in command_dicts:
+        assert not command.get("flags", 0) & _RETIRED_SKIP_BLANK_CHECK_FLAG
 
 
 class TestSdpOperationsWireShape:

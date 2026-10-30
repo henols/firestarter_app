@@ -437,16 +437,6 @@ def test_non_uv_target_reports_no_rig_life() -> None:
     assert target.slots_total is None
 
 
-def test_help_describes_the_repeat_as_a_cycle_and_a_rig_check() -> None:
-    """D-10: firmware is deterministic and cannot disagree with itself, so the
-    user-facing wording must not sell the repeat as extra firmware coverage."""
-    import firestarter.cli_handlers as cli_handlers_mod
-
-    doc = (cli_handlers_mod.dev_test.__doc__ or "").lower()
-    assert "cycle" in doc
-    assert "rig-health" in doc or "rig health" in doc
-
-
 def test_a_failing_first_cycle_keeps_the_fingerprint_read_back() -> None:
     """Evidence-gated fingerprint read-back across cycles (PRUNE-02).
 

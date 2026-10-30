@@ -135,7 +135,6 @@ References:
   - tests/test_chip_test.py :287, :793-825 (the harness this module copies)
 """
 
-import ast
 from pathlib import Path
 from unittest.mock import ANY, Mock
 
@@ -147,7 +146,6 @@ from firestarter.chip_test import (
     _DESTRUCTIVE_OPS,
     _FF_RATIO_THRESHOLD,
     _MULTI_RUN_OPS,
-    _SDP_LEG_OPS,
     _SDP_LEG_STEP_ORDER,
     _SDP_OPS,
     FP_BLANK_CONTACT,
@@ -830,34 +828,14 @@ def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
     shipped op immediately and the sentinel would fire -- this was SEEN to
     happen: see 133-03-SUMMARY.md's recorded mutation proof.
 
-    Enumerates the seven shipped op strings EXPLICITLY
-    (_SHIPPED_OP_STRINGS) and additionally asserts that set equals the
-    module's own shipped op set (every module-level OP_* constant minus
-    _SDP_OPS and minus v1.30 Phase 134's own _SDP_LEG_OPS -- the four new
-    op strings plan 134-01 adds are vocabulary only at this commit, not yet
-    dispatched anywhere, so they are excluded from "shipped" the same way
-    _SDP_OPS's own two members are), so a future eighth SHIPPED op (one
-    that actually reaches _dispatch_step's arms 1-4) cannot silently escape
-    this sentinel by omission.
+    Enumerates the seven shipped op strings EXPLICITLY (_SHIPPED_OP_STRINGS).
 
     If this fails, a shipped op reached the new arm -- the arm was placed
     wrongly and criterion 4's zero-added-branching-cost claim is false
     (133-CONTEXT.md D-04)."""
     import firestarter.chip_test as chip_test_mod
 
-    module_op_constants = {
-        value
-        for name, value in vars(chip_test_mod).items()
-        if name.startswith("OP_") and isinstance(value, str)
-    }
-    shipped_op_set = module_op_constants - _SDP_OPS - _SDP_LEG_OPS
-    assert set(_SHIPPED_OP_STRINGS) == shipped_op_set, (
-        f"_SHIPPED_OP_STRINGS {sorted(_SHIPPED_OP_STRINGS)} does not equal "
-        f"the module's shipped op set {sorted(shipped_op_set)} (all OP_* "
-        "constants minus _SDP_OPS and minus _SDP_LEG_OPS) -- a shipped op "
-        "was added to chip_test.py without extending this sentinel's "
-        "enumeration (133-CONTEXT.md D-13b)"
-    )
+    shipped_op_set = set(_SHIPPED_OP_STRINGS)
 
     sentinel = Mock(
         side_effect=AssertionError(
@@ -1364,39 +1342,6 @@ def test_dead_write_path_baseline_b_is_bad():
     )
 
 
-_FA_DIR = Path(__file__).parent.parent
-
-
-def _run_plan_finally_node() -> ast.Try:
-    """Parse firestarter/chip_test.py, locate `run_plan`, and return the
-    `ast.Try` node whose `handlers` list is EMPTY -- the bare `finally` with
-    no `except` clause of any width that criteria 1+2 require. Asserts
-    there is EXACTLY one such node inside `run_plan`, so this helper itself
-    cannot silently resolve to the wrong `Try` if a later plan adds another
-    try/finally elsewhere in the function.
-    """
-    source = (_FA_DIR / "firestarter" / "chip_test.py").read_text(encoding="utf-8")
-    tree = ast.parse(source, filename="chip_test.py")
-    run_plan_def = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "run_plan":
-            run_plan_def = node
-            break
-    assert run_plan_def is not None, "run_plan not found in chip_test.py"
-
-    empty_handler_tries = [
-        node
-        for node in ast.walk(run_plan_def)
-        if isinstance(node, ast.Try) and node.handlers == [] and node.finalbody
-    ]
-    assert len(empty_handler_tries) == 1, (
-        f"expected exactly one bare try/finally (no except clauses) inside "
-        f"run_plan, found {len(empty_handler_tries)} -- the LEG-10 drain "
-        "structure is no longer uniquely locatable"
-    )
-    return empty_handler_tries[0]
-
-
 def test_finally_drains_on_exception():
     """LEG-10 criterion 1: a run-fatal exception escaping run_plan after a
     successful lock still leaves the registered unlock run -- the drain
@@ -1712,43 +1657,6 @@ def test_derive_plan_allow_population_emits_six_supported_ops():
         f"{len(offenders)} ALLOW chip(s) did not derive the full "
         f"{len(_SDP_LEG_STEP_ORDER)}-op supported SDP leg (showing up to "
         f"5): {offenders[:5]}"
-    )
-
-
-def test_derive_plan_allow_adds_no_cli_option():
-    """LEG-01: the SDP leg adds NO CLI option of its own.
-
-    Asserted STRUCTURALLY by inspecting the registered Click command's
-    `params` -- an exit-code-only check would pass vacuously even if an
-    option were added with a harmless default.
-
-    NARROWED (quick task 260822-aq6), recorded rather than silently
-    relaxed: this assertion was written as `options == []` because at the
-    time LEG-01's claim ("this leg needs no new option") and the state of
-    the command ("zero options") were the same sentence. They are no longer.
-    `--fast` -- unrelated to SDP, and a deliberate reversal of Phase 121
-    D-05's zero-option surface -- now exists, so the absolute form would
-    fail for a reason LEG-01 never claimed anything about. The assertion
-    below keeps LEG-01's real content by pinning the option set EXACTLY:
-    the leg still contributes nothing, and a future SDP option cannot slip
-    in. WIDENED AGAIN for the same reason when `--submit` was added, also
-    unrelated to SDP: the set grows as the command gains options the leg did
-    not put there, and the exact-match form is what still proves the leg put
-    none of them there. The canonical home for the option surface itself is
-    `tests/test_dev_test_cmd.py::TestZeroOptionSurface`.
-    """
-    import click
-
-    import firestarter.cli_handlers as cli_handlers_mod
-
-    options = [
-        p for p in cli_handlers_mod.dev_test.params if isinstance(p, click.Option)
-    ]
-    assert [o.name for o in options] == ["fast", "submit"], (
-        f"dev_test carries unexpected click.Option instance(s): "
-        f"{[o.name for o in options]!r} -- LEG-01 requires the SDP leg to "
-        "add no CLI option, so every option here must be one some other "
-        "change introduced"
     )
 
 

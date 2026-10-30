@@ -4,7 +4,7 @@ comparison engine (D-01/D-02/D-03/D-04/D-05/D-13/D-14/D-16).
 Drives `CompareAccumulator` directly from a synthetic generator of
 (address, bytes) chunk pairs -- no operator, no serial, no bench hardware.
 This is deliberate: the engine is stdlib-only (see the module's own
-import-set invariant, separately pinned by an AST scan in this file), so
+import-set invariant, pinned by a fresh-interpreter run in this file), so
 most of this file's tests need nothing beyond that either. The one
 deliberate exception is the D-03 corpus (`TestClassifyFingerprintCorpus`),
 which imports `firestarter.chip_test` and a fixture from
@@ -16,8 +16,6 @@ does.
 
 from __future__ import annotations
 
-import ast
-import inspect
 import textwrap
 import tracemalloc
 from collections.abc import Iterator
@@ -492,66 +490,43 @@ class TestCompareAccumulatorPeakAllocation:
         assert peak_512k <= peak_128k * 2
 
 
-def _feed_function_ast() -> ast.FunctionDef:
-    """Parse `CompareAccumulator.feed`'s own source into its `ast.FunctionDef`
-    node, for the structural fast-path test below. `inspect.getsource`
-    returns method-indented source, so it must be dedented before
-    `ast.parse` accepts it."""
-    source = textwrap.dedent(inspect.getsource(CompareAccumulator.feed))
-    module = ast.parse(source)
-    func = module.body[0]
-    assert isinstance(func, ast.FunctionDef)
-    return func
+class _IndexCountingBytes(bytes):
+    """bytes that counts every per-offset access. `==` stays at C level and
+    is not counted, so only a Python per-offset loop moves the counter."""
+
+    accesses = 0
+
+    def __getitem__(self, index):  # type: ignore[override]
+        type(self).accesses += 1
+        return super().__getitem__(index)
+
+    def __iter__(self):  # type: ignore[override]
+        type(self).accesses += 1
+        return super().__iter__()
 
 
-class TestCompareAccumulatorFastPathStructure:
-    """The equality fast path must come before the per-offset loop. A
-    per-byte loop over an all-matching 512 KiB input costs ~20s; the fast
-    path costs ~2ms. This checks the shape of `feed`, so it does not
-    depend on machine speed."""
+class TestCompareAccumulatorFastPath:
+    """A clean chunk takes the equality fast path. A per-byte loop over an
+    all-matching 512 KiB input costs ~20s; the fast path costs ~2ms. This
+    counts per-offset accesses, so it does not depend on machine speed."""
 
-    def test_fast_path_precedes_per_offset_loop(self) -> None:
-        func = _feed_function_ast()
+    def test_a_matching_chunk_touches_no_offset(self) -> None:
+        data = bytes(range(256)) * 2048  # 512 KiB
+        _IndexCountingBytes.accesses = 0
+        acc = CompareAccumulator()
+        acc.feed(0, _IndexCountingBytes(data), _IndexCountingBytes(data))
+        assert _IndexCountingBytes.accesses == 0
+        assert acc.finalise().bad == 0
 
-        first_for_lineno: int | None = None
-        for node in ast.walk(func):
-            if isinstance(node, ast.For):
-                if first_for_lineno is None or node.lineno < first_for_lineno:
-                    first_for_lineno = node.lineno
-
-        fast_path_lineno: int | None = None
-        for stmt in func.body:
-            if not isinstance(stmt, ast.If):
-                continue
-            test = stmt.test
-            if not (
-                isinstance(test, ast.Compare)
-                and len(test.ops) == 1
-                and isinstance(test.ops[0], ast.Eq)
-            ):
-                continue
-            names = {
-                side.id
-                for side in (test.left, *test.comparators)
-                if isinstance(side, ast.Name)
-            }
-            if names != {"expected", "actual"}:
-                continue
-            if any(isinstance(inner, ast.Return) for inner in stmt.body):
-                fast_path_lineno = stmt.lineno
-                break
-
-        assert fast_path_lineno is not None, (
-            "no whole-chunk `expected == actual` comparison with an early "
-            "return found in feed()'s top-level body"
-        )
-        assert first_for_lineno is not None, (
-            "no per-offset loop found in feed() to compare the fast path against"
-        )
-        assert fast_path_lineno < first_for_lineno, (
-            "the equality fast path must precede any per-offset loop, or "
-            "a clean chunk pays per-offset cost it should have skipped"
-        )
+    def test_a_differing_chunk_is_compared_offset_by_offset(self) -> None:
+        """The control: the counter does move when the bytes differ."""
+        expected = bytes(64)
+        actual = bytes(63) + b"\x01"
+        _IndexCountingBytes.accesses = 0
+        acc = CompareAccumulator()
+        acc.feed(0, _IndexCountingBytes(expected), _IndexCountingBytes(actual))
+        assert _IndexCountingBytes.accesses > 0
+        assert acc.finalise().bad == 1
 
 
 class TestCompareAccumulatorAdjacencyAndOverlap:
@@ -1304,39 +1279,42 @@ _FORBIDDEN_MODULES = (
 
 
 class TestImportPurity:
-    """D-01: `compare.py`'s whole-tree import set names none of the four
-    forbidden modules. AST-based, not a substring grep -- this module's own
-    docstring names all four forbidden modules in prose describing this
-    very safety property, so a raw grep would false-positive on itself
-    (`test_diagnostic_report.py::test_report_module_is_orchestrator_only`'s
-    docstring records the same reasoning, mirroring the Phase-109 SAFE-02
-    lesson). Walks the WHOLE tree, not just module level: a function-local
-    lazy import would defeat D-01 exactly as thoroughly as a top-level
-    one -- `eprom_operations.py`'s own read path already shows this
-    codebase uses that shape deliberately, so it is not a hypothetical."""
+    """D-01: using `compare.py` loads none of the four forbidden modules. A
+    fresh interpreter imports it and runs a whole compare and
+    classification, so a function-local lazy import on those paths counts
+    too."""
 
-    def test_no_forbidden_import_anywhere_in_compare_py(self) -> None:
-        import firestarter.compare as compare_mod
+    def test_a_compare_loads_no_forbidden_module(self) -> None:
+        import subprocess
+        import sys
 
-        src = inspect.getsource(compare_mod)
-        tree = ast.parse(src)
+        script = textwrap.dedent(
+            f"""
+            import sys
+            from firestarter.compare import (
+                CompareAccumulator,
+                classify_streamed,
+                diff_summary,
+                render_compare_lines,
+            )
 
-        qualified_names: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                qualified_names.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    qualified_names.add(node.module)
-                    qualified_names.update(
-                        f"{node.module}.{alias.name}" for alias in node.names
-                    )
-                else:
-                    qualified_names.update(alias.name for alias in node.names)
-
-        for forbidden in _FORBIDDEN_MODULES:
-            for name in qualified_names:
-                assert name != forbidden and not name.startswith(f"{forbidden}."), (
-                    f"{name!r} in compare.py's import set reaches forbidden "
-                    f"module {forbidden!r} -- breaks D-01"
-                )
+            acc = CompareAccumulator()
+            acc.feed(0, bytes(4096), bytes(4096))
+            acc.feed(4096, bytes(4096), bytes([0xFF]) * 4096)
+            result = acc.finalise()
+            classify_streamed(result)
+            render_compare_lines(result)
+            diff_summary(bytes(16), bytes([1]) * 16)
+            loaded = [m for m in {_FORBIDDEN_MODULES!r} if m in sys.modules]
+            print(",".join(loaded))
+            """
+        )
+        run = subprocess.run(
+            [sys.executable, "-I", "-c", script],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert run.stdout.strip() == "", (
+            f"compare.py loaded forbidden modules: {run.stdout.strip()}"
+        )
