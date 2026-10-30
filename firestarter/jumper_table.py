@@ -401,6 +401,16 @@ JUMPER_TABLE: Mapping[str, JumperEntry] = {
         rev20_jp4=Jp4Rev20.OPEN,
         rev22_jp4=Jp4Rev22.NO_JUMPER,
     ),
+    # Pins 1, 28, 30 and 32 have the DIP32_27C020 functions; pin 31 is WE, not PGM.
+    "DIP32_28F020": JumperEntry(
+        vpp_lands=VppLanding.SOCKET_1,
+        pin1_signal="VPP",
+        jp1=Jp1.A13,
+        jp2=Jp2.A17,
+        jp3=Jp3.PIN32,
+        rev20_jp4=Jp4Rev20.OPEN,
+        rev22_jp4=Jp4Rev22.NO_JUMPER,
+    ),
     # Pins 1, 28, 30 and 32 have the DIP32_27C020 functions; only pins 2 and 24 differ.
     "DIP32_27C301": JumperEntry(
         vpp_lands=VppLanding.SOCKET_1,

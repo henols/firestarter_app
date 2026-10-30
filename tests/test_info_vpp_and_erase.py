@@ -59,30 +59,52 @@ def test_wp_pin_rows_show_no_vpp(rows: list[tuple[dict, dict, dict]]) -> None:
 
 def test_exact_count_of_rows_that_show_vpp(rows: list[tuple[dict, dict, dict]]) -> None:
     shown = [m for _, m, s in rows if "vpp_str" in s]
-    assert len(shown) == 371
+    assert len(shown) == 369
     assert {m["protocol-id"] for m in shown} == {0x07, 0x08, 0x0B, 0x10}
 
 
 @pytest.mark.parametrize(
-    ("algorithm", "vpp_mv", "expected"),
+    ("name", "vpp_str"),
+    [("SST28SF040", None), ("P28F010", "12.0v"), ("W27C512", "12.0v")],
+)
+def test_vpp_line_needs_a_vpp_pin_in_the_pin_map(
+    db: EpromDatabase, name: str, vpp_str: str | None
+) -> None:
+    """SST28SF040 is protocol 0x10, but its pin map has no VPP pin. P28F010 has VPP on
+    pin 1. W27C512 has VPP on the OE pin, which the wire drops but the pin map keeps."""
+    raw, manufacturer = db.get_eprom_config(name)
+    mapped = db.map_chip_record(raw, manufacturer)
+    spec = EpromSpecBuilder(db).build_specifications(mapped)
+    assert spec is not None
+    assert spec.get("vpp_str") == vpp_str
+
+
+VPP_PINS = {"vpp-pin": [1]}
+NO_VPP_PINS = {"rw-pin": [31]}
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "vpp_mv", "pins", "expected"),
     [
-        (0x07, 12000, True),
-        (0x0B, "25000", True),
-        (0x10, 12000, True),
-        (0x0D, 12000, False),
-        (0x05, 12000, False),
-        (0x0E, 12000, False),
-        (0x99, 12000, False),
-        (None, 12000, False),
-        (0x08, 0, False),
-        (0x08, None, False),
-        (0x08, "twelve", False),
+        (0x07, 12000, VPP_PINS, True),
+        (0x0B, "25000", VPP_PINS, True),
+        (0x10, 12000, VPP_PINS, True),
+        (0x10, 12000, NO_VPP_PINS, False),
+        (0x08, 12000, None, False),
+        (0x0D, 12000, VPP_PINS, False),
+        (0x05, 12000, VPP_PINS, False),
+        (0x0E, 12000, VPP_PINS, False),
+        (0x99, 12000, VPP_PINS, False),
+        (None, 12000, VPP_PINS, False),
+        (0x08, 0, VPP_PINS, False),
+        (0x08, None, VPP_PINS, False),
+        (0x08, "twelve", VPP_PINS, False),
     ],
 )
 def test_shows_programming_vpp(
-    algorithm: object, vpp_mv: object, expected: bool
+    algorithm: object, vpp_mv: object, pins: object, expected: bool
 ) -> None:
-    assert shows_programming_vpp(algorithm, vpp_mv) is expected
+    assert shows_programming_vpp(algorithm, vpp_mv, pins) is expected
 
 
 # --- INFO-02 ----------------------------------------------------------------------------------

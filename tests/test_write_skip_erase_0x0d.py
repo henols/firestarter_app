@@ -68,10 +68,10 @@ from .conftest import make_app_context
 
 # Concrete chip names, verified live against the packaged DB in this session:
 #   AT28C256 -- protocol 0x0D (13), capability-ALLOWED (SDP-capable).
-#   FM28V020 -- protocol 0x0D (13), capability-REFUSED (FRAM, no SDP decoder).
+#   X2864AP  -- protocol 0x0D (13), capability-REFUSED (unrecognised, no SDP decoder).
 #   W27C512  -- protocol 0x07, not protocol-0x0D at all.
 _ALLOWED_0X0D_CHIP = "AT28C256"
-_REFUSED_0X0D_CHIP = "FM28V020"
+_REFUSED_0X0D_CHIP = "X2864AP"
 _NON_0X0D_CHIP = "W27C512"
 
 _SKIP_ERASE_WARNING = "has nothing to skip on this chip's protocol"

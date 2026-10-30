@@ -189,10 +189,14 @@ Key fields per chip entry:
 
 - `algorithm` — the upstream `protocol_id` integer. The firmware dispatches on it.
 - `vpp_mv` — the VPP voltage in millivolts, decoded from the `voltages` field.
-- `pinout` — the DIP pinout key. The shipped database uses 18 keys: `DIP24_2532`, `DIP24_2716`,
+- `pinout` — the DIP pinout key. The shipped database uses 20 keys: `DIP24_2532`, `DIP24_2716`,
   `DIP24_2732`, `DIP24_2816`, `DIP24_6116`, `DIP28_27011`, `DIP28_27128`, `DIP28_27256`,
   `DIP28_27512`, `DIP28_2764`, `DIP28_28C64`, `DIP28_28C256`, `DIP28_6264`,
-  `DIP32_27C020`, `DIP32_27C801`, `DIP32_28C040`, `DIP32_SST39SF040` and `DIP32_STD`.
+  `DIP32_27C020`, `DIP32_27C301`, `DIP32_27C801`, `DIP32_28C040`, `DIP32_28F020`,
+  `DIP32_SST39SF040` and `DIP32_STD`.
+- `vcc_mv` — the operating VCC. A 3 V part names it in the low nibble of the VPP byte. A row below
+  4.5 V is `protocol-not-implemented`, because the shield supplies 5 V. See
+  `tools/DECODE-NOTES.md` §9.6.
 - `non_volatile` — SRAM-class rows only (`electrical`). `true` when the part keeps its data
   without power: battery-backed NVRAM, timekeeper RAM or FRAM. The infoic protocol of the row
   decides it, not a flag. See `tools/DECODE-NOTES.md` §12.

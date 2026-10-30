@@ -136,6 +136,11 @@ VCC_VOLTAGES = {
 # rather than a literal so it cannot drift from the table.
 _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 
+# The shield supplies a fixed 5V VCC. A chip whose operating VCC is below this
+# runs out of its rating on every operation. Must agree with the VCC guard in
+# firestarter/chip_resolver.py.
+SHIELD_MIN_VCC_MV = 4500
+
 # DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
 # have been DELETED. The principled resolve_pinout_key
 # function below is the sole pinout-selection path.
@@ -306,6 +311,20 @@ def intel28f_vpp_conflict_pins(pinout_key, pin_count, address_lines):
     return []
 
 
+def vpp_byte_vcc_mv(voltages):
+    """The VCC that the low nibble of the VPP byte selects, or None.
+
+    minipro sends that nibble to the T48/T56 as its own byte, except when the
+    VPP byte is 0xF0-0xFF, where the whole byte is the VPP index. Its values
+    are VCC_VOLTAGES indices: 0x1 (3.3V) on the LV/BV/VF parts, 0x8 (3.0V) on
+    SST39VF040. See DECODE-NOTES.md §9.6.
+    """
+    vpp_byte = voltages & 0xFF
+    if vpp_byte & 0xF0 == 0xF0 or not vpp_byte & 0x0F:
+        return None
+    return VCC_VOLTAGES.get(vpp_byte & 0x0F)
+
+
 def address_width(mem_size):
     """Address lines a chip of mem_size bytes needs, from its infoic size."""
     return (mem_size - 1).bit_length()
@@ -421,11 +440,17 @@ def resolve_pinout_key(
                 # [VERIFIED: infoic.xml — pm_idx=13 / proto 0x10 is the SST28
                 #  rows only; map 13 bonds chip pins 1 and 31]
                 key = "DIP32_SST39SF040"
+            elif proto_id == 0x10:
+                # Intel 28F command set: VPP on pin 1, WE on pin 31. DIP32_STD
+                # has no WE, so pin 31 stayed low through every read.
+                # [VERIFIED: infoic.xml — proto 0x10 on maps 5/7/9/10/11/12 is
+                #  the 28F256-28F020 family, 18 address lines or fewer]
+                key = "DIP32_28F020"
             elif proto_id == 0x0D:
                 # 5V EEPROM; WE=31, no VPP.
                 # [VERIFIED: infoic.xml <maps> 9/11/13 bond pin 31, not pin 30]
                 key = "DIP32_28C040"
-            elif proto_id in {0x07, 0x08, 0x10}:
+            elif proto_id in {0x07, 0x08}:
                 if proto_id == 0x08 and variant_lo == 0x03:
                     key = "DIP32_27C801"
                 elif proto_id == 0x08 and variant_lo == 0x02:
@@ -894,7 +919,17 @@ def main():
                     if _voltages_lo in _VPP_EXACT_LOW_BYTES
                     else VPP_MV.get(_voltages_lo & 0xF0, 0)
                 )
-                _d_vcc_mv = VCC_VOLTAGES.get((voltages >> 8) & 0x0F, 5000)
+                # A 3V part names its supply in the VPP byte, not in the vcc
+                # nibble. A 5V-class value there (4.75, 5.25, 5.5) is ignored.
+                _byte_vcc_mv = vpp_byte_vcc_mv(voltages)
+                _low_vcc = (
+                    _byte_vcc_mv is not None and _byte_vcc_mv < SHIELD_MIN_VCC_MV
+                )
+                _d_vcc_mv = (
+                    _byte_vcc_mv
+                    if _low_vcc
+                    else VCC_VOLTAGES.get((voltages >> 8) & 0x0F, 5000)
+                )
                 _d_vdd_mv = VCC_VOLTAGES.get((voltages >> 12) & 0x0F, 5000)
                 _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
 
@@ -1066,10 +1101,14 @@ def main():
                 #
                 # SRAM only. On UV-EPROM and Flash/EEPROM, vdd is the ELEVATED
                 # program rail (~6.5V) and must never be surfaced as operating Vcc.
+                #
+                # A 3V SRAM-class part (DS1230W, BQ4011LYMA) keeps its VPP-byte
+                # VCC: the one rail is 3.3V, and vdd does not say so.
                 if _etype == "SRAM":
-                    chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
-                        "vdd_mv"
-                    ]
+                    if not _low_vcc:
+                        chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
+                            "vdd_mv"
+                        ]
                     chip_entry["electrical"]["non_volatile"] = sram_non_volatile(
                         _upstream_proto_id, name, read_write_sram_parts
                     )
@@ -1087,6 +1126,19 @@ def main():
                     chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
                         "vdd_mv"
                     ]
+
+                # The shield supplies 5V. resolve_chip refuses the row too.
+                _vcc_mv = chip_entry["electrical"]["vcc_mv"]
+                if (
+                    chip_entry["support_status"] == "supported"
+                    and _vcc_mv < SHIELD_MIN_VCC_MV
+                ):
+                    chip_entry["support_status"] = "protocol-not-implemented"
+                    chip_entry["unsupported_reason"] = (
+                        f"protocol not implemented: the chip's operating VCC is "
+                        f"{_vcc_mv / 1000:g}V, but the shield supplies 5V. The "
+                        f"programmer refuses every operation on this chip."
+                    )
 
                 chips.append(chip_entry)
                 total_chips += 1

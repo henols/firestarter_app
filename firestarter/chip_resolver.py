@@ -21,6 +21,10 @@ _NON_ZERO_WIRE_FIELDS = ("memory-size", "pin-count", "vpp_mv")
 # The 0x10 (Intel 28F) handler routes 12V to socket pin 1 (CTRL_VPP_P1_ENABLE).
 _INTEL_28F_ALGORITHM = 0x10
 
+# The shield supplies a fixed 5V VCC. Must agree with SHIELD_MIN_VCC_MV in
+# tools/build_db.py.
+_SHIELD_MIN_VCC_MV = 4500
+
 
 def _qualified_choices(name: str, db: EpromDatabase) -> list[str]:
     """The row `name` selects first, then each other row it selects that
@@ -116,6 +120,15 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
         raise ChipNotImplementedError(
             f"{name}: no usable programming algorithm (protocol) defined — "
             "a chip entry must specify a non-zero 'algorithm' to be programmed"
+        )
+
+    # A 3V part runs out of its rating on the shield's 5V supply. A user
+    # override that marks such a row supported is refused here, before any wire.
+    vcc_mv = raw_config.get("electrical", {}).get("vcc_mv")
+    if isinstance(vcc_mv, int) and 0 < vcc_mv < _SHIELD_MIN_VCC_MV:
+        raise ChipNotImplementedError(
+            f"{name}: the chip's operating VCC is {vcc_mv / 1000:g}V, but the "
+            "shield supplies 5V. The programmer refuses the chip."
         )
 
     full = db.get_eprom(name)

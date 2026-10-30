@@ -272,7 +272,7 @@ class EpromDatabase:
                 logger.warning(message)
         return pin_maps_base
 
-    def get_pin_map(self, pins: int, pin_map_id: str):
+    def get_pin_map(self, pins: int | None, pin_map_id: str | None):
         """
         Retrieves a specific pin map configuration.
         """

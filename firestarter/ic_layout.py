@@ -545,7 +545,9 @@ class EpromSpecBuilder:
         # the 5 V-only protocols vpp_mv is the WP-pin voltage, and on SRAM/FRAM it is a decode
         # artifact. The list view calls the same predicate.
         if shows_programming_vpp(
-            eprom_data.get("protocol-id"), eprom_data.get("vpp_mv")
+            eprom_data.get("protocol-id"),
+            eprom_data.get("vpp_mv"),
+            self.db.get_pin_map(eprom_data.get("pin-count"), eprom_data.get("pin-map")),
         ):
             output_data["vpp_str"] = format_mv(int(eprom_data["vpp_mv"]))
 

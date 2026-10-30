@@ -96,9 +96,12 @@ _EXPECTED_ALGORITHM_HISTOGRAM = {7: 164, 8: 102, 11: 21}
 _EXPECTED_VENDOR_COUNT = 34
 # The 27C301 / 27C1000 rows and the 2532: the shield drives an address pin
 # of theirs as OE or CE. The 27011 rows: their pin map reaches 16 KB of 128 KB.
-_EXPECTED_NOT_SUPPORTED = {"adapter-required": 6, "protocol-not-implemented": 3}
+# The 17 3V EPROMs (AM27LV, MX27L, NM27LV, HT27LC, SST27VF, SST37VF): their VPP
+# byte names a 3.3V VCC, and the shield supplies 5V (DECODE-NOTES.md §9.6).
+_EXPECTED_NOT_SUPPORTED = {"adapter-required": 6, "protocol-not-implemented": 3 + 17}
 _VOLT03_VCC_MV = 5500
-_EXPECTED_VOLT03_ROWS = 28
+# 28LV64A, M28LV64 and the two M28C64-xxW rows left the group: they are 3V parts.
+_EXPECTED_VOLT03_ROWS = 24
 _EXPECTED_DATASHEET_CITED_KEYS = (
     "FUJITSU/MBM27128",
     "FUJITSU/MBM27C1001",

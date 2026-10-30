@@ -160,6 +160,25 @@ _PROMOTED_FROM_ADAPTER_REQUIRED = frozenset(
     }
 )
 
+# The twelve 3V 0x0D rows that were supported and are now refused: their VPP
+# byte names a VCC below 4.5V, and the shield supplies 5V.
+_REFUSED_FOR_LOW_VCC = frozenset(
+    {
+        ("ATMEL", "AT28BV64,AT28LV64"),
+        ("ATMEL", "AT28BV64B,AT28LV64B"),
+        ("ATMEL", "AT28BV256,AT28LV256"),
+        ("ATMEL", "AT28LV010"),
+        ("CATALYST(CSI)", "CAT28LV64,CAT28LV65"),
+        ("CATALYST(CSI)", "CAT28LV256"),
+        ("CYPRESS", "FM28V020"),
+        ("FUJITSU", "MB85R256H"),
+        ("MICROCHIP memory", "28LV64A"),
+        ("SGS-THOMSON", "M28C64-xxW"),
+        ("ST", "M28C64-xxW"),
+        ("ST", "M28LV64"),
+    }
+)
+
 _ALL_PROVENANCE_CORROBORATED_IDENTITIES = (
     _NATIVE_0X0D_PAGE_SIZE_IDENTITIES
     | _NATIVE_0X05_PAGE_SIZE_IDENTITIES
@@ -391,12 +410,15 @@ def test_support_status_byte_unchanged_across_all_84_0x0d_rows() -> None:
         identity for identity in live_idx if live_idx[identity] != base_idx[identity]
     }
     # The nine DIP24_2816 rows left adapter-required on purpose. Each of them
-    # must now be supported, and no other row may move.
-    assert changed == _PROMOTED_FROM_ADAPTER_REQUIRED, (
+    # must now be supported. The twelve 3V rows are now refused. No other row
+    # may move.
+    expected = _PROMOTED_FROM_ADAPTER_REQUIRED | _REFUSED_FOR_LOW_VCC
+    assert changed == expected, (
         f"support_status must be byte-unchanged for every algorithm==13 row "
-        f"except the nine promoted DIP24_2816 rows; symmetric difference: "
-        f"{changed ^ _PROMOTED_FROM_ADAPTER_REQUIRED}"
+        f"except the nine promoted DIP24_2816 rows and the twelve 3V rows; "
+        f"symmetric difference: {changed ^ expected}"
     )
+    assert all(live_idx[i] == "protocol-not-implemented" for i in _REFUSED_FOR_LOW_VCC)
     assert all(live_idx[i] == "supported" for i in _PROMOTED_FROM_ADAPTER_REQUIRED)
     assert all(
         base_idx[i] == "adapter-required" for i in _PROMOTED_FROM_ADAPTER_REQUIRED

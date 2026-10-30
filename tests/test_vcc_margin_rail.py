@@ -19,13 +19,15 @@ DECODED VALUE alone, never a part number, type, or algorithm.
 Coverage:
   1. Zero-at-rail: no chip in the regenerated database has
      `electrical.vcc_mv == 4000`.
-  2. Exactly 56 movers: exactly 56 chips moved `4000 -> 5000` relative to the
-     (un-re-pinned, D-11) baseline, and every one of them landed on its own
-     `vdd_mv`.
-  3. No-decrease guard: no chip's `vcc_mv` is ever lower than its own baseline
-     value -- the property the rejected type-keyed and algorithm-keyed rules
-     (measured at 85 / 84 movers, each setting 16 genuinely-5V EEPROMs to
-     3.3V) would have violated.
+  2. Exactly 56 movers: exactly 56 chips moved off `4000` relative to the
+     (un-re-pinned, D-11) baseline. 49 landed on their own `vdd_mv`. 7 are 3V
+     parts (AT28LV64, FM28V020 ...) whose VPP byte names a 3.3V VCC; they
+     are refused (DECODE-NOTES.md §9.6).
+  3. No-decrease guard: no supported chip's `vcc_mv` is lower than its own
+     baseline value -- the property the rejected type-keyed and
+     algorithm-keyed rules (measured at 85 / 84 movers, each setting 16
+     genuinely-5V EEPROMs to 3.3V) would have violated. A chip whose VPP byte
+     names a VCC below 4.5V may decrease, but only if it is refused.
   4. DATA-04: `VCC_VOLTAGES[0x02]` still decodes to 4000 -- the decode table
      itself is never edited, only the value read from it afterward; and
      the generator carries no `_PAGE_SIZE_BY_PART` attribute at all -- no
@@ -59,6 +61,17 @@ _BASELINE_FILE = Path(
 # string voltages -- duplicating three lines of parsing is preferable to
 # importing a gate tool (diff_db.py) into a test.
 _VCC_MARGIN_RAIL_MV = 4000
+
+# Below this the generator refuses the row: the shield supplies 5V.
+_SHIELD_MIN_VCC_MV = 4500
+
+
+def _refused_low_vcc(chip: dict) -> bool:
+    """True for a 3V row that the generator decoded from the VPP byte and refused."""
+    return (
+        _mv(chip["electrical"]["vcc_mv"]) < _SHIELD_MIN_VCC_MV
+        and chip.get("support_status", "supported") != "supported"
+    )
 
 
 # Shared helpers -- both the real-DB tests and the non-vacuity test call
@@ -150,10 +163,11 @@ def test_zero_chips_at_margin_rail():
 
 
 def test_exactly_56_chips_moved_4000_to_5000_onto_their_own_vdd():
-    """Exactly 56 chips moved vcc_mv 4000 -> 5000 relative to the baseline,
-    and every one of them landed on ITS OWN vdd_mv (not a fixed 5000
-    literal) -- proving the substitution reads vdd_mv per-chip rather than
-    hardcoding the (measured, but not guaranteed-forever) 5000 value.
+    """Exactly 56 chips moved vcc_mv off 4000 relative to the baseline. Each
+    one that is not a refused 3V part landed on ITS OWN vdd_mv (not a fixed
+    5000 literal) -- proving the substitution reads vdd_mv per-chip rather
+    than hardcoding the (measured, but not guaranteed-forever) 5000 value.
+    The 7 refused 3V parts carry the VCC of their VPP byte instead.
 
     A different mover count means the margin-rail condition in build_db.py
     was widened or narrowed and must be re-measured against the four-way
@@ -164,6 +178,7 @@ def test_exactly_56_chips_moved_4000_to_5000_onto_their_own_vdd():
     baseline_indexed = _index_baseline(baseline_db)
 
     movers = []
+    low_vcc_movers = []
     offenders_not_on_own_vdd = []
     for mfr, part, idx, chip in _iter_chips_with_keys(current_db):
         bl_chip = baseline_indexed.get((mfr, part, idx))
@@ -174,7 +189,9 @@ def test_exactly_56_chips_moved_4000_to_5000_onto_their_own_vdd():
         cu_vdd_mv = _mv(chip["electrical"]["vdd_mv"])
         if bl_vcc_mv == _VCC_MARGIN_RAIL_MV and cu_vcc_mv != _VCC_MARGIN_RAIL_MV:
             movers.append(f"{mfr}/{part}#{idx}")
-            if cu_vcc_mv != cu_vdd_mv:
+            if _refused_low_vcc(chip):
+                low_vcc_movers.append(f"{mfr}/{part}#{idx}")
+            elif cu_vcc_mv != cu_vdd_mv:
                 offenders_not_on_own_vdd.append(
                     f"{mfr}/{part}#{idx} (vcc_mv={cu_vcc_mv}, vdd_mv={cu_vdd_mv})"
                 )
@@ -190,13 +207,15 @@ def test_exactly_56_chips_moved_4000_to_5000_onto_their_own_vdd():
         f"re-measured against the four-way split table (55/16/12/1), never "
         f"argued. Found {len(movers)}: {sorted(movers)}"
     )
+    assert len(low_vcc_movers) == 7, sorted(low_vcc_movers)
 
 
 # Test 3: no-decrease guard
 
 
 def test_no_chip_vcc_ever_decreases():
-    """No chip's vcc_mv is lower than its own baseline value.
+    """No chip's vcc_mv is lower than its own baseline value, except a 3V
+    part that the generator refuses (DECODE-NOTES.md §9.6).
 
     This is the property the rejected type-keyed (85 movers) and
     algorithm-keyed (84 movers) alternatives would have violated on 16
@@ -217,7 +236,7 @@ def test_no_chip_vcc_ever_decreases():
             continue
         bl_vcc_mv = _mv(bl_chip["electrical"]["vcc"])
         cu_vcc_mv = _mv(chip["electrical"]["vcc_mv"])
-        if cu_vcc_mv < bl_vcc_mv:
+        if cu_vcc_mv < bl_vcc_mv and not _refused_low_vcc(chip):
             offenders.append(
                 f"{mfr}/{part}#{idx} (baseline={bl_vcc_mv}, current={cu_vcc_mv})"
             )

@@ -1303,8 +1303,8 @@
   | SST27VF020          | SST              |   32 | 0xBFAA     | EEPROM      | 12.0v|
   | SST27VF256          | SST              |   28 | 0xBFA7     | EEPROM      | 12.0v|
   | SST27VF512          | SST              |   28 | 0xBFA8     | EEPROM      | 12.0v|
-  | SST28LF040,SST28LF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| 12.0v|
-  | SST28SF040,SST28SF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| 12.0v|
+  | SST28LF040,SST28LF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| -    |
+  | SST28SF040,SST28SF0…| SST              |   32 | 0xBF04     | Flash/EEPROM| -    |
   | SST29EE010          | SST              |   32 | 0xBF07     | Flash/EEPROM| -    |
   | SST29EE020          | SST              |   32 | 0xBF10     | Flash/EEPROM| -    |
   | SST29EE512          | SST              |   32 | 0xBF5D     | Flash/EEPROM| -    |
