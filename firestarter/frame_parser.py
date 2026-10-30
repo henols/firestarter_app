@@ -14,16 +14,20 @@ from typing import Any, Tuple  # noqa: UP035
 
 # Define a structured object for responses to improve clarity over tuples.
 # `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
+# `params` is the tuple of decoded catalog values of an id frame, in catalog
+# order; None for a text line.
 Response = namedtuple(
-    "Response", ["type", "message", "payload", "id"], defaults=[None, None]
+    "Response",
+    ["type", "message", "payload", "id", "params"],
+    defaults=[None, None, None],
 )
 
 # ID-encoded wire frame primitives. MAGIC_PREAMBLE is fixed by the wire
 # protocol; LogMessage is the decoded-frame value type.
-# `payload` carries raw bytes for MSG_DATA_CHUNK and the parameter bytes of
-# MSG_ERR_FRAME_VERSION; None for all others.
+# `payload` carries raw bytes for MSG_DATA_CHUNK; None for all others.
+# `params` is the tuple of decoded catalog values, in catalog order.
 LogMessage = namedtuple(
-    "LogMessage", ["severity", "text", "id", "payload"], defaults=[None]
+    "LogMessage", ["severity", "text", "id", "payload", "params"], defaults=[None, None]
 )
 MAGIC_PREAMBLE: bytes = b"\xaa\x55\xaa\x55"
 

@@ -123,13 +123,6 @@ class SerialCommunicator:
     # found". Class defaults of None keep the gates fail-closed instead.
     firmware_identity: str | None = None
     hw_revision: int | None = None
-    # The message id of the last ERROR that expect_ack returned, so a caller
-    # can tell an unsupported frame from any other refusal. Class-level for
-    # the same reason as the three above.
-    last_ack_error_id: int | None = None
-    # The parameter bytes of that ERROR when the decoder keeps them
-    # (MSG_ERR_FRAME_VERSION), else None.
-    last_ack_error_payload: bytes | None = None
     # The id of an ERROR frame that the caller caused on purpose, so the
     # frame is logged at DEBUG, not ERROR. A read that stops acking at the
     # first mismatch sets it to MSG_ERR_TIMEOUT: the firmware's ack-wait
@@ -519,13 +512,14 @@ class SerialCommunicator:
 
                 decoded = self._decode_id_frame(frame_len, body)
                 if decoded is not None:
-                    # Propagate raw-bytes payload for MSG_DATA_CHUNK (W-04);
-                    # Response.payload is None for all other message types.
+                    # Propagate raw-bytes payload for MSG_DATA_CHUNK (W-04)
+                    # and the decoded params of every id frame.
                     response = Response(
                         type=decoded.severity,
                         message=decoded.text,
                         payload=decoded.payload,
                         id=decoded.id,
+                        params=decoded.params,
                     )
                     self._log_rurp_feedback(response)
                     yield response
@@ -561,25 +555,32 @@ class SerialCommunicator:
             f"Timeout waiting for a significant response from {self.port_name}."
         )
 
+    def expect_ack_response(
+        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
+    ) -> Response:
+        """Wait for an 'OK' or 'ERROR' response from the programmer and return it.
+
+        A caller that needs the id or the params of the answer reads them
+        from the returned Response.
+        """
+        while True:
+            response = self.get_response(timeout)
+            if response.type == "OK":
+                return response
+            elif response.type == "ERROR":
+                if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
+                    raise ProtocolNotImplementedError(response.message)
+                return response
+            # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
+
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
     ) -> Tuple[bool, str | None]:  # noqa: UP006
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
-        self.last_ack_error_id = None
-        self.last_ack_error_payload = None
-        while True:
-            response = self.get_response(timeout)
-            if response.type == "OK":
-                return True, response.message
-            elif response.type == "ERROR":
-                if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
-                    raise ProtocolNotImplementedError(response.message)
-                self.last_ack_error_id = response.id
-                self.last_ack_error_payload = response.payload
-                return False, response.message
-            # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
+        response = self.expect_ack_response(timeout)
+        return response.type == "OK", response.message
 
     def send_ack(self) -> None:
         """Send the 'OK' acknowledgement string to the programmer."""
@@ -867,9 +868,9 @@ class SerialCommunicator:
         # op_wait_for_ack(). Raising below means that ack is never sent, so
         # the operation never starts and the rail stays down.
         self.send_command(command_to_send)
-        is_ok, msg = self.expect_ack()
+        response = self.expect_ack_response()
 
-        if msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+        if response.message == GENERIC_FRAME_DECODE_ERROR_TEXT:
             logger.debug(
                 f"Port {self.port_name}: setup ack was a spurious "
                 f"{GENERIC_FRAME_DECODE_ERROR_TEXT!r} frame — Uno-class "
@@ -877,20 +878,21 @@ class SerialCommunicator:
                 f"for up to {SETUP_ACK_RECOVERY_TIMEOUT_S}s for the real ack."
             )
             setup_ack_deadline = time.time() + SETUP_ACK_RECOVERY_TIMEOUT_S
-            while msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+            while response.message == GENERIC_FRAME_DECODE_ERROR_TEXT:
                 remaining = setup_ack_deadline - time.time()
                 if remaining <= 0:
                     break
-                is_ok, msg = self.expect_ack(timeout=remaining)
+                response = self.expect_ack_response(timeout=remaining)
 
-        if not is_ok and self.last_ack_error_id == MSG_ERR_FRAME_VERSION:
-            self._refuse_frame_version()
+        if response.type == "ERROR" and response.id == MSG_ERR_FRAME_VERSION:
+            self._refuse_frame_version(response)
 
-        if not is_ok and self.last_ack_error_id == MSG_ERR_BAD_FRAME:
-            is_ok, msg = self._recover_from_unsupported_frame(
+        if response.type == "ERROR" and response.id == MSG_ERR_BAD_FRAME:
+            response = self._recover_from_unsupported_frame(
                 command_to_send, allow_outdated_firmware
             )
 
+        is_ok, msg = response.type == "OK", response.message
         if not is_ok:
             logger.debug(f"Port {self.port_name} responded but not with OK: {msg}")
             self.setup_refusal = msg
@@ -972,7 +974,7 @@ class SerialCommunicator:
         config_manager.remember_port(self.port_name)  # never promotes a typed --port
         return True
 
-    def _refuse_frame_version(self) -> None:
+    def _refuse_frame_version(self, response: Response) -> None:
         """Raise FirmwareFrameVersionError for a MSG_ERR_FRAME_VERSION ack.
 
         The firmware read the binary magic and refused the frame version, so it
@@ -981,8 +983,7 @@ class SerialCommunicator:
         JSON query would only draw a MSG_ERR_BAD_FRAME. The parameter is the
         frame version the firmware reads, and it names the side to upgrade.
         """
-        payload = self.last_ack_error_payload or b""
-        firmware = payload[0] if payload else 0
+        firmware = response.params[0] if response.params else 0
         if firmware > cf.VERSION:
             advice = (
                 "The firmware is newer than this CLI. Upgrade the CLI: "
@@ -1003,7 +1004,7 @@ class SerialCommunicator:
 
     def _recover_from_unsupported_frame(
         self, command_to_send: dict, allow_outdated_firmware: bool
-    ) -> Tuple[bool, str | None]:  # noqa: UP006
+    ) -> Response:
         """Handle MSG_ERR_BAD_FRAME, the firmware's answer to a frame it cannot read.
 
         Firmware from before the binary command protocol parses every frame
@@ -1033,7 +1034,7 @@ class SerialCommunicator:
             f"resending it as JSON because this is the firmware-update read path."
         )
         self._send_framed(command_codec.encode_legacy_fw_version_query(command_to_send))
-        return self.expect_ack()
+        return self.expect_ack_response()
 
     @staticmethod
     def _probe_port(

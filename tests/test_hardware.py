@@ -20,6 +20,7 @@ import pytest
 
 from firestarter.config import ConfigManager
 from firestarter.constants import COMMAND_READ_VPE
+from firestarter.frame_parser import Response
 from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_DATA_VPE_MV, MSG_DATA_VPP_MV, MSG_END_DONE
 
@@ -369,21 +370,41 @@ def _mv_frame(msg_id: int, rail_mv: int, vcc_mv: int = 5000) -> bytes:
     return build_frame(msg_id, struct.pack(">HH", rail_mv, vcc_mv))
 
 
-def test_parse_voltage_frame_returns_exact_mv(hw_config) -> None:
+def _decoded(make_comm, fake_serial, frame: bytes):
+    fake_serial.feed(frame)
+    return make_comm().get_response()
+
+
+def test_parse_voltage_frame_returns_exact_mv(
+    hw_config, make_comm, fake_serial
+) -> None:
     """The firmware sends millivolts, so the host keeps every mV: 12449 is
     not rounded to the 100 mV grid the old volts-and-tenths frame forced."""
     hw = HardwareManager(hw_config)
 
-    assert hw._parse_voltage_frame("VPP: 12449 mV, Internal VCC: 5012 mV") == (
-        12449,
-        5012,
+    vpp = _decoded(make_comm, fake_serial, _mv_frame(MSG_DATA_VPP_MV, 12449, 5012))
+    vpe = _decoded(make_comm, fake_serial, _mv_frame(MSG_DATA_VPE_MV, 21000, 4999))
+    assert hw._parse_voltage_frame(vpp) == (12449, 5012)
+    assert hw._parse_voltage_frame(vpe) == (21000, 4999)
+    assert hw._parse_voltage_frame(Response(type="DATA", message="12449 mV")) is None
+
+
+def test_parse_voltage_frame_does_not_depend_on_the_rendered_text(
+    hw_config, make_comm, fake_serial, monkeypatch
+) -> None:
+    """A changed catalog wording changes the text, never the reading."""
+    import dataclasses
+
+    from firestarter.messages import CATALOG
+
+    monkeypatch.setitem(
+        CATALOG,
+        MSG_DATA_VPP_MV,
+        dataclasses.replace(CATALOG[MSG_DATA_VPP_MV], format="rail=%u vcc=%u"),
     )
-    assert hw._parse_voltage_frame("VPE: 21000 mV, Internal VCC: 4999 mV") == (
-        21000,
-        4999,
-    )
-    assert hw._parse_voltage_frame("VPP: 20.9V, Internal VCC: 5.0V") is None
-    assert hw._parse_voltage_frame(None) is None
+    response = _decoded(make_comm, fake_serial, _mv_frame(MSG_DATA_VPP_MV, 12449, 5012))
+    assert response.message == "rail=12449 vcc=5012"
+    assert HardwareManager(hw_config)._parse_voltage_frame(response) == (12449, 5012)
 
 
 def test_sample_vpp_mv_returns_median(hw_config, make_comm, fake_serial) -> None:
@@ -503,19 +524,6 @@ def test_sample_vpp_mv_sends_done_before_disconnect(
     manager.send_done.assert_called_once()
     manager.disconnect.assert_called_once()
     assert [c[0] for c in manager.mock_calls] == ["send_done", "disconnect"]
-
-
-def test_voltage_format_pin() -> None:
-    """Pin the MSG_DATA_VPP_MV / MSG_DATA_VPE_MV catalog formats against the
-    sampler's regex -- a codegen regen that changes the wording silently
-    breaks the parser otherwise."""
-    from firestarter.hardware import _VOLTAGE_RE
-    from firestarter.messages import CATALOG
-
-    for msg_id in (MSG_DATA_VPP_MV, MSG_DATA_VPE_MV):
-        match = _VOLTAGE_RE.search(CATALOG[msg_id].format % (12449, 5012))
-        assert match is not None
-        assert match.groups() == ("12449", "5012")
 
 
 @pytest.mark.parametrize(
@@ -651,36 +659,16 @@ def test_read_calibration_reads_a_zero_count_from_a_board_without_calibration(
     assert cal is not None and cal["bandgap_adc"] == 0
 
 
-def test_read_calibration_has_no_count_from_the_11_byte_ack(
+def test_read_calibration_returns_none_for_another_ack(
     hw_config, make_comm, fake_serial
 ) -> None:
-    """Firmware before 3.3 sends no count: the bandgap still reads."""
-    params = struct.pack(">IIBH", 270000, 44000, 0xFF, 1083)
-    cal = _read_calibration(hw_config, make_comm, fake_serial, params)
-    assert cal == {"r1": 270000, "r2": 44000, "bandgap_mv": 1083, "bandgap_adc": None}
+    """An OK that is not MSG_OK_CFG carries no calibration."""
+    from firestarter.messages import MSG_OK_READY
 
-
-def test_read_calibration_returns_none_for_legacy_9_byte_ack(
-    hw_config, make_comm, fake_serial
-) -> None:
-    """3.1.0 firmware sends MSG_OK_CFG without the bandgap. The reply still
-    decodes, and read_calibration reports older firmware (None), no crash."""
-    fake_serial.feed(_cfg_ack(struct.pack(">IIB", 270000, 44000, 0xFF)))
+    fake_serial.feed(build_frame(MSG_OK_READY, struct.pack(">H", 512)))
     comm = make_comm()
-    acks = []
-    real_expect_ack = comm.expect_ack
-
-    def _spy():
-        result = real_expect_ack()
-        acks.append(result)
-        return result
-
-    comm.expect_ack = _spy
-    hw = HardwareManager(hw_config)
     with patch(
         "firestarter.serial_comm.SerialCommunicator.find_and_connect",
         return_value=comm,
     ):
-        assert hw.read_calibration() is None
-    # The ack decoded: the None comes from the missing field, not a timeout.
-    assert acks == [(True, "R1: 270000, R2: 44000")]
+        assert HardwareManager(hw_config).read_calibration() is None

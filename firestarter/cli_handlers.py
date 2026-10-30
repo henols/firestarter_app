@@ -1668,12 +1668,6 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
             )
             sys.exit(1)
         bandgap_adc = before["bandgap_adc"]
-        if bandgap_adc is None:
-            click.echo(
-                "This firmware does not report its bandgap count. Update the "
-                "firmware to calibrate."
-            )
-            sys.exit(1)
         if bandgap_adc == 0:
             click.echo("This board has no bandgap calibration (py32f071).")
             sys.exit(1)

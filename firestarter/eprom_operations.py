@@ -10,7 +10,6 @@ EPROM Operations Module (Refactored)
 import hashlib
 import logging
 import os
-import re
 import shutil
 import statistics
 import time
@@ -144,10 +143,6 @@ def _raise_for_error_response(response, message: str) -> None:
 # Boot-block region size: W29C040 §6.6 defines two 16K boot blocks (first and last).
 _BOOT_BLOCK_SIZE = 0x4000  # 16 KiB
 
-# Pattern to extract the hex address from MSG_ERR_FL4_VERIFY_TIMEOUT messages.
-# Format: "Timeout verifying 0x%02x at 0x%06lx (got 0x%02x)"
-_TIMEOUT_ADDR_RE = re.compile(r"at 0x([0-9a-fA-F]+)")
-
 # Flash4 protocol ID.  Boot-block lockout is specific to the AMD/JEDEC SDP
 # page-write flash family (protocol 0x05, FLASH_AMD_STD).
 _FLASH4_PROTOCOL_ID = 5
@@ -172,22 +167,6 @@ WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 # it would never fire.
 _BUDGET_FAILURE_IDS = (0xBD, 0xBE, 0xAE)
 
-# Pattern to extract the refused pulse width from MSG_ERR_PULSE_TOO_WIDE
-# messages. Format: "Pulse width %lu us exceeds this protocol's per-byte
-# program-energy budget" -- mirrors _TIMEOUT_ADDR_RE's own extract-from-text
-# approach immediately above, for the same reason: the refused value is only
-# available as decoded prose, not as a separate structured field on Response.
-_PULSE_WIDTH_RE = re.compile(r"Pulse width (\d+) us")
-
-# Pattern to extract the raw silicon byte and the firmware decode code from
-# MSG_DATA_PROTECTION_STATUS (0xE1) messages.
-# Format: "Lock status probe: raw=0x%02X decode=%u" -- same rationale as
-# _TIMEOUT_ADDR_RE/_PULSE_WIDTH_RE immediately above: Response.payload is
-# populated only for MSG_DATA_CHUNK (W-04); every other id-frame's decoded
-# param values reach the caller only as already-rendered prose, so this is
-# the established way to recover them.
-_LOCK_STATUS_RE = re.compile(r"raw=0x([0-9A-Fa-f]{2}) decode=(\d+)")
-
 
 def _boot_block_hint_message(response, protocol: int, mem_size: int) -> str | None:
     """Return a boot-block-locked inference hint string, or None.
@@ -208,15 +187,10 @@ def _boot_block_hint_message(response, protocol: int, mem_size: int) -> str | No
     if protocol != _FLASH4_PROTOCOL_ID:
         return None
 
-    # Extract the failing address from the decoded message text.
-    m = _TIMEOUT_ADDR_RE.search(response.message or "")
-    if not m:
+    # Params: expected byte, failing address, read byte.
+    if not response.params:
         return None
-
-    try:
-        addr = int(m.group(1), 16)
-    except ValueError:
-        return None
+    addr = response.params[1]
 
     boot_block_size = _BOOT_BLOCK_SIZE
     in_first_block = addr < boot_block_size
@@ -273,10 +247,9 @@ def _budget_failure_hint_message(response) -> str | None:
     from firestarter.messages import MSG_ERR_PULSE_TOO_WIDE
 
     if response.id == MSG_ERR_PULSE_TOO_WIDE:
-        m = _PULSE_WIDTH_RE.search(response.message or "")
-        if not m:
+        if not response.params:
             return None
-        width = m.group(1)
+        width = response.params[0]
         return (
             f"the firmware refused this {width} us pulse before enabling any "
             "high voltage -- no byte was programmed by this command and the "
@@ -3378,10 +3351,7 @@ class EpromOperator:
         so the DATA frame is still acked as MAIN-phase flow control
         requires), but additionally recognises the one DATA id-frame this
         operation cares about -- `MSG_DATA_PROTECTION_STATUS` (0xE1) -- and
-        extracts its two-byte payload from the already-rendered prose via
-        `_LOCK_STATUS_RE`, the same text-extraction idiom `_TIMEOUT_ADDR_RE`
-        and `_PULSE_WIDTH_RE` already use elsewhere in this module
-        (`Response.payload` is populated only for `MSG_DATA_CHUNK`).
+        keeps its two params (raw byte, decode code) as the payload.
 
         `captured` is a caller-owned one-element mutable list, written into
         rather than returned, because this handler's own return value is
@@ -3401,12 +3371,13 @@ class EpromOperator:
                 _raise_for_error_response(response, response.message)
             if response.type == "OK" and final_msg is None:
                 final_msg = response.message
-            if response.id == MSG_DATA_PROTECTION_STATUS and captured[0] is None:
-                match = _LOCK_STATUS_RE.search(response.message or "")
-                if match:
-                    captured[0] = bytes(
-                        [int(match.group(1), 16) & 0xFF, int(match.group(2)) & 0xFF]
-                    )
+            if (
+                response.id == MSG_DATA_PROTECTION_STATUS
+                and response.params
+                and captured[0] is None
+            ):
+                raw, decode = response.params
+                captured[0] = bytes([raw, decode])
             # MAIN phase: DATA frames are flow-control; ack them (unchanged).
             self._handle_progress_response(response, progress, ack_data=True)
         return final_msg

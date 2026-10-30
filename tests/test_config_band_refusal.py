@@ -274,13 +274,3 @@ def test_cal_refusal_names_the_board_without_calibration() -> None:
     assert result.exit_code == 1, result.output
     assert "py32f071" in result.output
     hardware.set_bandgap_mv.assert_not_called()
-
-
-def test_cal_refuses_firmware_that_sends_no_bandgap_count() -> None:
-    hardware = Mock(spec=HardwareManager)
-    hardware.read_calibration.return_value = _calibration(None)
-    app = make_app_context(hardware_manager=hardware)
-    result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
-    assert result.exit_code == 1, result.output
-    assert "Update the firmware" in result.output
-    hardware.set_bandgap_mv.assert_not_called()
