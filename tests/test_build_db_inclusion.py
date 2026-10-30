@@ -178,8 +178,8 @@ class TestProtocolNotImplementedInclusion:
 
 
 class TestIntel28fVppOnAddressPin:
-    """henols/firestarter#154: algorithm 0x10 puts 12V on pin 1. A row that
-    needs pin 1 or pin 31 as an address line is protocol-not-implemented."""
+    """henols/firestarter#154: algorithm 0x10 puts 12V on socket pin 1. A row
+    whose pin map uses that pin as an address line is protocol-not-implemented."""
 
     _SST28 = {"SST28SF040", "SST28LF040", "SST28VF040"}
 
@@ -196,6 +196,13 @@ class TestIntel28fVppOnAddressPin:
             )
             assert chip["programming"]["algorithm"] == 0x10
             assert chip["unsupported_reason"].startswith("protocol not implemented")
+            assert "socket pin 1" in chip["unsupported_reason"]
+
+    def test_the_sst28_rows_have_a18_on_pin_1(self):
+        """infoic map 13 is the SST39SF040 layout: A18 on pin 1, WE on pin 31."""
+        for _, chip in _all_chips(_load_db()):
+            if _aliases(chip) & self._SST28:
+                assert chip["pinout"] == "DIP32_SST39SF040"
 
     def test_every_other_intel_28f_row_stays_supported(self):
         others = [
@@ -207,6 +214,29 @@ class TestIntel28fVppOnAddressPin:
         assert others
         for mfg, chip in others:
             assert chip["support_status"] == "supported", f"{mfg}/{chip['part_number']}"
+
+    def test_pin_1_counts_only_inside_the_chip_width_of_a_32_pin_part(self):
+        from tools import build_db
+
+        conflict = build_db.intel28f_vpp_conflict_pins
+        assert conflict("DIP32_SST39SF040", 32, 19) == [1]
+        assert conflict("DIP32_SST39SF040", 32, 18) == []
+        assert conflict("DIP32_STD", 32, 19) == []
+        # Pin 1 is A14 on DIP28_28C256, but a 28-pin part sits bottom-aligned,
+        # so its pin 1 is not socket pin 1.
+        assert conflict("DIP28_28C256", 28, 15) == []
+
+    def test_the_vpp_pin_agrees_with_the_host_pin_conversions(self):
+        """resolve_chip checks the bus for the line of socket pin 1."""
+        from firestarter.database import pin_conversions
+        from tools import build_db
+
+        assert pin_conversions[32][build_db.INTEL_28F_VPP_PIN] == pin_conversions[32][1]
+        assert not any(
+            line == pin_conversions[32][1]
+            for pins in (24, 28)
+            for line in pin_conversions[pins].values()
+        )
 
 
 class TestDip24_2816Family:

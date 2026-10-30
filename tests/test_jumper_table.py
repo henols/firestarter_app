@@ -230,7 +230,7 @@ def test_32pin_vpp_on_pin1_maps_get_jp4_open_and_no_jumper(
     rows = [
         s for p, s in rendered if p in ("DIP32_STD", "DIP32_27C020", "DIP32_27C301")
     ]
-    assert len(rows) == 70 + 83 + 5
+    assert len(rows) == 68 + 83 + 5
     for spec in rows:
         rev20 = spec["jumpers"][REV20_KEY]["jumpers"]["jp4"]
         rev22 = spec["jumpers"][REV22_KEY]["jumpers"]["jp4"]

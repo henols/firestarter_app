@@ -341,7 +341,7 @@ def test_a18_remainder_is_recorded_and_deliberately_not_gated():
         for chip in chips
         if chip.get("pinout") == "DIP32_SST39SF040"
     )
-    assert shipped_rows == 255
+    assert shipped_rows == 257
 
 
 def test_synthetic_pin_map_with_pin1_at_index19_appears_in_the_affected_set():

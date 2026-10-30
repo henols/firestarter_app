@@ -13296,7 +13296,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_SST39SF040",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -13307,7 +13307,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "protocol-not-implemented",
-      "unsupported_reason": "protocol not implemented: algorithm 0x10 puts 12V on pin 1 and uses pin 31 as WE, but this chip needs pins [31] as address lines. The programmer implements no write or erase for it."
+      "unsupported_reason": "protocol not implemented: algorithm 0x10 puts 12V on socket pin 1, but pin map DIP32_SST39SF040 uses chip pin 1 as an address line. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {
@@ -13319,7 +13319,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST28SF040,SST28SF040A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_SST39SF040",
       "programming": {
         "algorithm": 16,
         "chip_id_check": true,
@@ -13330,7 +13330,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "protocol-not-implemented",
-      "unsupported_reason": "protocol not implemented: algorithm 0x10 puts 12V on pin 1 and uses pin 31 as WE, but this chip needs pins [31] as address lines. The programmer implements no write or erase for it."
+      "unsupported_reason": "protocol not implemented: algorithm 0x10 puts 12V on socket pin 1, but pin map DIP32_SST39SF040 uses chip pin 1 as an address line. The programmer refuses every operation on this chip."
     },
     {
       "electrical": {

@@ -153,10 +153,10 @@ _BONDED_PIN_FIELDS = ("ce-pin", "oe-pin", "rw-pin", "pgm-pin", "data-bus-pins")
 # pin_conversions.
 SHIELD_CE_OE_PINS = {24: (18, 20), 28: (20, 22), 32: (22, 24)}
 
-# Chip pins the 0x10 (Intel 28F) handler reserves on a 32-pin part: it routes
-# VPP to pin 1 (CTRL_VPP_P1_ENABLE), and pin 31 is WE#. That leaves 18 address
-# lines, so a 0x10 row that needs either pin as an address line has no VPP pin.
-INTEL_28F_RESERVED_PINS = (1, 31)
+# The 0x10 (Intel 28F) handler routes VPP to socket pin 1 (CTRL_VPP_P1_ENABLE).
+# A smaller part sits bottom-aligned in the socket, so only on a 32-pin part is
+# that chip pin 1. Must agree with the 0x10 guard in firestarter/chip_resolver.py.
+INTEL_28F_VPP_PIN = 1
 
 # 4. PROCESSING FUNCTIONS
 
@@ -291,6 +291,21 @@ def shield_misdriven_pins(pinout_key, pin_count, address_lines):
     return sorted(bad)
 
 
+def intel28f_vpp_conflict_pins(pinout_key, pin_count, address_lines):
+    """Chip pins of pinout_key that the 0x10 handler would put 12V on.
+
+    The 0x10 handler routes VPP to socket pin 1, which is chip pin 1 of a
+    32-pin part. A layout that uses that pin for one of its first
+    address_lines address lines would take 12V on an address line.
+    """
+    if pin_count != 32:
+        return []
+    pins = _PINOUTS[pinout_key]["pins"]
+    if INTEL_28F_VPP_PIN in pins.get("address-bus-pins", [])[:address_lines]:
+        return [INTEL_28F_VPP_PIN]
+    return []
+
+
 def address_width(mem_size):
     """Address lines a chip of mem_size bytes needs, from its infoic size."""
     return (mem_size - 1).bit_length()
@@ -400,6 +415,12 @@ def resolve_pinout_key(
             # Mixed flash/EPROM families — proto_id discriminates
             if proto_id in {0x05, 0x06}:
                 key = "DIP32_SST39SF040"  # 5V flash; no VPP, WE=31
+            elif proto_id == 0x10 and pm_idx == 13:
+                # SST28SF040 / SST28LF040 / SST28VF040 SuperFlash: A18 on pin 1
+                # and WE on pin 31, like the 0x06 rows on the same map.
+                # [VERIFIED: infoic.xml — pm_idx=13 / proto 0x10 is the SST28
+                #  rows only; map 13 bonds chip pins 1 and 31]
+                key = "DIP32_SST39SF040"
             elif proto_id == 0x0D:
                 # 5V EEPROM; WE=31, no VPP.
                 # [VERIFIED: infoic.xml <maps> 9/11/13 bond pin 31, not pin 30]
@@ -908,12 +929,13 @@ def main():
                     proto_id = NON_DISPATCHABLE_ALGO
                     _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
 
+                _address_pins = _PINOUTS[pinout_key]["pins"].get("address-bus-pins", [])
+                _width = address_width(mem_size)
+
                 # A layout whose CE, OE or address lines sit on the wrong
                 # socket pins for the shield's CE/OE drivers cannot be driven
                 # in place: resolve_chip refuses it, and the info output says why.
-                _misdriven = shield_misdriven_pins(
-                    pinout_key, pin_count, address_width(mem_size)
-                )
+                _misdriven = shield_misdriven_pins(pinout_key, pin_count, _width)
                 if _support_status == "supported" and _misdriven:
                     _ce_pin, _oe_pin = SHIELD_CE_OE_PINS[pin_count]
                     _support_status = "adapter-required"
@@ -927,8 +949,8 @@ def main():
                 # A pin map with fewer address lines than the chip's size needs
                 # reaches only part of the chip (the 27011 pages the rest in).
                 # resolve_chip refuses the row; the status says so too.
-                _map_lines = len(_PINOUTS[pinout_key]["pins"].get("address-bus-pins", []))
-                if _support_status == "supported" and address_width(mem_size) > _map_lines:
+                _map_lines = len(_address_pins)
+                if _support_status == "supported" and _width > _map_lines:
                     _support_status = "protocol-not-implemented"
                     _unsupported_reason = (
                         f"protocol not implemented: pin map {pinout_key} gives "
@@ -937,23 +959,20 @@ def main():
                         f"no way to reach the rest."
                     )
 
-                # The 0x10 handler puts 12V on pin 1. A 0x10 row that needs pin 1
-                # or pin 31 as an address line (A18 on the SST28SF040 family)
-                # would take 12V on that line. resolve_chip refuses the row.
-                _vpp_on_address = [
-                    p
-                    for p in _PINOUTS[pinout_key]["pins"].get("address-bus-pins", [])[
-                        : address_width(mem_size)
-                    ]
-                    if p in INTEL_28F_RESERVED_PINS
-                ]
-                if _support_status == "supported" and proto_id == 0x10 and _vpp_on_address:
+                # The 0x10 handler puts 12V on socket pin 1. A 0x10 row whose pin
+                # map uses that pin as an address line (A18 on the SST28SF040
+                # family) would take 12V on it. resolve_chip refuses the row.
+                if (
+                    _support_status == "supported"
+                    and proto_id == 0x10
+                    and intel28f_vpp_conflict_pins(pinout_key, pin_count, _width)
+                ):
                     _support_status = "protocol-not-implemented"
                     _unsupported_reason = (
-                        f"protocol not implemented: algorithm 0x10 puts 12V on pin 1 "
-                        f"and uses pin 31 as WE, but this chip needs pins "
-                        f"{_vpp_on_address} as address lines. The programmer "
-                        f"implements no write or erase for it."
+                        f"protocol not implemented: algorithm 0x10 puts 12V on "
+                        f"socket pin 1, but pin map {pinout_key} uses chip pin "
+                        f"{INTEL_28F_VPP_PIN} as an address line. The programmer "
+                        f"refuses every operation on this chip."
                     )
 
                 chip_entry = {
@@ -1016,8 +1035,6 @@ def main():
                     },
                     "pinout": pinout_key,
                 }
-                _address_pins = _PINOUTS[pinout_key]["pins"].get("address-bus-pins", [])
-                _width = address_width(mem_size)
                 if pm_idx in infoic_maps:
                     _bonded = bonded_chip_pins(infoic_maps[pm_idx], pin_count)
                     # A line inside the chip's address width must be bonded

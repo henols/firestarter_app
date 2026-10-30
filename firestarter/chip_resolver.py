@@ -9,7 +9,7 @@ Single chokepoint between CLI dispatch and the EPROM database lookup/conversion.
 
 from typing import Any
 
-from firestarter.database import ROM_CE, ROM_OE, EpromDatabase
+from firestarter.database import ROM_CE, ROM_OE, EpromDatabase, pin_conversions
 from firestarter.exceptions import (
     AmbiguousChipNameError,
     ChipNotFoundError,
@@ -18,10 +18,8 @@ from firestarter.exceptions import (
 
 _NON_ZERO_WIRE_FIELDS = ("memory-size", "pin-count", "vpp_mv")
 
-# The 0x10 (Intel 28F) handler puts 12V on pin 1 and uses pin 31 as WE, which
-# leaves a 32-pin part 18 address lines.
+# The 0x10 (Intel 28F) handler routes 12V to socket pin 1 (CTRL_VPP_P1_ENABLE).
 _INTEL_28F_ALGORITHM = 0x10
-_INTEL_28F_ADDRESS_LINES = 18
 
 
 def _qualified_choices(name: str, db: EpromDatabase) -> list[str]:
@@ -153,16 +151,13 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
             f"{1 << len(bus)} of its {data['memory-size']} bytes. The programmer "
             "cannot address the rest of the chip."
         )
-    # A 0x10 chip that needs a 19th address line has it on pin 1 or pin 31
-    # (A18 on the SST28SF040 family), so the handler would put 12V on it.
-    if (
-        bus
-        and algorithm == _INTEL_28F_ALGORITHM
-        and len(bus) > _INTEL_28F_ADDRESS_LINES
-    ):
+    # The 0x10 handler puts 12V on socket pin 1, so a 0x10 chip whose bus uses
+    # that pin (A18 on the SST28SF040 family) would take 12V on an address
+    # line. Only a 32-pin chip has a pin there: a smaller chip sits
+    # bottom-aligned, and none of its pins converts to the socket pin 1 line.
+    if bus and algorithm == _INTEL_28F_ALGORITHM and pin_conversions[32][1] in bus:
         raise ChipNotImplementedError(
-            f"{name}: algorithm 0x10 puts 12V on pin 1 and uses pin 31 as WE, "
-            f"which leaves {_INTEL_28F_ADDRESS_LINES} address lines, but the chip "
-            f"needs {len(bus)}. The programmer would put 12V on an address line."
+            f"{name}: algorithm 0x10 puts 12V on socket pin 1, but the chip's pin "
+            "map uses pin 1 as an address line. The programmer refuses the chip."
         )
     return data
