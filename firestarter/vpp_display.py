@@ -11,6 +11,10 @@ the voltage of the chip's write-protect (WP) pin from the datasheet. It is not a
 and the firmware never turns on the VPP regulator for these protocols. The retired
 `tools/check_dispatch.py` had the same carve-out (`git show 7ebdef8^:tools/check_dispatch.py`).
 
+A row on a VPP protocol shows a VPP only when its pin map has a `vpp-pin`. The SST28SF040 rows
+are protocol 0x10, but their pin map has no VPP pin: their `vpp_mv` 12000 is VPP index 0x00, the
+same value that every 5 V-only row decodes.
+
 Polarity: fail closed. Only the protocols in `PROGRAMMING_VPP_PROTOCOL_IDS` show a VPP. An unknown
 protocol shows no VPP. The worst case of that choice is a missing line in `info`. The worst case of
 the other choice is a wrong voltage that the operator can set on the potentiometer.
@@ -35,12 +39,15 @@ PROGRAMMING_VPP_PROTOCOL_IDS = frozenset(
 )
 
 
-def shows_programming_vpp(algorithm: Any, vpp_mv: Any) -> bool:
+def shows_programming_vpp(algorithm: Any, vpp_mv: Any, pins: Any) -> bool:
     """True when the row's `vpp_mv` is a programming VPP that `info` and `list` must show.
 
+    `pins` is the `pins` dict of the row's pin map, or None when the map is unknown.
     `vpp_mv` can be a string in a user override entry, so the value is converted here.
     """
     if algorithm not in PROGRAMMING_VPP_PROTOCOL_IDS:
+        return False
+    if not isinstance(pins, dict) or "vpp-pin" not in pins:
         return False
     try:
         return int(vpp_mv or 0) > 0

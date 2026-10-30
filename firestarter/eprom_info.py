@@ -455,7 +455,8 @@ def print_eprom_list_table(
         chip_id_str = f"0x{ic.get('chip-id', 0):04X}" if ic.get("chip-id") else ""
 
         # The info view calls the same predicate, so the two views cannot disagree.
-        if shows_programming_vpp(ic.get("protocol-id"), ic.get("vpp_mv")):
+        pins = spec_builder.db.get_pin_map(ic.get("pin-count"), ic.get("pin-map"))
+        if shows_programming_vpp(ic.get("protocol-id"), ic.get("vpp_mv"), pins):
             vpp_str = format_mv(int(ic["vpp_mv"]))
         else:
             vpp_str = "-"
