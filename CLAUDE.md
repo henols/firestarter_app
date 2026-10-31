@@ -7,7 +7,6 @@ Arduino firmware over serial at 250000 baud.
 
 ```bash
 pip install -e '.[test]'            # install in dev mode. CI installs the [test] extra.
-firestarter --help                  # check the install
 ./firestarter_test.sh [EPROM]       # run the hardware integration test
 python tools/build_db.py            # generate the chip database from infoic.xml
 ```
@@ -63,58 +62,13 @@ selection has no effect.
 
 ## Architecture
 
-### Data Flow
-
-```
-infoic.xml → build_db.py → chip_database.json
-                                        ↓
-firestarter <chip> write/read/erase
-     ↓
-EpromDatabase.get_eprom(name)       # find the chip
-     ↓
-database._map_data()                # get algorithm, vpp_mv, pinout
-     ↓
-database.convert_to_programmer()    # change DIP pins to bus config
-     ↓
-eprom_operations.py                 # make the command dict
-     ↓
-command_codec.py                    # encode the dict as a binary command frame
-     ↓
-serial_comm.py                      # send it over serial, read the response
-```
-
 ### Key Files
 
 - `firestarter/data/chip_database.json` — the generated chip database. **Do not edit it.**
-- `firestarter/data/pinouts.json` — maps physical DIP pins to RURP bus lines. It has one entry for
-  each pinout key that the database uses.
-- `firestarter/database.py` — `EpromDatabase`. It finds chips, changes pins and makes commands. It
-  has the `skip_local_override` seam.
-- `firestarter/eprom_operations.py` — the high-level operations: read, write, erase, verify and
-  blank check.
 - `firestarter/compare.py` — the one host-side comparison engine. `verify_eprom`, `chip_test` and
   the write guard all use it.
-- `firestarter/serial_comm.py` — the serial protocol, as an INIT/MAIN/END state machine.
-- `firestarter/command_codec.py` — encodes a command dict as a binary command frame. It uses the
-  layout in the generated `firestarter/command_frame.py`.
-- `firestarter/frame_parser.py` — CRC8, `cobs_encode`, `cobs_decode`, `_decode_param`,
-  `MAGIC_PREAMBLE`, and the `Response` and `LogMessage` types. You can test it without serial I/O.
-- `firestarter/codec.py` — `format_message`, `decode_id_frame` and the revision-silkscreen text.
-- `firestarter/address_parser.py` — parses hex and decimal addresses and sizes.
-- `firestarter/chip_resolver.py` — `resolve_chip(name, db) -> programmer_config`.
-- `firestarter/cli_handlers.py` — the Click command handlers, the `dev` command group, the
-  `@map_typed_errors` decorator and the `AppContext` dataclass.
-- `firestarter/py32_dfu.py` — the USB DFU firmware-install backend for the `py32f071` board. It
-  supports DfuSe and plain DFU 1.1. It loads Intel-HEX and raw binary files. It uses `pyusb` through
-  the optional `[py32]` extra. `firmware.py::flash_method()` sends that board here, not to avrdude.
+- `firestarter/py32_dfu.py` — the USB DFU firmware-install backend for the `py32f071` board.
   **No test on real silicon covers it.**
-- `firestarter/channel.py` — the release-channel gate. Refer to the next section.
-- `firestarter/exceptions.py` — the typed exceptions. The root classes are `SerialError`,
-  `EpromOperationError`, `HardwareOperationError`, `FirmwareOperationError` and
-  `ChipNotFoundError`. Read the file for the subclasses.
-- `firestarter/main.py` — the CLI entry point. It exports `cli` from `cli_handlers`.
-- `tools/build_db.py` — the database pipeline. It downloads the upstream `infoic.xml` and writes
-  JSON.
 
 ### Release-Channel Gate
 
