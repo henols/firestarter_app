@@ -18,10 +18,12 @@ import pytest
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 
+from .plan_corpus import REAL_DB
+
 
 @pytest.fixture(scope="module")
 def db() -> EpromDatabase:
-    return EpromDatabase(skip_local_override=True)
+    return REAL_DB
 
 
 @pytest.fixture(scope="module")

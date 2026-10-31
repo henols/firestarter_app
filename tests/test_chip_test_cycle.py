@@ -19,20 +19,9 @@ import pytest
 
 from firestarter import chip_test as ct
 from firestarter.chip_resolver import resolve_chip
-from firestarter.database import EpromDatabase
 
-_REAL_DB = EpromDatabase()
-
-_OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-    "sdp_lock",
-    "sdp_unlock",
-]
+from .fixtures.operator_doubles import OPERATOR_METHODS
+from .plan_corpus import REAL_DB
 
 # Family representatives, one per recipe. Chosen from the shipped database and
 # asserted to still carry the recipe under test (see
@@ -58,9 +47,9 @@ def _cycle_operator(name: str, *, blank: bool = False):
     come back short, which silently turns a masked write into a SKIPPED step --
     so this double seeks, and the tests below would not pass without it.
     """
-    eprom_data = resolve_chip(name, db=_REAL_DB)
+    eprom_data = resolve_chip(name, db=REAL_DB)
     writes: list[tuple[str | None, bytes]] = []
-    operator = Mock(spec=_OPERATOR_METHODS)
+    operator = Mock(spec=OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, eprom_data.get("chip-id") or 0)
     # 202-05 D-10: check_eprom_blank now returns an int too (0 == blank),
     # the same convention verify_eprom adopted in 202-01.
@@ -92,12 +81,10 @@ def _cycle_operator(name: str, *, blank: bool = False):
 
 def _run(name: str, *, runs: int = 2):
     operator, writes = _cycle_operator(name)
-    plan = ct.derive_plan(name, _REAL_DB, write_scope="full")
+    plan = ct.derive_plan(name, REAL_DB, write_scope="full")
     # `allow_single_run` mirrors what `dev test --fast` passes: `runs=1` alone
     # still fails the whole plan fail-closed, deliberately.
-    results = ct.run_plan(
-        plan, operator, _REAL_DB, runs=runs, allow_single_run=runs < 2
-    )
+    results = ct.run_plan(plan, operator, REAL_DB, runs=runs, allow_single_run=runs < 2)
     write_result = next(
         r for r in results if r.op in (ct.OP_WRITE, ct.OP_WRITE_PARTIAL)
     )
@@ -118,7 +105,7 @@ def _run(name: str, *, runs: int = 2):
 def test_each_family_gets_its_own_recipe(chip: str, expected: str) -> None:
     """`derive_plan` decides the recipe ONCE, from facts it already holds, and
     carries it on both the write and the verify step."""
-    plan = ct.derive_plan(chip, _REAL_DB, write_scope="full")
+    plan = ct.derive_plan(chip, REAL_DB, write_scope="full")
     write_step = next(
         s for s in plan.steps if s.op in (ct.OP_WRITE, ct.OP_WRITE_PARTIAL)
     )
@@ -131,7 +118,7 @@ def test_every_other_step_keeps_the_default_recipe() -> None:
     """Only write/verify carry a recipe. Everything else keeps `same`, which is
     also the pre-cycle behaviour, so no step outside the pair can be given a
     payload it has no use for."""
-    plan = ct.derive_plan(_UV, _REAL_DB, write_scope="full")
+    plan = ct.derive_plan(_UV, REAL_DB, write_scope="full")
     for step in plan.steps:
         if step.op in (ct.OP_WRITE, ct.OP_WRITE_PARTIAL, ct.OP_VERIFY):
             continue
@@ -325,7 +312,7 @@ def test_uv_write_is_always_one_slot_never_the_whole_device() -> None:
     target = write_result.write_target
     assert target is not None
 
-    memory_size = int(resolve_chip(_UV, db=_REAL_DB)["memory-size"])
+    memory_size = int(resolve_chip(_UV, db=REAL_DB)["memory-size"])
     start, length = target.region
     assert length == 256, "a UV write widened beyond one slot"
     assert start == memory_size - length, "the UV slot was not the top one"
@@ -341,7 +328,7 @@ def test_uv_target_carries_rig_life_all_the_way_to_the_report() -> None:
     target = write_result.write_target
     assert target is not None
 
-    memory_size = int(resolve_chip(_UV, db=_REAL_DB)["memory-size"])
+    memory_size = int(resolve_chip(_UV, db=REAL_DB)["memory-size"])
     assert target.slots_total == memory_size // 256
     assert target.slots_remaining == target.slots_total, "a virgin part is untouched"
 
@@ -352,7 +339,7 @@ def test_rig_life_is_rendered_in_the_write_coverage_line() -> None:
     from a slot address."""
     from firestarter.diagnostic_report import _write_coverage_line
 
-    plan = ct.derive_plan(_UV, _REAL_DB, write_scope="full")
+    plan = ct.derive_plan(_UV, REAL_DB, write_scope="full")
     write_step = next(
         s for s in plan.steps if s.op in (ct.OP_WRITE, ct.OP_WRITE_PARTIAL)
     )
@@ -443,7 +430,7 @@ def test_a_failing_first_cycle_keeps_the_fingerprint_read_back() -> None:
     Cycle 1 fails, cycle 2 passes -- the gate still consults `per_step[i]`
     across ALL prior cycles, not just the final cycle's own one-element
     `outcomes` list, so the read-back is kept. Built on `_cycle_operator`,
-    not `test_chip_test.py`'s plain `_mock_operator`: its `read_eprom` side
+    not the plain `mock_operator`: its `read_eprom` side
     effect seeks to the ABSOLUTE address before writing, which
     `_read_region` depends on -- a double that writes at offset 0 makes
     every region slice come back short and this test would pass for the
@@ -453,10 +440,10 @@ def test_a_failing_first_cycle_keeps_the_fingerprint_read_back() -> None:
     gate's own contribution is measured as the DELTA above that baseline."""
     operator, _writes = _cycle_operator(_ERASABLE)
     operator.write_eprom.side_effect = [False, True]
-    plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
+    plan = ct.derive_plan(_ERASABLE, REAL_DB, write_scope="full")
     runs = 2
 
-    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+    ct.run_plan(plan, operator, REAL_DB, runs=runs)
 
     assert operator.read_eprom.call_count > runs
 
@@ -467,10 +454,10 @@ def test_an_all_passing_two_cycle_run_performs_zero_fingerprint_read_backs() -> 
     reads and `read_eprom.call_count` stays at exactly the `read` step's
     own fixed baseline of `runs` calls -- zero ADDED by the gate."""
     operator, _writes = _cycle_operator(_ERASABLE)
-    plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
+    plan = ct.derive_plan(_ERASABLE, REAL_DB, write_scope="full")
     runs = 2
 
-    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+    ct.run_plan(plan, operator, REAL_DB, runs=runs)
 
     assert operator.read_eprom.call_count == runs
 
@@ -540,7 +527,7 @@ def test_uv_plan_blank_check_sits_outside_the_cycle_block(chip: str) -> None:
     (`chip_test.py:1648-1652`). A future phase that moves the UV blank-
     check inside the block would silently reintroduce the cycle-2 abort
     this phase exists to remove; this test would go red instead."""
-    plan = ct.derive_plan(chip, _REAL_DB, write_scope="full")
+    plan = ct.derive_plan(chip, REAL_DB, write_scope="full")
     ops = [s.op for s in plan.steps]
     blank_check_index = ops.index(ct.OP_BLANK_CHECK)
     bounds = ct.cycle_block_bounds(plan.steps)

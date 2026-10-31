@@ -14,8 +14,6 @@ Tests import directly from firestarter.codec — no SerialCommunicator instance
 or serial fixtures needed.
 """
 
-import pytest  # noqa: F401
-
 from firestarter.codec import format_message
 from firestarter.messages import (
     CATALOG,

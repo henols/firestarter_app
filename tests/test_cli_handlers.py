@@ -24,69 +24,22 @@ import pytest
 from click.testing import CliRunner
 
 import firestarter.cli_handlers as cli_handlers_mod
-from firestarter.cli_handlers import AppContext, cli
+from firestarter.cli_handlers import cli
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
-from firestarter.messages import (
-    MSG_DATA_CHUNK,
-    MSG_END_DONE,
-    MSG_INIT_DONE,
-    MSG_MAIN_DONE,
-)
 
 from .conftest import (
     ADAPTER_REQUIRED_TEST_CHIP,
     ADAPTER_REQUIRED_TEST_REASON,
     adapter_required_db,
-    build_frame,
+    connect_via,
+    make_app_context,
+    read_phase_frames,
 )
-
-
-@pytest.fixture
-def runner() -> CliRunner:
-    """Fresh CliRunner per test — mix_stderr=True so stderr+stdout flow into result.output."""
-    return CliRunner()
-
-
-def make_app_context(**manager_overrides) -> AppContext:
-    """Construct an AppContext for in-process CliRunner tests.
-
-    Defaults to a real `EpromDatabase(skip_local_override=True)` (Phase 36
-    D-06 seam — hermetic isolation from any local override file) plus
-    Mock-spec'd manager fields (no test attempts real serial I/O).
-
-    Overrides let a test substitute a specific manager with a configured mock
-    (e.g. `eprom_operator=mock_returning_read_true`).
-    """
-    db = manager_overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    config_manager = manager_overrides.pop("config_manager", None)
-    if config_manager is None:
-        # ConfigManager is a singleton — use the real one for tests; handlers
-        # only read .get_value for port plumbing on the fw install path.
-        config_manager = ConfigManager()
-    return AppContext(
-        db=db,
-        config_manager=config_manager,
-        eprom_operator=manager_overrides.pop(
-            "eprom_operator", Mock(spec=EpromOperator)
-        ),
-        hardware_manager=manager_overrides.pop(
-            "hardware_manager", Mock(spec=HardwareManager)
-        ),
-        firmware_manager=manager_overrides.pop(
-            "firmware_manager", Mock(spec=FirmwareManager)
-        ),
-        eprom_presenter=manager_overrides.pop(
-            "eprom_presenter", Mock(spec=EpromConsolePresenter)
-        ),
-    )
-
 
 # Wave 2 tests (preserved)
 
@@ -216,46 +169,32 @@ def test_info_five_volt_part_emits_no_programming_vcc_warning(
     assert "not found in database" not in caplog.text
 
 
-def test_info_happy_path_no_crash(runner: CliRunner) -> None:
-    """`firestarter info W27C512` exits 0 with chip name in output.
+@pytest.mark.parametrize(
+    "chip",
+    [
+        # SC#1 regression: the ic_layout list-vs-int fix holds end-to-end.
+        "W27C512",
+        # vpp-pin=[20] (list-valued shared pin): the original live-crash chip,
+        # the vpp-exceeds-max + shared-pin path of the scalar extraction.
+        "2732",
+        # Supported 25V NMOS with distinct vpp and oe pins (Phase 79, NMOS-02:
+        # graduated from 'vpp-exceeds-max' at the raised 25V ceiling).
+        "M2716",
+        # The sole protocol-not-implemented chip (protocol 0x34 XICOR NovRAM,
+        # alias "X88C64P,X88C64S"). info bypasses resolve_chip, so it DISPLAYS
+        # the chip without refusing.
+        "X88C64P",
+    ],
+)
+def test_info_no_crash(runner: CliRunner, chip: str) -> None:
+    """`firestarter info <chip>` exits 0 with no traceback.
 
-    SC#1 regression: proves the ic_layout list-vs-int fix holds end-to-end.
-    Uses a REAL EpromConsolePresenter(db) to exercise the full display path.
+    Uses a REAL EpromConsolePresenter(db) to exercise the full display path
+    (Pitfall 1: the default Mock presenter masks a crash).
     """
     db = EpromDatabase(skip_local_override=True)
     app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
-    result = runner.invoke(cli, ["info", "W27C512"], obj=app)
-    assert result.exit_code == 0
-    assert "Traceback (most recent call last)" not in result.output
-
-
-def test_info_2732_list_valued_pin_no_crash(runner: CliRunner) -> None:
-    """`firestarter info 2732` exits 0 — SC#1 list-valued-pin regression.
-
-    2732 has vpp-pin=[20] (list-valued shared pin); this was the original
-    live-crash chip. Proves the scalar-extraction fix in ic_layout.py works
-    for the vpp-exceeds-max + shared-pin path. REAL presenter required.
-    """
-    db = EpromDatabase(skip_local_override=True)
-    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
-    result = runner.invoke(cli, ["info", "2732"], obj=app)
-    assert result.exit_code == 0
-    assert "Traceback (most recent call last)" not in result.output
-
-
-def test_info_nmos_25v_no_crash(runner: CliRunner) -> None:
-    """`firestarter info M2716` exits 0 — supported 25V NMOS, distinct vpp/oe.
-
-    info renders a chip with distinct vpp and oe pins without crashing. REAL
-    presenter required (Pitfall 1).
-
-    Phase 79 (NMOS-02): M2716 graduated from 'vpp-exceeds-max' to 'supported'
-    at the raised 25V ceiling; info still exits 0 (it displayed before and
-    resolves now).
-    """
-    db = EpromDatabase(skip_local_override=True)
-    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
-    result = runner.invoke(cli, ["info", "M2716"], obj=app)
+    result = runner.invoke(cli, ["info", chip], obj=app)
     assert result.exit_code == 0
     assert "Traceback (most recent call last)" not in result.output
 
@@ -273,22 +212,6 @@ def test_info_adapter_required_no_crash(runner: CliRunner) -> None:
     assert result.exit_code == 0
     assert "Traceback (most recent call last)" not in result.output
     assert "ChipNotImplementedError" not in result.output
-
-
-def test_info_protocol_not_implemented_no_crash(runner: CliRunner) -> None:
-    """`firestarter info X88C64P` exits 0 — protocol-not-implemented DISPLAYS, not refuses.
-
-    SC#3 protocol-not-implemented coverage (Phase 66 third non-supported status).
-    X88C64P is the sole protocol-not-implemented chip in the packaged DB (part_number
-    alias "X88C64P,X88C64S", protocol 0x34 XICOR NovRAM). info bypasses resolve_chip
-    so it DISPLAYS the chip without refusing — same contract as M2716/AT28C16.
-    REAL presenter required (Pitfall 1). Depends on Plan 01 ic_layout fix.
-    """
-    db = EpromDatabase(skip_local_override=True)
-    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
-    result = runner.invoke(cli, ["info", "X88C64P"], obj=app)
-    assert result.exit_code == 0
-    assert "Traceback (most recent call last)" not in result.output
 
 
 def test_search_happy_path(runner: CliRunner) -> None:
@@ -470,37 +393,30 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
     assert not (kwargs3["operation_flags"] & FLAG_SKIP_ERASE)
 
 
-def test_verify_happy_path(runner: CliRunner) -> None:
-    """`firestarter verify W27C512 in.bin` exits 0 when verify_eprom returns 0.
-
-    202-01 D-10: verify_eprom returns an int (0 match / 1 mismatch /
-    2 transport-hardware-or-refusal); cli_handlers.verify now `sys.exit`s
-    directly on that int.
-    """
+# 202-01 / 202-05 D-10: verify_eprom and check_eprom_blank return an int
+# (0 match or blank / 1 mismatch or not blank / 2 transport, hardware or a
+# pre-wire region refusal); the handler `sys.exit`s directly on that int.
+@pytest.mark.parametrize(
+    ("argv", "method", "code"),
+    [
+        (["verify", "W27C512", "in.bin"], "verify_eprom", 0),
+        (["verify", "W27C512", "in.bin"], "verify_eprom", 1),
+        (["verify", "W27C512", "in.bin"], "verify_eprom", 2),
+        (["blank", "W27C512"], "check_eprom_blank", 0),
+        (["blank", "W27C512"], "check_eprom_blank", 1),
+        (["blank", "W27C512"], "check_eprom_blank", 2),
+    ],
+    ids=["verify-0", "verify-1", "verify-2", "blank-0", "blank-1", "blank-2"],
+)
+def test_verify_and_blank_exit_with_the_operator_result(
+    runner: CliRunner, argv: list[str], method: str, code: int
+) -> None:
+    """`verify` and `blank` exit with the int the operator returns."""
     operator = Mock(spec=EpromOperator)
-    operator.verify_eprom.return_value = 0
+    getattr(operator, method).return_value = code
     app = make_app_context(eprom_operator=operator)
-    result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
-    assert result.exit_code == 0
-
-
-def test_verify_operator_returns_mismatch(runner: CliRunner) -> None:
-    """`firestarter verify W27C512 in.bin` exits 1 when verify_eprom returns 1."""
-    operator = Mock(spec=EpromOperator)
-    operator.verify_eprom.return_value = 1
-    app = make_app_context(eprom_operator=operator)
-    result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
-    assert result.exit_code == 1
-
-
-def test_verify_operator_returns_setup_failure(runner: CliRunner) -> None:
-    """`firestarter verify W27C512 in.bin` exits 2 when verify_eprom returns 2
-    (D-10: transport, hardware, or a pre-wire region refusal)."""
-    operator = Mock(spec=EpromOperator)
-    operator.verify_eprom.return_value = 2
-    app = make_app_context(eprom_operator=operator)
-    result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
-    assert result.exit_code == 2
+    result = runner.invoke(cli, argv, obj=app)
+    assert result.exit_code == code
 
 
 def test_verify_cli_prints_range_line_and_bucket_summary_line(
@@ -549,62 +465,22 @@ def test_verify_cli_prints_range_line_and_bucket_summary_line(
     actual_bytes = bytearray(expected_bytes)
     actual_bytes[5] = 0x01  # one mismatch: a range line + a bucket line
 
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(actual_bytes)))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    monkeypatch.setattr(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        _fake_find_and_connect,
-    )
+    for frame in read_phase_frames(bytes(actual_bytes)):
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
     app = make_app_context(eprom_operator=operator)
 
-    with caplog.at_level(logging.INFO, logger="EpromOperator"):
+    with (
+        connect_via(make_comm),
+        caplog.at_level(logging.INFO, logger="EpromOperator"),
+    ):
         result = runner.invoke(cli, ["verify", "W27C512", str(input_file)], obj=app)
 
     assert result.exit_code == 1
     assert "Mismatch 0x" in caplog.text
     assert " bad of " in caplog.text
     assert " compared of " in caplog.text
-
-
-def test_blank_happy_path(runner: CliRunner) -> None:
-    """`firestarter blank W27C512` exits 0 when check_eprom_blank returns 0.
-
-    202-05 D-10: check_eprom_blank returns an int (0 blank / 1 not blank /
-    2 transport-hardware-or-refusal); cli_handlers.blank now `sys.exit`s
-    directly on that int, the same shape 202-01 gave `verify`.
-    """
-    operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = 0
-    app = make_app_context(eprom_operator=operator)
-    result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
-    assert result.exit_code == 0
-
-
-def test_blank_operator_returns_mismatch(runner: CliRunner) -> None:
-    """`firestarter blank W27C512` exits 1 when check_eprom_blank returns 1."""
-    operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = 1
-    app = make_app_context(eprom_operator=operator)
-    result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
-    assert result.exit_code == 1
-
-
-def test_blank_operator_returns_setup_failure(runner: CliRunner) -> None:
-    """`firestarter blank W27C512` exits 2 when check_eprom_blank returns 2
-    (D-10: transport, hardware, or a pre-wire region refusal)."""
-    operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = 2
-    app = make_app_context(eprom_operator=operator)
-    result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
-    assert result.exit_code == 2
 
 
 # CMP-08 / D-17: region options and the two pre-wire refusals, shared by
@@ -782,30 +658,18 @@ def test_region_scoped_verify_composes_a_command_dict_bounding_exact_region(
     input_file = tmp_path / "in.bin"
     input_file.write_bytes(payload)
 
-    command_dicts: list[dict] = []
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        command_dicts.append(dict(command_dict))
-        return make_comm()
-
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    monkeypatch.setattr(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        _fake_find_and_connect,
-    )
+    for frame in read_phase_frames(payload):
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
     app = make_app_context(eprom_operator=operator)
 
-    result = runner.invoke(
-        cli,
-        ["verify", "W27C512", str(input_file), "-a", "0x100", "-s", "4"],
-        obj=app,
-    )
+    with connect_via(make_comm) as command_dicts:
+        result = runner.invoke(
+            cli,
+            ["verify", "W27C512", str(input_file), "-a", "0x100", "-s", "4"],
+            obj=app,
+        )
 
     assert result.exit_code == 0, result.output
     assert command_dicts, "find_and_connect was never called"
@@ -1543,23 +1407,6 @@ def test_info_non_supported_shows_status(runner: CliRunner, caplog) -> None:
     DB-04 SC#1: non-supported chips render a status-specific line in info. The
     chip is the synthetic adapter-required row from conftest. Exit must be 0 --
     info displays, never refuses. Log captured via caplog (WARNING level).
-    """
-    import logging
-
-    db = adapter_required_db()
-    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
-    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
-        result = runner.invoke(cli, ["info", ADAPTER_REQUIRED_TEST_CHIP], obj=app)
-    assert result.exit_code == 0
-    log_text = " ".join(r.getMessage() for r in caplog.records)
-    assert "Support status" in log_text
-    assert "adapter" in log_text.lower()
-
-
-def test_info_adapter_required_shows_status(runner: CliRunner, caplog) -> None:
-    """`firestarter info` of an adapter-required chip exits 0 and shows its status.
-
-    DB-04 SC#1: the adapter-required status is surfaced in the info display.
     """
     import logging
 

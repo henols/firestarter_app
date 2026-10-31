@@ -33,9 +33,6 @@ Coverage:
      the generator carries no `_PAGE_SIZE_BY_PART` attribute at all -- no
      part-number-keyed page-size table exists, curated or otherwise
      (Phase 194 D-01).
-  5. Non-vacuity (S-5): a synthetic in-memory chip carrying `vcc_mv == 4000`
-     makes the SAME offender-collecting helper Test 1 calls raise -- proves
-     Test 1 is capable of failing, not a vacuous always-pass check.
 
 Criterion 1 (`firestarter info AT28C256` renders `VCC: 5.0v`) has its only
 test in `tests/test_characterization.py::test_info_at28c256` -- a new pinned
@@ -74,8 +71,7 @@ def _refused_low_vcc(chip: dict) -> bool:
     )
 
 
-# Shared helpers -- both the real-DB tests and the non-vacuity test call
-# these, so the non-vacuity leg exercises the same code the real tests do.
+# Shared helpers for the real-DB tests.
 
 
 def _mv(value) -> int:
@@ -120,8 +116,7 @@ def _collect_margin_rail_offenders(db: dict) -> list[str]:
     """Return a list naming every chip whose electrical.vcc_mv is still the
     4000 mV margin rail. Empty means the substitution ran to completion.
 
-    Called by BOTH the real-DB Test 1 and the synthetic Test 5 non-vacuity
-    leg -- never a parallel reimplementation.
+    Called by the real-DB Test 1.
     """
     offenders = []
     for mfr, part, idx, chip in _iter_chips_with_keys(db):
@@ -266,32 +261,4 @@ def test_vcc_voltages_table_unedited_and_no_new_part_keyed_dict():
     assert not hasattr(build_db, "_PAGE_SIZE_BY_PART"), (
         "build_db must carry no part-number-keyed page-size table -- the "
         "page size is generated from upstream provenance, never curated"
-    )
-
-
-# Test 5: non-vacuity proof
-
-
-def test_synthetic_chip_at_margin_rail_is_flagged_non_vacuous():
-    """Non-vacuity proof: a synthetic in-memory chip carrying
-    vcc_mv == 4000 MUST be flagged by the SAME offender-collecting helper
-    Test 1 calls against the real database.
-
-    Proves the zero-at-rail gate is capable of failing -- not a vacuous
-    always-pass check. Exercises `_collect_margin_rail_offenders` directly,
-    not a parallel reimplementation.
-    """
-    synthetic_db = {
-        "SYNTHETIC_MFR": [
-            {
-                "part_number": "SYNTHETIC_MARGIN_RAIL_VIOLATION",
-                "electrical": {"vcc_mv": 4000, "vdd_mv": 5000},
-            }
-        ]
-    }
-    offenders = _collect_margin_rail_offenders(synthetic_db)
-    assert offenders, (
-        "Non-vacuity failure: the shared offender-collecting helper did not "
-        "flag a synthetic chip at the 4000 mV margin rail -- the "
-        "zero-at-rail gate is vacuous."
     )

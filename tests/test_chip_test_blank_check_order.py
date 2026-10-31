@@ -9,9 +9,8 @@ Quick task 260807-kaq: `dev test` blank-check must run AFTER erase.
 Unit-level ordering proof for `derive_plan`'s conditional blank-check
 placement rule (see `<placement_rule>` in the quick task's PLAN.md). Three
 placement cases are covered against the REAL on-disk chip database
-(the same `EpromDatabase(skip_local_override=True)` idiom
-`tests/test_chip_test.py`'s `_REAL_DB` fixture uses -- no serial I/O, no
-mocking of the database itself):
+(`tests.plan_corpus.REAL_DB`, an `EpromDatabase(skip_local_override=True)`
+-- no serial I/O, no mocking of the database itself):
 
   1. M8720 (protocol 0x08, EEPROM, FLAG_CAN_ERASE set) -- an executable
      erase step exists, so blank-check moves to AFTER erase and BEFORE the
@@ -38,12 +37,8 @@ from firestarter.chip_test import (
     OP_ERASE,
     derive_plan,
 )
-from firestarter.database import EpromDatabase
 
-# A real, on-disk-database instance (skip_local_override=True: no
-# ~/.firestarter override, no serial) -- the same module-level idiom
-# tests/test_chip_test.py's `_REAL_DB` fixture uses.
-_REAL_DB = EpromDatabase(skip_local_override=True)
+from .plan_corpus import REAL_DB
 
 # M8720: protocol 0x08, electrical-type EEPROM, FLAG_CAN_ERASE set -- the
 # established erasable fixture across this suite (see tests/test_chip_test.py
@@ -62,7 +57,7 @@ def test_m8720_full_blank_check_moves_after_erase_before_sdp_leg():
     immediately after it -- and the SDP leg (M8720 is a measured REFUSE
     chip, so its six ops are NA here, D-06/LEG-02) stays a contiguous
     terminal block strictly after blank-check."""
-    plan = derive_plan(_CHIP_ERASABLE, _REAL_DB, write_scope="full")
+    plan = derive_plan(_CHIP_ERASABLE, REAL_DB, write_scope="full")
     ops = [s.op for s in plan.steps]
 
     assert OP_ERASE in ops, "fixture setup error: M8720 must have an erase step"
@@ -92,7 +87,7 @@ def test_am27512_uv_blank_check_position_is_unchanged():
     """Case 4/UV: a pre-write blank-check is genuinely actionable on an
     irrecoverable UV write, so its index and supported status stay exactly
     as they were before this fix."""
-    plan = derive_plan(_CHIP_UV, _REAL_DB, write_scope="full")
+    plan = derive_plan(_CHIP_UV, REAL_DB, write_scope="full")
     ops = [s.op for s in plan.steps]
     assert ops.index(OP_BLANK_CHECK) == 2
 
@@ -115,7 +110,7 @@ def test_at28c256_blank_check_moves_after_erase_but_stays_na():
     while KEEPING case 3's verdict (unsupported/NA) -- this combination
     is exactly why this case still earns its own function rather than
     being folded into case 1."""
-    plan = derive_plan(_CHIP_AUTO_ERASE_28C, _REAL_DB, write_scope="full")
+    plan = derive_plan(_CHIP_AUTO_ERASE_28C, REAL_DB, write_scope="full")
     ops = [s.op for s in plan.steps]
 
     assert OP_ERASE in ops, "fixture setup error: AT28C256 must have an erase step"
@@ -154,7 +149,7 @@ def test_m8720_full_plan_has_exactly_one_blank_check_and_one_erase_step():
     """Non-vacuity leg: the index comparisons above cannot pass by accident
     on a duplicated op -- M8720's write_scope="full" plan has exactly one
     OP_BLANK_CHECK step and exactly one OP_ERASE step."""
-    plan = derive_plan(_CHIP_ERASABLE, _REAL_DB, write_scope="full")
+    plan = derive_plan(_CHIP_ERASABLE, REAL_DB, write_scope="full")
     ops = [s.op for s in plan.steps]
     assert ops.count(OP_BLANK_CHECK) == 1
     assert ops.count(OP_ERASE) == 1

@@ -36,24 +36,10 @@ own CI on a bare checkout and made three of its fail-closed proofs
 tautological, since `python3` on a missing script exits `2` exactly as the
 checker's fail-closed path did.
 
-D-07's seven element-wise `to_dict()` key-list pins (plan 174-03) got their
-own anti-vacuity leg,
-`test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys`:
-deleting `voltage` from a real `to_dict()` mapping and separately adding a
-`canonical_part_number` key were both observed to move the sorted top-level
-key list away from `_TO_DICT_KEYS` before these seven pins were trusted --
-transcribed verbatim in
-`.planning/phases/174-blast-radius-invariance-harness/evidence/
-174-03-schema-pins.txt`.
-
-D-10's four-way `shape_id` closure (plan 174-03,
-`test_shape_ids_closure_is_sensitive_to_removed_and_added_entries`) was
-likewise observed RED both ways before being trusted: popping the last
-entry from a local copy of the committed `tests/fixtures/shape_ids.json`
-anchor moved it away from `sorted(SHAPE_IDS)` (16 entries -> 15, no longer
-equal), and appending a synthetic `bogus-added-shape-id` entry moved it
-away the other direction (16 entries -> 17, no longer equal) -- neither
-mutation touched the committed file on disk.
+D-07's seven element-wise `to_dict()` key-list pins and D-10's four-way
+`shape_id` closure (plan 174-03) are list/set equality checks against
+the real `to_dict()` output and registry; they need no separate
+anti-vacuity leg.
 
 CR-01's two regression legs
 (`test_build_shape_never_shares_results_or_plan_between_shape_ids`,
@@ -764,23 +750,6 @@ def test_to_dict_steps_element_0_key_list_is_pinned() -> None:
     )
 
 
-def test_steps_element_0_key_pin_is_sensitive_to_the_error_name_key() -> None:
-    """Proves `_STEPS_ELEMENT_0_KEYS` was updated to a set that is actually
-    sensitive to `error_name` rather than merely widened to accept it --
-    copying the in-process-mutation idiom of
-    `test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys`
-    below. Never mutates a file on disk."""
-    d = build_shape(_TRACER_SHAPE_ID).to_dict()
-    step_0 = dict(d["steps"][0])
-    assert sorted(step_0) == _STEPS_ELEMENT_0_KEYS
-
-    del step_0["error_name"]
-    assert sorted(step_0) != _STEPS_ELEMENT_0_KEYS, (
-        "deleting error_name did not move the sorted key list away from "
-        "the pinned constant -- the pin is not sensitive to this key"
-    )
-
-
 def test_schema_version_is_pinned() -> None:
     """The triple-equality idiom (`tests/test_diagnostic_report.py:734`):
     the imported constant, the literal, and the value `to_dict()` actually
@@ -800,74 +769,6 @@ def test_schema_version_is_pinned() -> None:
         "was mechanically free because both parsers accept schema_version "
         "by presence only and the dedup hash never reads it)"
     )
-
-
-def test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys() -> None:
-    """The anti-vacuity leg for the seven D-07 pins above: an in-process
-    mutation of a real `to_dict()` mapping, never a change to production
-    code. Deleting one key must move the sorted key list away from the
-    pinned constant, and adding one must too -- proving the element-wise
-    comparisons above are sensitive in both directions, not merely
-    coincidentally correct on the shape as built. Observed output
-    transcribed in
-    `.planning/phases/174-blast-radius-invariance-harness/evidence/
-    174-03-schema-pins.txt`."""
-    report = build_shape(_TRACER_SHAPE_ID)
-    d = report.to_dict()
-    assert sorted(d) == _TO_DICT_KEYS
-
-    removed = dict(d)
-    del removed["voltage"]
-    assert sorted(removed) != _TO_DICT_KEYS, (
-        "deleting a top-level key did not move the sorted key list away "
-        "from the pinned constant -- the pin is vacuous"
-    )
-
-    added = dict(d)
-    added["canonical_part_number"] = None
-    assert sorted(added) != _TO_DICT_KEYS, (
-        "adding a top-level key did not move the sorted key list away "
-        "from the pinned constant -- the pin is vacuous"
-    )
-
-
-def test_the_to_dict_key_pin_reddens_on_a_planted_added_and_removed_key() -> None:
-    """The pin that will govern every deletion in this phase, observed RED
-    against both directions of key drift on a real `to_dict()` mapping --
-    never production. `_VOLTAGE_KEYS` and `_BANNER_KEYS` had never been
-    SHRUNK before this phase, confirmed by diffing each list's own defining
-    lines across every commit from `5693bf7 test(174-03)` (their creation)
-    onward -- plan `181-04` (`_BANNER_KEYS`, RPT-B2) and plan `181-09`
-    (`_VOLTAGE_KEYS`, RPT-B1) perform the first deletions ever to pass
-    through these pins. `ec1db5c` (`feat(178-01)`) is an additive precedent
-    only -- there is no subtractive precedent to cite."""
-    report = build_shape("sst27sf512-six-step")
-    d = report.to_dict()
-    keys = sorted(d)
-    assert len(keys) == 16
-    assert keys.count("is_uv") == 1
-
-    added = dict(d)
-    added["synthetic_planted_key"] = None
-    assert sorted(added) != _TO_DICT_KEYS
-    with pytest.raises(AssertionError):
-        assert sorted(added) == _TO_DICT_KEYS
-
-    removed = dict(d)
-    del removed["is_uv"]
-    assert sorted(removed) != _TO_DICT_KEYS
-    with pytest.raises(AssertionError):
-        assert sorted(removed) == _TO_DICT_KEYS
-
-
-def test_the_to_dict_key_pin_is_not_vacuous_against_an_empty_expected_list() -> None:
-    """The separate, explicitly-named vacuity leg (never folded into the
-    RED-drift test above): comparing a real `to_dict()` key list against
-    an empty expected list must fail, not pass by coincidence."""
-    report = build_shape("sst27sf512-six-step")
-    keys = sorted(report.to_dict())
-    with pytest.raises(AssertionError):
-        assert keys == []
 
 
 _PINNED_SHAPE_ID_SET = [
@@ -1066,24 +967,3 @@ def test_build_shape_raises_for_every_reserved_shape_id() -> None:
             build_shape(reserved_id)
     with pytest.raises(KeyError):
         build_shape("unregistered-sentinel-shape-id-179")
-
-
-def test_shape_ids_closure_is_sensitive_to_removed_and_added_entries() -> None:
-    """The anti-vacuity leg for D-10's four-way closure: an in-process
-    mutation of a local copy of the committed anchor, never a change to
-    the committed file on disk. Removing one entry and separately adding
-    one must both move the mutated list away from `sorted(SHAPE_IDS)`."""
-    committed = _committed_shape_ids()
-
-    removed = list(committed)
-    removed.pop()
-    assert removed != sorted(SHAPE_IDS), (
-        "removing one entry from a copy of the committed anchor did not "
-        "move it away from sorted(SHAPE_IDS) -- the closure pin is vacuous"
-    )
-
-    added = sorted([*committed, "bogus-added-shape-id"])
-    assert added != sorted(SHAPE_IDS), (
-        "appending one entry to a copy of the committed anchor did not "
-        "move it away from sorted(SHAPE_IDS) -- the closure pin is vacuous"
-    )

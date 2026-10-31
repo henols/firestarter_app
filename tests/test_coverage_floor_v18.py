@@ -21,8 +21,10 @@ import pytest
 
 from firestarter.codec import decode_id_frame, format_message
 from firestarter.config import ConfigManager
-from firestarter.frame_parser import _crc8_ccitt, _decode_param
+from firestarter.frame_parser import _decode_param
 from firestarter.messages import CATALOG, MSG_DEBUG, MSG_OK_REV
+
+from .conftest import id_frame_body
 
 
 class TestDecodeParamUncoveredTypes:
@@ -87,10 +89,7 @@ class TestDecodeIdFrameGuards:
     def test_param_shape_mismatch(self):
         # MSG_OK_REV (0x04) declares param_bytes=2; build a CRC-valid frame
         # carrying only ONE param byte so the shape guard rejects it.
-        msg_id = MSG_OK_REV
-        params = bytes([0x00])
-        crc = _crc8_ccitt(bytes([msg_id]) + params)
-        body = bytes([msg_id]) + params + bytes([crc])
+        body = id_frame_body(MSG_OK_REV, bytes([0x00]))
         assert decode_id_frame(len(body), body) is None
 
 
@@ -126,8 +125,6 @@ class TestConfigSaveFailures:
     ):
         missing = tmp_path / "no_such_dir"
         monkeypatch.setattr("firestarter.config.HOME_PATH", str(missing))
-        ConfigManager._instances.clear()
-        ConfigManager._initialized_configs.clear()
         cm = ConfigManager(config_filename="t_mkdir_fail.json")
 
         def boom(*args, **kwargs):
@@ -138,12 +135,7 @@ class TestConfigSaveFailures:
         cm.set_value("port", "/dev/ttyACM0", persist=True)
         assert cm.get_value("port") == "/dev/ttyACM0"
 
-    def test_save_config_write_failure_is_logged_not_raised(
-        self, tmp_path, monkeypatch
-    ):
-        monkeypatch.setattr("firestarter.config.HOME_PATH", str(tmp_path))
-        ConfigManager._instances.clear()
-        ConfigManager._initialized_configs.clear()
+    def test_save_config_write_failure_is_logged_not_raised(self, monkeypatch):
         cm = ConfigManager(config_filename="t_write_fail.json")
 
         import builtins
@@ -159,10 +151,7 @@ class TestConfigSaveFailures:
         cm.set_value("port", "/dev/ttyACM0", persist=True)
         assert cm.get_value("port") == "/dev/ttyACM0"
 
-    def test_set_value_none_persist_false_pops_in_memory(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("firestarter.config.HOME_PATH", str(tmp_path))
-        ConfigManager._instances.clear()
-        ConfigManager._initialized_configs.clear()
+    def test_set_value_none_persist_false_pops_in_memory(self):
         cm = ConfigManager(config_filename="t_none_nopersist.json")
         cm.set_value("port", "/dev/ttyACM0", persist=False)
         cm.set_value("port", None, persist=False)

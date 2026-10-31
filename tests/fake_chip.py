@@ -71,30 +71,6 @@ class FakeChip:
         return cls(memory_size=memory_size, uv=True)
 
     @classmethod
-    def uv_with_slot_saturated(
-        cls, memory_size: int, slot_start: int, slot_length: int
-    ) -> FakeChip:
-        """A UV chip whose given slot is pre-saturated under the
-        address-derived pattern: its content is set to the bitwise
-        complement of that slot's pattern, so `bits_cleared_by` there is
-        high (there ARE 1-bits differing from the pattern... no -- see
-        below) while the MASKED image (`current & pattern`) is all-zero,
-        the slot-saturation shape D-B's selector must skip.
-
-        Concretely: `content = ~pattern`, so `mask_write_pattern(content,
-        pattern) == content & pattern == (~pattern) & pattern == 0` for
-        every byte -- the masked write at this slot is degenerate, exactly
-        the case `WriteTarget.__post_init__` must refuse.
-        """
-        from firestarter.chip_test import generate_pattern
-
-        chip = cls(memory_size=memory_size, uv=True)
-        pattern = generate_pattern(slot_start, slot_length)
-        complement = bytes(~b & 0xFF for b in pattern)
-        chip.data[slot_start : slot_start + slot_length] = complement
-        return chip
-
-    @classmethod
     def uv_with_slot_zeroed(
         cls, memory_size: int, slot_start: int, slot_length: int
     ) -> FakeChip:
@@ -314,13 +290,10 @@ class WriteInitPreflightChip(FakeChip):
     models firmware as it behaved BEFORE that removal, keyed on an
     explicit keyword rather than on the retired wire bit.
 
-    `write_flags_seen` records every `operation_flags` value this instance
-    is handed (frozen at 0 for every production caller now that the
-    retired bit no longer travels through it). `blank_check_requested_seen`
-    records every `blank_check_requested` keyword value this instance is
-    handed -- the explicit signal that replaces the retired wire bit for
-    every UV-03 leg that used to assert on `write_flags_seen`'s non-zero
-    values.
+    `blank_check_requested_seen` records every `blank_check_requested`
+    keyword value this instance is handed -- the explicit signal that
+    replaced the retired wire bit (0x08). `operation_flags` is not
+    recorded: no production caller sets a non-zero value in it now.
 
     Phase 203 (WRITE-01/WRITE-06): this double models the FIRMWARE
     write-init pre-flight only -- it is a duck-typed replacement for the
@@ -340,7 +313,6 @@ class WriteInitPreflightChip(FakeChip):
         super().__init__(memory_size, uv=uv)
         self.last_firmware_error_code: int | None = None
         self.last_firmware_error_message: str | None = None
-        self.write_flags_seen: list[int] = []
         self.blank_check_requested_seen: list[bool] = []
         setattr(self, "check_eprom_id", Mock(return_value=(True, self.id_value)))
 
@@ -364,7 +336,6 @@ class WriteInitPreflightChip(FakeChip):
     ) -> bool:
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
-        self.write_flags_seen.append(operation_flags)
         self.blank_check_requested_seen.append(blank_check_requested)
         # BLANK-01 / BLANK-03 / D-16.2: scope the pre-flight check to the
         # region this write actually touches -- the same start/end

@@ -31,25 +31,18 @@ from click.testing import CliRunner
 
 from firestarter import chip_test, dip24_2816_erase_gate
 from firestarter.cli_handlers import cli
-from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 from firestarter.erase_support import erase_accepted
 from firestarter.hardware import HardwareManager
 
 from .conftest import make_app_context
-
-_DB = EpromDatabase(skip_local_override=True)
-
-
-def _rows():
-    return [(m, c) for m, cs in _DB.proms.items() for c in cs]
-
+from .plan_corpus import REAL_DB, all_rows
 
 # 1. The predicate
 
 
 def test_predicate_is_true_for_dip24_2816_only():
-    pinouts = {c["pinout"] for _, c in _rows()}
+    pinouts = {c["pinout"] for _, c in all_rows(REAL_DB)}
     assert "DIP24_2816" in pinouts
     for pinout in pinouts:
         assert dip24_2816_erase_gate.is_affected(pinout) is (pinout == "DIP24_2816")
@@ -66,14 +59,18 @@ def test_predicate_fails_open_on_absent_or_other_keys(absent):
 def test_the_refused_rows_are_exactly_the_19_dip24_2816_rows():
     refused = {
         (m, c["part_number"])
-        for m, c in _rows()
+        for m, c in all_rows(REAL_DB)
         if c["electrical"]["type"] in ("EEPROM", "Flash/EEPROM")
         and c["programming"]["algorithm"] == 0x0D
         and not erase_accepted(
             c["electrical"]["type"], c["programming"]["algorithm"], c["pinout"]
         )
     }
-    dip24 = {(m, c["part_number"]) for m, c in _rows() if c["pinout"] == "DIP24_2816"}
+    dip24 = {
+        (m, c["part_number"])
+        for m, c in all_rows(REAL_DB)
+        if c["pinout"] == "DIP24_2816"
+    }
     assert len(dip24) == 19
     assert refused == dip24
 
@@ -85,7 +82,9 @@ def _app():
     operator = Mock(spec=EpromOperator)
     operator.erase_eprom.return_value = True
     hardware = Mock(spec=HardwareManager)
-    return make_app_context(db=_DB, eprom_operator=operator, hardware_manager=hardware)
+    return make_app_context(
+        db=REAL_DB, eprom_operator=operator, hardware_manager=hardware
+    )
 
 
 def test_cli_erase_on_a_dip24_2816_part_refuses_before_any_hardware_call():
@@ -127,7 +126,7 @@ def test_refusal_text_names_the_chip_and_the_way_to_clear_it():
 
 
 def _erase_step(name):
-    plan = chip_test.derive_plan(name, _DB, write_scope="full")
+    plan = chip_test.derive_plan(name, REAL_DB, write_scope="full")
     steps = [s for s in plan.steps if s.op == chip_test.OP_ERASE]
     assert len(steps) == 1, [s.op for s in plan.steps]
     return steps[0]

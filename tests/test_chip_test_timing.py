@@ -25,29 +25,14 @@ from firestarter.chip_test import (
     derive_plan,
     run_plan,
 )
-from firestarter.database import EpromDatabase
-from firestarter.eprom_operations import EpromOperator
 
-# `skip_local_override=True` so a developer's ~/.firestarter/database.json
-# cannot change what this module tests -- matches
-# tests/test_chip_test_sdp_leg.py's own `_REAL_DB`.
-_REAL_DB = EpromDatabase(skip_local_override=True)
+from .fixtures.operator_doubles import mock_operator
+from .plan_corpus import REAL_DB
 
 
 def _operator() -> Mock:
-    """A clean-path operator."""
-    op = Mock(spec=EpromOperator)
-    op.check_eprom_id.return_value = (True, None)
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
-    op.check_eprom_blank.return_value = 0
-    op.read_eprom.return_value = True
-    # 202-01 D-10: verify_eprom now returns an int (0 == match).
-    op.verify_eprom.return_value = 0
-    op.erase_eprom.return_value = True
-    op.write_eprom.return_value = True
-    op.sdp_lock.return_value = True
-    op.sdp_unlock.return_value = True
-    return op
+    """A clean-path operator that reports no chip id."""
+    return mock_operator(check_eprom_id=(True, None))
 
 
 def test_steps_that_did_not_run_have_no_duration():
@@ -56,8 +41,8 @@ def test_steps_that_did_not_run_have_no_duration():
     A `0.0` there would read as "ran, took no measurable time" rather than
     "never ran", and it would be summed into the `steps total` row.
     """
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
-    results = run_plan(plan, _operator(), _REAL_DB)
+    plan = derive_plan("w29c020", REAL_DB, write_scope="full")
+    results = run_plan(plan, _operator(), REAL_DB)
 
     not_run = [r for r in results if r.verdict not in _RAN_VERDICTS]
     assert not_run, "expected at least one NA/SKIPPED step on this chip"
@@ -68,8 +53,8 @@ def test_steps_that_did_not_run_have_no_duration():
 def test_every_step_that_ran_carries_a_duration():
     """No step that ran is left unmeasured -- the wrapper covers every
     return path of the timed function, not just the happy one."""
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
-    results = run_plan(plan, _operator(), _REAL_DB)
+    plan = derive_plan("w29c020", REAL_DB, write_scope="full")
+    results = run_plan(plan, _operator(), REAL_DB)
 
     ran = [r for r in results if r.verdict in _RAN_VERDICTS]
     assert ran, "expected at least one step to run"
@@ -95,7 +80,7 @@ def test_an_already_stamped_duration_is_not_overwritten(monkeypatch):
         "w29c020",
         Step(op="id", supported=True, reason=""),
         _operator(),
-        _REAL_DB,
+        REAL_DB,
         runs=1,
     )
 
@@ -117,7 +102,7 @@ def test_a_not_run_verdict_is_not_stamped(monkeypatch):
         "w29c020",
         Step(op="erase", supported=True, reason=""),
         _operator(),
-        _REAL_DB,
+        REAL_DB,
         runs=1,
     )
 

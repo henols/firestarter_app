@@ -833,12 +833,9 @@ class TestPortlessInstall:
     @pytest.fixture(autouse=True)
     def _prerelease_cli(self, monkeypatch):
         """A pre-release CLI: a stable CLI refuses the pre-release tags below."""
-        import firestarter as _pkg
-
-        monkeypatch.setattr(_pkg, "__version__", "3.0.0b12")
+        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
 
     def _manager(self, monkeypatch, board):
-        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
         fm = FirmwareManager(config_manager=MagicMock())
         # No identity read is possible: the bootloader speaks DFU, not CDC.
         monkeypatch.setattr(
@@ -904,7 +901,6 @@ class TestPortlessInstall:
 
     def test_default_board_still_yields_to_detection(self, monkeypatch):
         """The default --board=uno must keep deferring to the detected board."""
-        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(
             fm,

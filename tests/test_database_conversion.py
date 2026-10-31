@@ -7,11 +7,13 @@ import pytest
 from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
 
+from .plan_corpus import REAL_DB
+
 
 @pytest.fixture(scope="module")
 def db() -> EpromDatabase:
     """Hermetic DB: no ``~/.firestarter`` override interference (Phase 36 D-06)."""
-    return EpromDatabase(skip_local_override=True)
+    return REAL_DB
 
 
 def test_convert_w27c512_28pin_uveprom(db: EpromDatabase) -> None:

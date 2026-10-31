@@ -14,8 +14,8 @@ Two layers of coverage:
    and `compare.py`'s additive `CompareResult.first_actual` field -- all
    pure, no board, no serial.
 2. Integration-level: the genuine `EpromOperator.write_eprom` driven
-   through a fake serial port (`tests/conftest.py`'s `_FakeSerial` /
-   `make_comm`), proving the refusal fires (or does not) at the real host
+   through a fake serial port (`tests/conftest.py`'s `connect_via` /
+   `fresh_serial_and_comm`), proving the refusal fires (or does not) at the real host
    path, not against a double. `tests/fake_chip.py`'s `WriteInitPreflightChip`
    models the FIRMWARE write-init pre-flight only (its own docstring says
    so) and would pass regardless of what the real guard does -- it cannot
@@ -33,13 +33,7 @@ from firestarter.constants import COMMAND_READ, COMMAND_WRITE, FLAG_SKIP_ERASE
 from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import ProgrammerNotFoundError
-from firestarter.messages import (
-    MSG_DATA_CHUNK,
-    MSG_END_DONE,
-    MSG_INIT_DONE,
-    MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
-)
+from firestarter.messages import MSG_END_DONE, MSG_INIT_DONE, MSG_MAIN_DONE
 from firestarter.write_blank_guard import (
     GUARDED_PROTOCOL_IDS,
     NAMED_EXEMPT_PROTOCOL_IDS,
@@ -52,14 +46,13 @@ from firestarter.write_blank_guard import (
     requires_blank_check,
 )
 
-from .conftest import _FakeSerial, build_frame
-
-# The Uno-floor default `_calculate_buffer_size()` returns when
-# `firmware_max_chunk` is unset (`make_comm`'s default) -- used here only to
-# keep the READ script's chunking realistic (multi-chunk address tracking
-# exercised for a region larger than one chunk); the firmware, not the
-# host, actually decides a READ's chunk boundaries.
-_BUFFER_SIZE = 512
+from .conftest import (
+    build_frame,
+    connect_via,
+    fresh_serial_and_comm,
+    read_phase_frames,
+    write_success_frames,
+)
 
 
 def _m27c512_data() -> dict:
@@ -336,67 +329,22 @@ def test_first_actual_carries_the_byte_value_at_first_offset() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _read_phase_frames(payload: bytes) -> list[bytes]:
-    """Wire frames for one complete COMMAND_READ main phase whose delivered
-    payload is `payload`, in the order `_main_phase_read_data` expects:
-    INIT_DONE, N x DATA_CHUNK (chunked at the Uno-floor buffer size so a
-    multi-chunk region exercises address tracking), MAIN_DONE, END_DONE.
+def _scripted_connections(*scripts: list[bytes]):
+    """A communicator factory whose n-th call connects to a fresh fake port
+    fed `scripts[n]`.
 
-    A "test authoring error" self-check (`tests/test_write_progress.py`'s
-    style): the chunk count must match ceiling division of `len(payload)`
-    by `_BUFFER_SIZE`, so a future edit to this helper cannot silently
-    produce zero chunks or the wrong count and pass as a false negative.
+    Every operation opens (and, on completion, closes) its own port (D-17),
+    so each connection needs its own fake port: a port the first operation
+    closed cannot serve a second one.
     """
-    chunks = [
-        payload[i : i + _BUFFER_SIZE] for i in range(0, len(payload), _BUFFER_SIZE)
-    ] or [b""]
-    expected_chunks = max(1, -(-len(payload) // _BUFFER_SIZE))
-    assert len(chunks) == expected_chunks, (
-        f"test authoring error: payload length {len(payload)} needs "
-        f"{expected_chunks} chunk(s) against the {_BUFFER_SIZE}-byte Uno "
-        f"floor, but chunking produced {len(chunks)}"
-    )
-    frames = [build_frame(MSG_INIT_DONE, b"")]
-    frames += [build_frame(MSG_DATA_CHUNK, chunk) for chunk in chunks]
-    frames.append(build_frame(MSG_MAIN_DONE, b""))
-    frames.append(build_frame(MSG_END_DONE, b""))
-    return frames
-
-
-def _write_phase_frames() -> list[bytes]:
-    """Wire frames for one complete, otherwise-successful COMMAND_WRITE
-    main phase -- mirrors `_drive_write_eprom_for_ack_check`'s script shape
-    (`tests/test_eprom_operations.py`)."""
-    return [
-        build_frame(MSG_INIT_DONE, b""),
-        build_frame(MSG_OK_REQ_DATA, b""),
-        build_frame(MSG_MAIN_DONE, b""),
-        build_frame(MSG_END_DONE, b""),
-    ]
-
-
-def _comm_factory_for(serial: _FakeSerial):
-    """Build a `SerialCommunicator` factory wired to one specific fake
-    serial port, mirroring `tests/conftest.py`'s `make_comm` fixture and
-    `tests/test_write_skip_sdp_unlock.py`'s `_fresh_serial_and_comm` shape."""
-    from firestarter.serial_comm import SerialCommunicator
-
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = serial
-        instance.port_name = "/dev/null"
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        instance._fault_inject_outgoing = None
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.firmware_identity = None
-        instance.hw_revision = None
-        instance.seen_message_ids = set()
-        return instance
-
-    return _factory
+    factories = []
+    for script in scripts:
+        serial, factory = fresh_serial_and_comm()
+        for frame in script:
+            serial.feed(frame)
+        factories.append(factory)
+    pending = iter(factories)
+    return lambda: next(pending)()
 
 
 def _drive_write_eprom(
@@ -410,19 +358,13 @@ def _drive_write_eprom(
     operation_flags: int = 0,
     blank_check_requested: bool = True,
 ) -> tuple[bool, list[int]]:
-    """Drive the genuine `EpromOperator.write_eprom` through `_FakeSerial`.
+    """Drive the genuine `EpromOperator.write_eprom` through fake serial ports.
 
     `frame_scripts` is a list of already-built frame sequences (from
-    `_read_phase_frames`/`_write_phase_frames`) -- one entry per connection
+    `read_phase_frames`/`write_success_frames`) -- one entry per connection
     `write_eprom` opens, in order (the guard's own read, then the write
-    itself, when both happen). Each entry gets its OWN fresh `_FakeSerial`
-    instance, mirroring D-17's reality that every operation opens (and, on
-    completion, closes) its own port. Sharing a single fake serial port
-    across two connections desyncs it: the first connection's
-    `_disconnect_programmer()` closes the shared fake port
-    (`_FakeSerial.close()` sets `is_open = False`), so a second connection
-    reusing it fails with "Not connected" -- the exact pitfall
-    `tests/test_write_skip_sdp_unlock.py::_fresh_serial_and_comm` documents.
+    itself, when both happen). Each entry gets its own fake port (see
+    `_scripted_connections`).
 
     Returns `(ok, opened)`: `write_eprom`'s return value, and the list of
     `command_dict["cmd"]` values `find_and_connect` observed, in call
@@ -431,25 +373,8 @@ def _drive_write_eprom(
     input_file = tmp_path / f"wbg_{id(frame_scripts)}_{len(payload)}.bin"
     input_file.write_bytes(payload)
 
-    factories = []
-    for script in frame_scripts:
-        serial = _FakeSerial()
-        for frame in script:
-            serial.feed(frame)
-        factories.append(_comm_factory_for(serial))
-    pending = iter(factories)
-
-    opened: list[int] = []
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        opened.append(command_dict["cmd"])
-        return next(pending)()
-
     operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(_scripted_connections(*frame_scripts)) as captured:
         ok = operator.write_eprom(
             eprom_name,
             eprom_data,
@@ -458,7 +383,7 @@ def _drive_write_eprom(
             address_str=address_str,
             blank_check_requested=blank_check_requested,
         )
-    return ok, opened
+    return ok, [command["cmd"] for command in captured]
 
 
 def test_write_to_non_blank_region_of_guarded_part_is_refused(tmp_path, caplog) -> None:
@@ -478,7 +403,7 @@ def test_write_to_non_blank_region_of_guarded_part_is_refused(tmp_path, caplog) 
             eprom_name="m27c512",
             eprom_data=_m27c512_data(),
             payload=payload,
-            frame_scripts=[_read_phase_frames(region_payload)],
+            frame_scripts=[read_phase_frames(region_payload)],
         )
 
     assert ok is False
@@ -510,7 +435,7 @@ def test_write_into_blank_region_of_guarded_part_succeeds(tmp_path) -> None:
         eprom_name="m27c512",
         eprom_data=_m27c512_data(),
         payload=payload,
-        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+        frame_scripts=[read_phase_frames(region_payload), write_success_frames()],
     )
 
     assert ok is True
@@ -534,7 +459,7 @@ def test_write_into_blank_region_of_non_blank_part_succeeds_via_host_path(
         eprom_name="m27c512",
         eprom_data=_m27c512_data(),
         payload=payload,
-        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+        frame_scripts=[read_phase_frames(region_payload), write_success_frames()],
         address_str="0x008000",
     )
 
@@ -554,7 +479,7 @@ def test_write_on_erase_exempt_part_pays_no_guard_read(tmp_path) -> None:
         eprom_name="w27c512",
         eprom_data=_w27c512_data(),
         payload=payload,
-        frame_scripts=[_write_phase_frames()],
+        frame_scripts=[write_success_frames()],
     )
 
     assert ok is True
@@ -584,7 +509,7 @@ def test_write_at_a_non_zero_address_on_an_erase_capable_nor_unlock_part_pays_a_
         eprom_name="sst39sf020",
         eprom_data=chip_data,
         payload=payload,
-        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+        frame_scripts=[read_phase_frames(region_payload), write_success_frames()],
         address_str="0x010000",
     )
 
@@ -604,7 +529,7 @@ def test_write_of_zero_byte_input_file_pays_no_guard_read(tmp_path) -> None:
         eprom_name="m27c512",
         eprom_data=_m27c512_data(),
         payload=b"",
-        frame_scripts=[_write_phase_frames()],
+        frame_scripts=[write_success_frames()],
     )
 
     assert ok is True
@@ -620,13 +545,12 @@ def test_write_returns_false_when_guard_read_cannot_connect(tmp_path) -> None:
     input_file = tmp_path / "wbg_transport_fail.bin"
     input_file.write_bytes(payload)
 
-    def _raise_not_found(command_dict, config, **kwargs):
-        raise ProgrammerNotFoundError("No compatible programmer found on any port.")
-
     operator = EpromOperator(ConfigManager())
     with patch(
         "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_raise_not_found,
+        side_effect=ProgrammerNotFoundError(
+            "No compatible programmer found on any port."
+        ),
     ):
         ok = operator.write_eprom(
             "m27c512",
@@ -666,7 +590,7 @@ def test_write_with_incomplete_guard_read_is_refused_and_no_write_reaches_the_wi
             eprom_name="m27c512",
             eprom_data=_m27c512_data(),
             payload=payload,
-            frame_scripts=[_read_phase_frames(short_region_payload)],
+            frame_scripts=[read_phase_frames(short_region_payload)],
         )
 
     # Safety property 1: refused, not allowed.
@@ -693,22 +617,9 @@ def test_write_with_incomplete_guard_read_is_refused_and_no_write_reaches_the_wi
     # Re-derive the verdict the same way write_eprom does, using a second,
     # freshly instrumented operator so this assertion is not coupled to
     # `_drive_write_eprom`'s helper internals.
-    from unittest.mock import patch as _patch
-
     input_file = tmp_path / "wbg_short_read_verdict.bin"
     input_file.write_bytes(payload)
-    serial = _FakeSerial()
-    for frame in _read_phase_frames(short_region_payload):
-        serial.feed(frame)
-    factory = _comm_factory_for(serial)
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return factory()
-
-    with _patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(_scripted_connections(read_phase_frames(short_region_payload))):
         ok2 = operator.write_eprom("m27c512", _m27c512_data(), str(input_file))
     assert ok2 is False
     assert operator.last_write_guard_verdict == 1
@@ -726,7 +637,7 @@ def test_write_with_blank_check_requested_false_pays_no_guard_read(tmp_path) -> 
         eprom_name="m27c512",
         eprom_data=_m27c512_data(),
         payload=payload,
-        frame_scripts=[_write_phase_frames()],
+        frame_scripts=[write_success_frames()],
         blank_check_requested=False,
     )
 
@@ -760,7 +671,7 @@ def test_write_with_skip_erase_on_erase_capable_part_refuses_a_non_blank_region(
         eprom_name="w27c512",
         eprom_data=_w27c512_data(),
         payload=payload,
-        frame_scripts=[_read_phase_frames(region_payload)],
+        frame_scripts=[read_phase_frames(region_payload)],
         operation_flags=FLAG_SKIP_ERASE,
     )
 
@@ -787,7 +698,7 @@ def test_write_no_blank_check_via_build_op_flags_on_erase_capable_part_pays_no_g
         eprom_name="w27c512",
         eprom_data=_w27c512_data(),
         payload=payload,
-        frame_scripts=[_write_phase_frames()],
+        frame_scripts=[write_success_frames()],
         operation_flags=_build_op_flags(blank_check=False),
         blank_check_requested=False,
     )
@@ -830,30 +741,14 @@ def test_write_cycle_eprom_for_an_erase_capable_part_performs_no_guard_read(
     source_file = tmp_path / "wbg_cycle_source.bin"
     source_file.write_bytes(payload)
 
-    factories = []
-    for script in (
+    connections = _scripted_connections(
         _erase_phase_frames(),
-        _write_phase_frames(),
-        _read_phase_frames(payload),
-    ):
-        serial = _FakeSerial()
-        for frame in script:
-            serial.feed(frame)
-        factories.append(_comm_factory_for(serial))
-    pending = iter(factories)
-
-    opened: list[int] = []
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        opened.append(command_dict["cmd"])
-        return next(pending)()
-
+        write_success_frames(),
+        read_phase_frames(payload),
+    )
     operator = EpromOperator(ConfigManager())
     output_dir = tmp_path / "write-cycle-output"
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(connections) as captured:
         verdict = operator.write_cycle_eprom(
             "w27c512",
             eprom_data,
@@ -863,6 +758,7 @@ def test_write_cycle_eprom_for_an_erase_capable_part_performs_no_guard_read(
         )
 
     assert verdict == 0
+    opened = [command["cmd"] for command in captured]
     assert opened == [COMMAND_ERASE, COMMAND_WRITE, COMMAND_READ]
 
 
@@ -873,19 +769,10 @@ def test_write_cycle_eprom_for_an_erase_capable_part_performs_no_guard_read(
 
 def _drive_compare(make_comm, fake_serial, chunk: bytes, call):
     """Run one compare operation against a fake board that reads `chunk`."""
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, chunk))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in read_phase_frames(chunk):
+        fake_serial.feed(frame)
     operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(make_comm):
         return call(operator)
 
 
@@ -947,22 +834,13 @@ def test_blank_run_on_non_blank_chip_still_emits_mismatch_line(
     payload = bytearray(b"\xff" * 8)
     payload[3] = 0x00
     payload = bytes(payload)
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in read_phase_frames(payload):
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
     with (
         caplog.at_level("INFO", logger="EpromOperator"),
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
-        ),
+        connect_via(make_comm),
     ):
         verdict = operator.check_eprom_blank(
             "W27C512", {"memory-size": 8, "flags": 0, "cmd": 1}
@@ -1023,7 +901,7 @@ def test_write_at_address_zero_on_an_erase_capable_nor_unlock_part_still_pays_no
         eprom_name="sst39sf020",
         eprom_data=_sst39sf020_data(),
         payload=payload,
-        frame_scripts=[_write_phase_frames()],
+        frame_scripts=[write_success_frames()],
     )
 
     assert ok is True
@@ -1050,7 +928,7 @@ def test_write_at_a_non_zero_address_on_a_non_blank_nor_unlock_region_is_refused
             eprom_name="sst39sf020",
             eprom_data=_sst39sf020_data(),
             payload=payload,
-            frame_scripts=[_read_phase_frames(region_payload)],
+            frame_scripts=[read_phase_frames(region_payload)],
             address_str="0x010000",
         )
 

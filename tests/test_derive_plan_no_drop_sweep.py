@@ -52,12 +52,8 @@ cached sweep pass (``_run_whole_database_sweep``, mirroring the
 re-running ``run_plan`` over every plan independently. Correctness is
 identical either way; this shape only avoids paying the 34-second cost twice.
 
-**Anti-vacuity note (see Task 2's additions below the guard leg).** Both
-sweep predicates -- `alignment_violations` and `na_verdict_violations` --
-are proven sensitive on a pinned 40-plan slice, `SENSITIVITY_SLICE`, and
-three deliberate weakenings of this module were each observed to turn it RED
-before being reverted; the transcript is
-`.planning/phases/175-structural-sentinel-over-derive-plan/evidence/175-04-no-drop-sweep.txt`.
+**Anti-vacuity.** Both sweeps assert their own population is non-empty
+before they assert zero violations.
 """
 
 from __future__ import annotations
@@ -65,7 +61,7 @@ from __future__ import annotations
 import dataclasses
 
 import firestarter.chip_test as chip_test
-from tests.plan_corpus import PART_NUMBERS, REAL_DB, mock_operator, plan_corpus
+from tests.plan_corpus import REAL_DB, mock_operator, plan_corpus
 
 
 def alignment_violations(plan, results):
@@ -206,106 +202,4 @@ def test_a_single_run_returns_only_the_plan_guard_result():
     assert len(allowed) == len(plan.steps), (
         f"runs=1, allow_single_run=True returned {len(allowed)} results for "
         f"{len(plan.steps)} steps -- expected one result per step"
-    )
-
-
-_SORTED_PART_NUMBERS = sorted(PART_NUMBERS)
-
-SENSITIVITY_SLICE: tuple[str, ...] = tuple(_SORTED_PART_NUMBERS[:40])
-"""A pinned 40-member slice of `plan_corpus()` keys -- the first 40 names
-from `sorted(PART_NUMBERS)` (181-02: the corpus is now keyed by name alone,
-one entry per name at its single reachable scope, so a 40-name slice
-replaces the former 20-full-plus-20-partial pairing), chosen
-deterministically rather than randomly so a re-run always exercises the
-same 40 plans. 40 is enough because both mutations the sensitivity legs
-below apply are deterministic, not probabilistic, and the slice keeps
-those legs fast rather than re-paying the whole-database sweep three times
-over. Its size is asserted as an absolute `40` at the top of every leg
-that uses it, so a slice that went empty (an import-time regression in
-`PART_NUMBERS`, for example) cannot pass a sensitivity check that silently
-visited nothing."""
-
-
-def test_dropping_a_result_is_flagged_as_a_misalignment():
-    """`alignment_violations` is sensitive at 40 of 40 on the pinned slice:
-    for every one of the 40 plans, a results list one entry shorter than
-    `plan.steps` (a NEW list -- never `del`, `pop`, or an in-place mutation
-    of the corpus's cached `Step`/`StepResult` objects, per T-175-20) makes
-    `alignment_violations` non-empty."""
-    assert len(SENSITIVITY_SLICE) == 40, (
-        f"SENSITIVITY_SLICE has {len(SENSITIVITY_SLICE)} members, expected "
-        "exactly 40 -- this leg's absolute floor is not intact"
-    )
-    corpus = plan_corpus()
-    unflagged = []
-    for key in SENSITIVITY_SLICE:
-        plan = corpus[key]
-        results = chip_test.run_plan(plan, mock_operator(), REAL_DB)
-        dropped_results = results[:-1]
-        if not alignment_violations(plan, dropped_results):
-            unflagged.append(key)
-    assert unflagged == [], (
-        f"{len(unflagged)} of 40 plans in SENSITIVITY_SLICE were NOT "
-        f"flagged after dropping their last result -- alignment_violations "
-        f"is not sensitive on these: {unflagged[:10]}"
-    )
-
-
-def test_a_non_na_verdict_on_an_unsupported_step_is_flagged():
-    """`na_verdict_violations` is sensitive at 40 of 40 on the pinned slice:
-    for every one of the 40 plans, replacing one unsupported step's result
-    with a `dataclasses.replace` copy carrying a non-NA verdict (a NEW
-    `StepResult`, never an in-place attribute assignment on the corpus's
-    shared object, per T-175-20) makes `na_verdict_violations` non-empty. A
-    slice member with no unsupported step at all is a fixture-setup failure,
-    reported rather than silently skipped."""
-    assert len(SENSITIVITY_SLICE) == 40, (
-        f"SENSITIVITY_SLICE has {len(SENSITIVITY_SLICE)} members, expected "
-        "exactly 40 -- this leg's absolute floor is not intact"
-    )
-    corpus = plan_corpus()
-    unflagged = []
-    for key in SENSITIVITY_SLICE:
-        plan = corpus[key]
-        results = chip_test.run_plan(plan, mock_operator(), REAL_DB)
-        target_index = next(
-            (i for i, s in enumerate(plan.steps) if not s.supported), None
-        )
-        if target_index is None:
-            raise AssertionError(
-                f"fixture setup error: {key} has no unsupported step to "
-                "flip a verdict on -- SENSITIVITY_SLICE's assumption that "
-                "every member has at least one unsupported step does not "
-                "hold for this key"
-            )
-        flipped_results = list(results)
-        flipped_results[target_index] = dataclasses.replace(
-            flipped_results[target_index], verdict=chip_test.VERDICT_BAD
-        )
-        if not na_verdict_violations(plan, flipped_results):
-            unflagged.append(key)
-    assert unflagged == [], (
-        f"{len(unflagged)} of 40 plans in SENSITIVITY_SLICE were NOT "
-        f"flagged after flipping one unsupported step's verdict away from "
-        f"NA -- na_verdict_violations is not sensitive on these: "
-        f"{unflagged[:10]}"
-    )
-
-
-def test_a_short_results_list_is_reported_not_truncated():
-    """A results list shorter than `plan.steps` is reported by
-    `na_verdict_violations`, not silently truncated by a positional `zip` --
-    the precise failure PRUNE-05 forbids, since a truncating zip could drop
-    exactly the unsupported step whose result was cut and read that as
-    "nothing wrong"."""
-    corpus = plan_corpus()
-    plan = corpus["M8720"]
-    full_results = chip_test.run_plan(plan, mock_operator(), REAL_DB)
-    short_results = list(full_results[:-1])
-    violations = na_verdict_violations(plan, short_results)
-    assert violations, (
-        "na_verdict_violations returned no violations for a results list "
-        "one entry shorter than the step list -- a positional zip that "
-        "truncates silently would let a dropped tail pass unnoticed, which "
-        "is the precise failure PRUNE-05 forbids"
     )

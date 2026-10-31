@@ -58,7 +58,6 @@ think the write needs a flag, exactly what 152-CONTEXT.md D-08 exists to keep
 out of the public release notes. Leg 7 is that decision's guard.
 """
 
-import pytest
 from click.testing import CliRunner
 
 from firestarter.cli_handlers import AppContext, cli
@@ -84,11 +83,6 @@ _AUTO_SET_LINE = "auto-setting --skip-sdp-unlock on your behalf"
 # string) so a future addition of such a warning, however it is worded
 # around this fragment, fails leg 7 loudly rather than passing silently.
 _BLANK_CHECK_VACUITY_FRAGMENT = "no-blank-check has nothing to skip"
-
-
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
 
 
 def _drive_write(

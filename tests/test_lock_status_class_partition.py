@@ -24,8 +24,8 @@ Coverage (task numbering matches `151-12-PLAN.md`):
   Task 1 (this file's first half):
     1. Exhaustiveness -- every database row resolves into the frozen token
        set.
-    2. Disjointness / determinism -- one token per row, two consecutive
-       walks byte-equal.
+    2. Disjointness / determinism -- (vendor, part_number) unique in the
+       database, two consecutive walks byte-equal.
     3. The census, pinned as literals: `no_mechanism` by per-algorithm
        count, `not_implemented` as a key set (the `0x10` rows plus the one
        `0x34` row, the OD-2 / `151-DESIGN.md` §4 correction that supersedes
@@ -204,11 +204,9 @@ def test_every_row_resolves_exhaustively() -> None:
 # Leg 2: disjointness and determinism
 
 
-def test_exactly_one_token_per_row() -> None:
-    """Every resolved row carries exactly one `(token, reason)` result --
-    `protection_gate_for_entry` returns a single 2-tuple, never a
-    per-token collection, so this is really asserting the walk never
-    double-counts a vendor/part_number key."""
+def test_vendor_and_part_number_are_unique_in_the_database() -> None:
+    """No two rows in the shipped database share a (vendor, part_number)
+    key, so each key names one row and the walk resolves it once."""
     db = _load_db()
     resolutions = _resolve_database_or_raise(db)
     keys = [_key(r.vendor, r.part_number) for r in resolutions]

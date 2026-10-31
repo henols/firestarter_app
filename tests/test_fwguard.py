@@ -19,49 +19,35 @@ Covers four paths through SerialCommunicator._probe_port's pre-v1.2 guard:
 CAP-02 UPDATE: the version no longer arrives as the "FW: <ver>" text line of a
 dedicated CMD_FW_VERSION probe — that probe is retired. It now rides in the
 MSG_OK_READY ack and is decoded into `SerialCommunicator.firmware_identity`.
-These tests therefore patch that attribute (class-level, so patch.object works)
-instead of stuffing a version into expect_ack's message string. The GUARD
-POLICY under test is unchanged: _validate_firmware_version still receives the
-same "<major>.<minor>.<patch>" shape, because _probe_port strips the ":<board>"
-suffix with the same [\\d.x]+ extraction the old regex performed.
+These tests therefore feed a real CAP-02 ack that carries the version. The
+GUARD POLICY under test is unchanged: _validate_firmware_version still receives
+the same "<major>.<minor>.<patch>" shape, because _probe_port strips the
+":<board>" suffix with the same [\\d.x]+ extraction the old regex performed.
 
-The tests short-circuit the real serial connection via unittest.mock.patch.object
-per PATTERNS §"firestarter_app/tests/test_fwguard.py". An autouse class fixture
-guarantees the escape-hatch env var is UNSET for every test that expects the
-strict path, so the suite is hermetic against the developer's shell environment.
+The probe opens a fake port that answers the setup command with that ack.
 """
 
 import contextlib
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from firestarter.frame_parser import Response
 from firestarter.serial_comm import FirmwareOutdatedError, SerialCommunicator
+
+from .conftest import AnsweringSerial, port_opens
+from .fixtures.ready_ack import ready_ack_frame
 
 
 @contextlib.contextmanager
 def _probe_with_identity(identity):
-    """Patch out serial I/O and pin the CAP-02 firmware identity string.
+    """Open a fake port whose setup ack carries the CAP-02 identity string.
 
     `identity` mirrors the real wire value: "<version>:<board>", e.g.
     "3.0.0:uno". Passing the board suffix is deliberate — it keeps these tests
     honest about _probe_port having to strip it before the version policy runs.
+    None sends the 2-byte ack of firmware before CAP-02.
     """
-    with (
-        patch.object(
-            SerialCommunicator,
-            "expect_ack_response",
-            return_value=Response(type="OK", message="Ready"),
-        ),
-        patch.object(SerialCommunicator, "send_command", return_value=42),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-        patch.object(SerialCommunicator, "disconnect", return_value=None),
-        patch.object(SerialCommunicator, "firmware_identity", identity),
-        # setup_command asserts the link is open (207.1 D-11)
-        patch.object(SerialCommunicator, "is_connected", return_value=True),
-        patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
-    ):
+    with port_opens(AnsweringSerial(ready_ack_frame(identity=identity))):
         yield
 
 
@@ -77,16 +63,6 @@ def _probe():
 
 class TestFirmwareVersionGuard:
     """LFW-05 / LHOST-04 — host refuses pre-v1.2 firmware at probe time."""
-
-    @pytest.fixture(autouse=True)
-    def _clear_escape_hatch(self, monkeypatch):
-        """Ensure the dev escape-hatch env var is unset for every test by default.
-
-        Tests that explicitly want it set call `monkeypatch.setenv(...)` AFTER
-        this autouse fixture has cleared it; the per-test setenv then overrides
-        the delenv for the duration of that single test.
-        """
-        monkeypatch.delenv("FIRESTARTER_DEV_ALLOW_PRE_V12", raising=False)
 
     def test_refuse_pre_v3_firmware(self):
         """LFW-05 / LHOST-04 path: refuse. v2.0.11 firmware must trip the guard."""

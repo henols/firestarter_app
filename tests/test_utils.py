@@ -43,18 +43,17 @@ def test_is_valid_hex_string(s: str, expected: bool) -> None:
 
 
 @pytest.mark.parametrize(
-    "size, expected_unit",
+    "size, expected",
     [
-        (1023, "B"),
-        (1024, "KB"),
-        (1024 * 1024, "MB"),
-        (1024 * 1024 * 1024, "GB"),
+        (1023, "1023.00 B"),
+        (1024, "1.00 KB"),
+        (1536, "1.50 KB"),
+        (1024 * 1024, "1.00 MB"),
+        (1024 * 1024 * 1024, "1.00 GB"),
     ],
 )
-def test_format_size_picks_correct_unit(size: int, expected_unit: str) -> None:
-    out = format_size(size)
-    assert out is not None
-    assert expected_unit in out
+def test_format_size_picks_correct_unit(size: int, expected: str) -> None:
+    assert format_size(size) == expected
 
 
 @pytest.mark.parametrize(

@@ -15,7 +15,7 @@ prove the bit actually reaches the composed wire command.
 
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 from click.testing import CliRunner
@@ -28,15 +28,14 @@ from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
-from firestarter.messages import (
-    MSG_END_DONE,
-    MSG_INIT_DONE,
-    MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
-    MSG_WARN_SDP_UNLOCK_SKIPPED,
-)
+from firestarter.messages import MSG_WARN_SDP_UNLOCK_SKIPPED
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import (
+    build_frame,
+    connect_via,
+    fresh_serial_and_comm,
+    write_success_frames,
+)
 from .conftest import make_app_context as _make_app_context
 
 # --- Concrete chip names, drawn from 120-SDP-PARTITION.md section 3, mirroring
@@ -91,45 +90,6 @@ def make_app_context(
     )
 
 
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
-
-
-def _fresh_serial_and_comm():
-    """Build an independent (fake_serial, make_comm) pair.
-
-    Mirrors conftest.py's `fake_serial`/`make_comm` fixtures exactly, but as
-    a plain function rather than a fixture pair -- needed only by the
-    two-leg RETIRE-07 tripwire test below, which drives two full,
-    independent `write` invocations in one test function. The
-    fixture-injected pair cannot be reused for a second drive: the first
-    drive's `SerialCommunicator` closes its fake serial port
-    (`_FakeSerial.close()` sets `is_open = False`) at the end of a
-    successful write, so a second `_drive_write` call sharing that same
-    fake_serial fails with "Not connected" -- this is what a same-fixture
-    two-drive test measures instead of the intended behaviour.
-    """
-    from firestarter.serial_comm import SerialCommunicator
-
-    serial = _FakeSerial()
-
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = serial
-        instance.port_name = "/dev/null"
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        instance._fault_inject_outgoing = None
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.seen_message_ids = set()
-        return instance
-
-    return serial, _factory
-
-
 def _drive_write(
     runner: CliRunner,
     chip: str,
@@ -141,14 +101,12 @@ def _drive_write(
     """Invoke `firestarter write <chip> <file> [extra_args]` end to end.
 
     Drives a full, successful write through a REAL EpromOperator wired to a
-    fake serial port -- INIT_DONE -> OK_REQ_DATA (one data block requested) ->
-    MAIN_DONE -> END_DONE, the same happy-path frame sequence
-    `test_characterization.py::test_write_happy_path` pins for `write` --
-    while patching `SerialCommunicator.find_and_connect` to capture the
-    composed `command_dict` at the exact point it would cross onto the wire.
+    fake serial port, the standard `write_success_frames()` sequence, and
+    captures the composed `command_dict` at the exact point it would cross
+    onto the wire (`find_and_connect`, through `connect_via`).
 
-    Returns (result, captured) where `captured["command_dict"]` is the dict
-    passed to `find_and_connect`.
+    Returns (result, captured): `captured[0]` is the command dict the
+    operator connected with.
 
     Plan 120-10 / D-15 note: on a protocol-0x0D chip, real (post-Phase-119)
     firmware emits MSG_WARN_SDP_UNLOCK_SKIPPED (0x86) as part of this exact
@@ -175,23 +133,12 @@ def _drive_write(
 
     if is_protocol_0x0d:
         fake_serial.feed(build_frame(MSG_WARN_SDP_UNLOCK_SKIPPED, b""))
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    captured: dict = {}
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        captured["command_dict"] = command_dict
-        return make_comm()
+    for frame in write_success_frames():
+        fake_serial.feed(frame)
 
     app = make_app_context()
     args = ["write", chip, str(input_file), *(extra_args or [])]
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(make_comm) as captured:
         result = runner.invoke(cli, args, obj=app)
     return result, captured
 
@@ -213,7 +160,7 @@ def test_explicit_flag_sets_bit_0x100_on_the_wire(
         extra_args=["--skip-sdp-unlock"],
     )
     assert result.exit_code == 0, result.output
-    assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
+    assert captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK
 
 
 # Allowed 0x0D part, no flag -- auto-set must be scoped, not blanket
@@ -229,7 +176,7 @@ def test_no_flag_on_an_allowed_0x0d_part_emits_no_skip_bit_and_no_auto_set_line(
         runner, _ALLOWED_CHIP, tmp_path, make_comm, fake_serial
     )
     assert result.exit_code == 0, result.output
-    assert not (captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK)
+    assert not (captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK)
     assert "auto-setting --skip-sdp-unlock" not in result.output
 
 
@@ -243,7 +190,7 @@ def test_refused_0x0d_part_gets_the_bit_auto_set_with_an_unconditional_report_li
     proves default visibility, not verbosity-gated visibility."""
     result, captured = _drive_write(runner, chip, tmp_path, make_comm, fake_serial)
     assert result.exit_code == 0, result.output
-    assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
+    assert captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK
     assert chip.upper() in result.output
     assert "auto-setting --skip-sdp-unlock on your behalf" in result.output
 
@@ -267,7 +214,7 @@ def test_auto_set_line_is_not_duplicated_when_the_user_passed_the_flag(
         extra_args=["--skip-sdp-unlock"],
     )
     assert result.exit_code == 0, result.output
-    assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
+    assert captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK
     assert "auto-setting --skip-sdp-unlock on your behalf" not in result.output
 
 
@@ -288,7 +235,7 @@ def test_non_0x0d_chip_with_the_flag_warns_and_proceeds(
     )
     assert result.exit_code == 0, result.output
     assert "has no effect on this chip's protocol" in result.output
-    assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
+    assert captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK
 
 
 def test_non_0x0d_chip_without_the_flag_is_unchanged(
@@ -302,7 +249,7 @@ def test_non_0x0d_chip_without_the_flag_is_unchanged(
     assert result.exit_code == 0, result.output
     assert "has no effect on this chip's protocol" not in result.output
     assert "auto-setting --skip-sdp-unlock" not in result.output
-    assert not (captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK)
+    assert not (captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK)
 
 
 def test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on(
@@ -341,7 +288,7 @@ def test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on(
         runner, _UNRECOGNISED_28PIN_CHIP, tmp_path, make_comm, fake_serial
     )
     assert refused_result.exit_code == 0, refused_result.output
-    assert refused_captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK, (
+    assert refused_captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK, (
         "RETIRE-07/D-14 TRIPWIRE FIRED: a capability-refused protocol-0x0D "
         "part did NOT get FLAG_SKIP_SDP_UNLOCK auto-set on a plain write. "
         "The host's SDP auto-unlock is no longer default-on for this case, "
@@ -358,13 +305,13 @@ def test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on(
 
     # A second, independent (fake_serial, make_comm) pair -- the fixture-
     # injected pair used above is already closed by the drive that just
-    # completed. See _fresh_serial_and_comm's docstring.
-    allowed_serial, allowed_comm = _fresh_serial_and_comm()
+    # completed.
+    allowed_serial, allowed_comm = fresh_serial_and_comm()
     allowed_result, allowed_captured = _drive_write(
         runner, _ALLOWED_CHIP, tmp_path, allowed_comm, allowed_serial
     )
     assert allowed_result.exit_code == 0, allowed_result.output
-    assert not (allowed_captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK), (
+    assert not (allowed_captured[0]["flags"] & FLAG_SKIP_SDP_UNLOCK), (
         "RETIRE-07/D-14 TRIPWIRE FIRED (discriminating leg): a capability-"
         "ALLOWED protocol-0x0D part got FLAG_SKIP_SDP_UNLOCK auto-set on a "
         "plain write. The host's SDP auto-unlock is no longer conditional -- "
