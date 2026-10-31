@@ -22,19 +22,6 @@ from firestarter.config import get_local_database, get_local_pin_maps
 from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.erase_support import erase_accepted
 
-PROTOCOL_MAP = {
-    0x05: "FLASH_AMD_STD",
-    0x06: "FLASH_AMD_ALT",
-    0x07: "EPROM_STD",
-    0x08: "EPROM_QUICK",
-    0x0B: "EPROM_LEGACY",
-    0x0D: "EEPROM_POLL",
-    0x10: "FLASH_INTEL",
-    0x28: "SRAM_STD",
-}
-
-# Module-level constants
-types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 0x100
 ROM_OE = 0x101
 # pin_conversions: RURP board-wiring layer.
@@ -765,68 +752,3 @@ class EpromDatabase:
                             f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"  # noqa: E501
                         )
         return selected_proms
-
-
-def main():  # Test function
-    """
-    Main function for standalone testing or demonstration of the database module.
-    """
-    logging.basicConfig(
-        level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
-    )
-    db = EpromDatabase()  # Initializes the database
-
-    chip_name = "W27C512"
-    print(f"\n--- Getting EPROM config for: {chip_name} ---")
-    config, manufacturer = db.get_eprom_config(chip_name)
-    if config is None:
-        print(f"Prom {chip_name} not found")
-    else:
-        print(f"Found {config.get('name')} from {manufacturer}")
-        print(json.dumps(config, indent=2))
-
-    print(f"\n--- Getting full EPROM data for: {chip_name} ---")
-    full_data = db.get_eprom(chip_name)
-    if full_data:
-        print(json.dumps(full_data, indent=2))
-    else:
-        print(f"EPROM {chip_name} not found.")
-
-    print(f"\n--- Getting concise EPROM data for: {chip_name} ---")
-    full_data_for_conversion = db.get_eprom(chip_name)
-    concise_data = None
-    if full_data_for_conversion:
-        concise_data = db.convert_to_programmer(full_data_for_conversion)
-    if concise_data:
-        print(json.dumps(concise_data, indent=2))
-    else:
-        print(f"EPROM {chip_name} not found.")
-
-    # print("\n--- Listing all EPROMs (first 5) ---")
-    # all_eproms = db.get_eproms()
-    # for eprom_data in all_eproms[:5]:
-    #     print(f"  - {eprom_data['name']} by {eprom_data['manufacturer']}")
-
-    # print("\n--- Searching for '27C256' ---")
-    # search_results = db.search_eprom("27C256")
-    # for res in search_results:
-    #     print(f"  - {res['name']} by {res['manufacturer']}")
-
-    # Example: Test get_pin_map and get_bus_config if config was found
-    if config:
-        variant = None
-        pin_count = config.get("pin-count")
-        variant = config.get("pin-map", config.get("variant"))
-        if pin_count and not variant is None:  # noqa: E714
-            print("\n--- Pin Map ---")
-            pin_map_details = db.get_pin_map(pin_count, variant)
-            print(json.dumps(pin_map_details, indent=2))
-            print("\n--- Bus Config ---")
-            bus_config_details = db.get_bus_config(
-                pin_count, variant, chip_address_width(config.get("memory-size", 0))
-            )
-            print(json.dumps(bus_config_details, indent=2))
-
-
-if __name__ == "__main__":
-    main()

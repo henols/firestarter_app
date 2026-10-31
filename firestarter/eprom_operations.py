@@ -2258,9 +2258,9 @@ class EpromOperator:
         firestarter=False,
         flags: int = 0,
     ) -> bool:
-        msb = int(msb_str, 16) if "0x" in msb_str else int(msb_str)
-        lsb = int(lsb_str, 16) if "0x" in lsb_str else int(lsb_str)
-        ctrl_reg = int(ctrl_reg_str, 16) if "0x" in ctrl_reg_str else int(ctrl_reg_str)
+        msb = parse_address(msb_str)
+        lsb = parse_address(lsb_str)
+        ctrl_reg = parse_address(ctrl_reg_str)
         if msb < 0 or msb > 0xFF:
             logger.error(f"Invalid MSB value: 0x{msb:02x} {msb}")
             return False

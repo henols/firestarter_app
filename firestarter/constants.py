@@ -18,21 +18,6 @@ FIRESTARTER_RELEASE_BY_TAG_URL = (
 # Constants
 BAUD_RATE = "250000"
 
-BUFFER_SIZE = 512
-LEONARDO_BUFFER_SIZE = 1024
-
-# Max host->fw DATA chunk (write/verify pull-protocol). LOCKSTEP CONTRACT with the
-# firmware COBS decoder rurp_communication_read_data: it commits at most
-# DATA_BUFFER_SIZE-1 payload bytes (the guard reserves the NUL-terminator slot).
-# The decoded payload is data_chunk + CRC8, so the data chunk must
-# satisfy len(data) + 1 (CRC) <= DATA_BUFFER_SIZE - 1, i.e. len(data) <= BUFFER_SIZE - 2.
-# Sending a full BUFFER_SIZE (512) chunk overflows the decoder -> "Data error: -2"
-# and breaks write/verify on every board (bench-confirmed on both Uno + Leonardo).
-# OBSOLETE: _calculate_buffer_size now reads firmware_max_chunk
-# directly; this constant is no longer used as the chunk-size default. Retained to
-# avoid breaking external references.
-MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
-
 # Command-channel frame size limit — Firmware sync: firestarter.h CMD_FRAME_MAX
 # The transport's frame cap; a binary command frame is at most 65 B.
 # Firmware parity: firestarter.h #define CMD_FRAME_MAX DATA_BUFFER_SIZE

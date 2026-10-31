@@ -5,12 +5,7 @@ floor.
 
 import pytest
 
-from firestarter.utils import (
-    extract_hex_to_decimal,
-    format_size,
-    is_valid_hex_string,
-    time_formatter,
-)
+from firestarter.utils import extract_hex_to_decimal, print_to
 
 
 @pytest.mark.parametrize(
@@ -27,46 +22,18 @@ def test_extract_hex_to_decimal(s: str, expected) -> None:
     assert extract_hex_to_decimal(s) == expected
 
 
-@pytest.mark.parametrize(
-    "s, expected",
-    [
-        ("0x1A2B3C", True),
-        ("0X10", True),
-        ("0xff", True),
-        ("123ABC", False),
-        ("0xZZ", False),
-        ("", False),
-    ],
-)
-def test_is_valid_hex_string(s: str, expected: bool) -> None:
-    assert is_valid_hex_string(s) is expected
+def test_print_to_uses_the_console_when_given(capsys) -> None:
+    printed = []
+
+    class _Console:
+        def print(self, msg: str) -> None:
+            printed.append(msg)
+
+    print_to("hello", console=_Console())
+    assert printed == ["hello"]
+    assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize(
-    "size, expected_unit",
-    [
-        (1023, "B"),
-        (1024, "KB"),
-        (1024 * 1024, "MB"),
-        (1024 * 1024 * 1024, "GB"),
-    ],
-)
-def test_format_size_picks_correct_unit(size: int, expected_unit: str) -> None:
-    out = format_size(size)
-    assert out is not None
-    assert expected_unit in out
-
-
-@pytest.mark.parametrize(
-    "seconds, expected",
-    [
-        (0, "0s"),
-        (45, "45s"),
-        (60, "1m 0s"),
-        (65, "1m 5s"),
-        (3600, "1h 0m 0s"),
-        (3665, "1h 1m 5s"),
-    ],
-)
-def test_time_formatter(seconds: int, expected: str) -> None:
-    assert time_formatter(seconds) == expected
+def test_print_to_falls_back_to_stdout(capsys) -> None:
+    print_to("hello")
+    assert capsys.readouterr().out == "hello\n"

@@ -40,11 +40,6 @@ from urllib.parse import quote, urlencode
 
 from rich.prompt import Confirm
 
-# `chip_test` is already transitively present in this module's import graph
-# via `diagnostic_report` (which imports `_RAN_VERDICTS` etc. from it), and
-# it imports no serial-transport or hardware-manager class -- so importing
-# `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY
-# invariant stated in this module's docstring.
 from firestarter.chip_test import (
     STATUS_COMPLETE,
     STATUS_ERROR,
@@ -52,6 +47,13 @@ from firestarter.chip_test import (
     resolve_error_name,
 )
 from firestarter.diagnostic_report import is_submittable
+
+# `chip_test` is already transitively present in this module's import graph
+# via `diagnostic_report` (which imports `_RAN_VERDICTS` etc. from it), and
+# it imports no serial-transport or hardware-manager class -- so importing
+# `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY
+# invariant stated in this module's docstring.
+from firestarter.utils import print_to as _print
 
 # ---------------------------------------------------------------------------
 # Module constants
@@ -674,13 +676,6 @@ def comment_via_gh(
 # ---------------------------------------------------------------------------
 # Browser tier + oversize escalation
 # ---------------------------------------------------------------------------
-
-
-def _print(msg: str, *, console: Any = None) -> None:
-    if console is not None:
-        console.print(msg)
-    else:
-        print(msg)
 
 
 def submit_via_browser(

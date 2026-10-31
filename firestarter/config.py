@@ -239,11 +239,3 @@ class ConfigManager:
         Returns all configuration keys and values as a dictionary.
         """
         return self._config.copy()
-
-
-# For testing or standalone execution
-if __name__ == "__main__":
-    cfg_manager = ConfigManager()
-    print("Current Configuration:")
-    for key, value in cfg_manager.list_all().items():
-        print(f"{key}: {value}")
