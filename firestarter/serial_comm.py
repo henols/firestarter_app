@@ -145,7 +145,6 @@ class SerialCommunicator:
         self.programmer_info: str | None = None
         # Fault-injection hook — None by default; production path is byte-identical.
         # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
-        # getattr-guarded in _send_framed; this attribute is the formal default.
         self._fault_inject_outgoing: Callable[[bytes], bytes] | None = None
         # DEPRECATED: firmware_buffer_size was set by the earlier
         # identity-string parse (3rd colon-field). That parse block is removed; capacity
@@ -171,15 +170,6 @@ class SerialCommunicator:
         # _probe_port does.
         self.firmware_identity: str | None = None
         self.hw_revision: int | None = None
-        # The firmware's advertised worst-case seconds for
-        # one write block. The firmware ALREADY pads this figure -- only it
-        # knows its own delay(500) VPE settle, the final full-block verify
-        # pass and the per-pulse settle -- so the host applies no multiplier
-        # of its own on top. None means "not advertised", and
-        # downstream that means a safe default applies, never an error and
-        # never a refusal (mirroring the buffer-size field's own reversal of
-        # FirmwareOutdatedError into a safe default). Populated by
-        # _decode_id_frame below. Consumed only on the write path.
         # Bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
@@ -263,9 +253,8 @@ class SerialCommunicator:
         # Production path: attribute is None by default → no-op.
         # Hook is set only within fault_inject_cycle / dev fault-inject scope and
         # cleared after the single corrupted transfer.
-        _hook = getattr(self, "_fault_inject_outgoing", None)
-        if _hook is not None:
-            frame = _hook(frame)
+        if self._fault_inject_outgoing is not None:
+            frame = self._fault_inject_outgoing(frame)
         return self.send_bytes(frame)
 
     def _parse_response_line(self, line_bytes: bytes) -> Response | None:
