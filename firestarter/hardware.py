@@ -7,7 +7,6 @@ Hardware Management Module
 """
 
 import logging
-import statistics
 import time
 from typing import NamedTuple, TypedDict
 
@@ -559,6 +558,8 @@ class HardwareManager:
         finally:
             if comm:
                 comm.disconnect()
+
+        import statistics
 
         return int(statistics.median(samples)) if samples else None
 

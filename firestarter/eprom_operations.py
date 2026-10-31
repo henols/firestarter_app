@@ -11,15 +11,11 @@ import hashlib
 import logging
 import os
 import shutil
-import statistics
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO
-
-import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from firestarter import command_frame as cf
 from firestarter import transport_counters, write_budget
@@ -436,6 +432,10 @@ class ClassProgressHandler:
         if self.progress_callback:
             self.progress_callback(self.current_step, total_steps)
         else:
+            # tqdm loads asyncio: imported here, not at CLI start.
+            import tqdm
+            from tqdm.contrib.logging import logging_redirect_tqdm
+
             if self.pbar:
                 self.pbar.close()  # Close old one if any
             logging_redirect_tqdm()
@@ -895,6 +895,8 @@ class EpromOperator:
         self.last_firmware_error_message = None
         self._read_abort_stopped_at = None
         self._read_abort_accepted = False
+        from tqdm.contrib.logging import logging_redirect_tqdm
+
         try:
             with logging_redirect_tqdm():
                 # --- INIT Phase ---
@@ -2113,6 +2115,8 @@ class EpromOperator:
                 "structural_floor": floor_str,
                 "remainder": "unmeasured",
             }
+        import statistics
+
         median = statistics.median_low(samples)
         return {
             "samples": str(len(samples)),
