@@ -204,7 +204,7 @@ class HardwareManager:
         Returns True if successful, False otherwise.
         """
         logger.info("Reading hardware revision...")
-        return self._query_ack(_command(COMMAND_HW_VERSION, flags), "hardware revision")
+        return self._query_ack(_command(COMMAND_HW_VERSION, flags), "Hardware revision")
 
     def _query_ack(self, command: dict, label: str) -> bool:
         """Connect, log the data ack that follows the setup ack, disconnect.
@@ -217,12 +217,12 @@ class HardwareManager:
             comm = SerialCommunicator.find_and_connect(command, self.config)
             is_ok, msg = comm.expect_ack()
             if is_ok:
-                logger.info(f"{label[0].upper()}{label[1:]}: {msg}")
+                logger.info(f"{label}: {msg}")
                 return True
-            logger.error(f"Failed to read {label}: {msg}")
+            logger.error(f"Failed to read {label.lower()}: {msg}")
             return False
         except SerialError as e:
-            logger.error(f"Failed to read {label}: {e}")
+            logger.error(f"Failed to read {label.lower()}: {e}")
             return False
         finally:
             if comm:
@@ -318,7 +318,7 @@ class HardwareManager:
             logger.info(f"Setting hardware configuration: {', '.join(log_parts)}")
 
         if not log_parts:
-            return self._query_ack(command, "hardware configuration")
+            return self._query_ack(command, "Hardware configuration")
         success, _ = self._execute_simple_command(command, "Hardware configuration")
         return success
 

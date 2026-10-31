@@ -75,7 +75,7 @@ from firestarter.constants import (
     FLAG_CHIP_ENABLE,
     FLAG_OUTPUT_ENABLE,
 )
-from firestarter.database import EpromDatabase, _strip_mode
+from firestarter.database import EpromDatabase, strip_mode
 from firestarter.diagnostic_report import (
     AutoCapture,
     DiagnosticReport,
@@ -3141,10 +3141,10 @@ def _canonical_part_number(part_number: str | None, raw_token: str) -> str | Non
         for alias in aliases:
             if alias.lower() == query:
                 return alias
-        query_stripped = _strip_mode(raw_token)
+        query_stripped = strip_mode(raw_token)
         if query_stripped:
             for alias in aliases:
-                if _strip_mode(alias) == query_stripped:
+                if strip_mode(alias) == query_stripped:
                     return alias
 
     return part_number.split(",")[0].strip()

@@ -2980,7 +2980,7 @@ def _sample(sampler: Any, phase: str) -> None:
         return
     try:
         sampler(phase)
-    except Exception:  # LE001 -- best-effort diagnostic, swallow all
+    except Exception:  # best-effort diagnostic, swallow all
         pass
 
 

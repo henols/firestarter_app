@@ -479,7 +479,7 @@ def find_dfu_interfaces(
                 if interface.iInterface:
                     try:
                         name = usb.util.get_string(device, interface.iInterface)
-                    except Exception:  # LE001 — string descriptors are optional
+                    except Exception:  # string descriptors are optional
                         name = None
 
                 found.append(
@@ -512,7 +512,7 @@ def dfu_device_present() -> bool:
             interface.protocol == DFU_PROTOCOL_DFU_MODE
             for interface in find_dfu_interfaces()
         )
-    except Exception:  # LE001 — a hint must never break the install path
+    except Exception:  # a hint must never break the install path
         return False
 
 
@@ -760,7 +760,7 @@ class Py32DfuFlasher:
             interface.device.ctrl_transfer(
                 _OUT, DFU_DETACH, 1000, interface.interface, None
             )
-        except Exception as exc:  # LE001 — many stacks fault on DETACH
+        except Exception as exc:  # many stacks fault on DETACH
             logger.debug("DETACH raised (often expected): %s", exc)
         _sleep(1.0)
 
@@ -973,7 +973,7 @@ class Py32DfuFlasher:
 
         try:
             self._dnload(next_block, b"")
-        except Exception as exc:  # LE001 — device may reset immediately
+        except Exception as exc:  # device may reset immediately
             logger.debug("Zero-length DNLOAD raised (device may have reset): %s", exc)
             return
 
@@ -987,7 +987,7 @@ class Py32DfuFlasher:
                 )
         except DfuProtocolError:
             raise
-        except Exception as exc:  # LE001 — reset during manifest is success
+        except Exception as exc:  # reset during manifest is success
             logger.debug("Device left the bus during manifest (expected): %s", exc)
 
 

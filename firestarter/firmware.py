@@ -778,7 +778,7 @@ class FirmwareManager:
                     "bootloader mode, install with: firestarter fw --install "
                     "--board py32f071"
                 )
-        except Exception:  # LE001 — a hint must never break the flow
+        except Exception:  # a hint must never break the flow
             pass
 
     @staticmethod
