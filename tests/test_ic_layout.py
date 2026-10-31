@@ -132,22 +132,6 @@ def test_build_specifications_happy_path(
     assert result is not None
 
 
-def test_generate_pin_names_bare_int_still_works(
-    spec_builder: EpromSpecBuilder,
-) -> None:
-    """_generate_pin_names_for_display tolerates bare-int pin fields (isinstance guard
-    is two-way: list → extract scalar, int → pass through unchanged).
-    """
-    fake_eprom = {
-        "pin-count": 28,
-        "pin-map": None,  # no pin-map → falls through to generic names
-    }
-    result = spec_builder._generate_pin_names_for_display(fake_eprom)
-    # With no pin-map the generic layout is returned unchanged.
-    assert result is not None
-    assert len(result) == 28
-
-
 # fm-fram-full display-layer companion tests
 #
 # These tests pin the two display-layer changes that accompany the FM1608

@@ -513,7 +513,9 @@ def test_write_verify_arm1_guard_refusal_exits_1_and_prints_nothing_more(
     operator.last_write_guard_verdict = 1
     operator.last_write_attempt_verdict = None
     result = _run_write(runner, operator, extra_args=["--verify"])
+    assert isinstance(result.exception, SystemExit), result.exception
     assert result.exit_code == 1
+    operator.write_eprom.assert_called_once()
     assert operator.verify_eprom.call_count == 0
     lines = [line for line in result.output.splitlines() if line.strip()]
     assert lines == []

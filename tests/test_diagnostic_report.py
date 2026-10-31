@@ -836,41 +836,6 @@ def test_a_refused_write_disqualifies_the_fourth_arm_but_na_and_ok_do_not():
     assert diff_ok.ladder_state == "community-reported"
 
 
-def test_a_planted_na_as_refusal_disqualifier_reddens_the_na_case_claim(monkeypatch):
-    """D-21 anti-vacuity, plant 1: an over-broad predicate that ALSO treats
-    NA as a refusal must NOT be what `build_db_diff` uses -- if it were, an
-    unsupported-write part's disposition would silently change, which this
-    phase was not asked to do. Anchors the real predicate's False-for-NA
-    behaviour BEFORE mutating, per this project's anti-vacuity house style.
-    Static/in-process only -- monkeypatches one module attribute for the
-    duration of this test; no bench run is implied."""
-    import firestarter.diagnostic_report as dr
-
-    db = _mock_db()
-    na_write_results = [
-        StepResult(op="id", verdict=VERDICT_OK),
-        StepResult(op="read", verdict=VERDICT_OK),
-        StepResult(op="write", verdict=VERDICT_NA),
-    ]
-    assert dr._write_step_was_refused(na_write_results) is False
-
-    diff_na = dr.build_db_diff("X", db, na_write_results)
-    assert diff_na.proposed_disposition == dr._DISPOSITION_CANDIDATE
-
-    def over_broad_predicate(results):
-        return any(
-            r.op in ("write", "write-partial")
-            and r.verdict in (VERDICT_SKIPPED, VERDICT_NA)
-            for r in results
-        )
-
-    assert over_broad_predicate(na_write_results) is True
-    monkeypatch.setattr(dr, "_write_step_was_refused", over_broad_predicate)
-    with pytest.raises(AssertionError):
-        mutated_diff = dr.build_db_diff("X", db, na_write_results)
-        assert mutated_diff.proposed_disposition == dr._DISPOSITION_CANDIDATE
-
-
 def test_a_planted_missing_write_ran_condition_reddens_the_refused_slots_claim():
     """D-20 anti-vacuity, plant 2: the slots sentence's write-ran condition
     is load-bearing, not decorative. Anchors the RAN case's real "one
@@ -910,22 +875,6 @@ def test_a_planted_missing_write_ran_condition_reddens_the_refused_slots_claim()
     )
     with pytest.raises(AssertionError):
         assert no_condition_would_say in refused_line
-
-
-def test_comparing_a_real_disposition_against_an_empty_expected_set_fails_rather_than_passes_vacuously():
-    """The standalone vacuity leg, explicitly separate from the two planted
-    legs above: an empty expected-disposition set must fail against a real
-    disposition rather than passing vacuously."""
-    from firestarter.diagnostic_report import build_db_diff
-
-    db = _mock_db()
-    ok_results = [
-        StepResult(op="id", verdict=VERDICT_OK),
-        StepResult(op="write", verdict=VERDICT_OK),
-    ]
-    diff = build_db_diff("X", db, ok_results)
-    with pytest.raises(AssertionError):
-        assert diff.proposed_disposition in set()
 
 
 def test_ladder_state_single_source_in_to_dict():

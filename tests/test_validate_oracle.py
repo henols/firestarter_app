@@ -11,6 +11,7 @@ Covers (all software-testable, no serial port required):
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -110,10 +111,15 @@ class TestNegativeControl:
             ],
             obj=app,
         )
-        # Exit code is the verdict_int (1 = FAIL)
+        # Exit code is the verdict_int (1 = FAIL), raised as a SystemExit
+        # rather than as a crash.
+        assert isinstance(result.exception, SystemExit), result.exception
         assert result.exit_code == 1, (
             f"Expected exit 1 (FAIL), got {result.exit_code}. Output: {result.output}"
         )
+        operator.write_cycle_eprom.assert_called_once()
+        data = json.loads((tmp_path / "validation-matrix.json").read_text())
+        assert [cell["verdict"] for cell in data["cells"]] == ["FAIL"], data["cells"]
 
 
 # uno328pb hard N/A (T-71-UNO328 mitigation)
@@ -148,8 +154,6 @@ class TestUno328pbNA:
         )
         # Exits 0 (N/A is not a failure)
         assert result.exit_code == 0, result.output
-
-        import json
 
         data = json.loads((tmp_path / "validation-matrix.json").read_text())
         cells = data["cells"]
@@ -345,8 +349,6 @@ class TestLeonardoAuthoritativePass:
         )
         assert result.exit_code == 0, result.output
 
-        import json
-
         data = json.loads((tmp_path / "validation-matrix.json").read_text())
         cells = data["cells"]
         assert cells
@@ -392,8 +394,6 @@ class TestLeonardoAuthoritativePass:
         )
         assert result.exit_code == 0, result.output
 
-        import json
-
         data = json.loads((tmp_path / "validation-matrix.json").read_text())
         cells = data["cells"]
         assert cells
@@ -421,8 +421,6 @@ class TestRetryCount:
             ["dev", "validate-family", "eprom", "--output-dir", str(tmp_path)],
             obj=app,
         )
-        import json
-
         data = json.loads((tmp_path / "validation-matrix.json").read_text())
         for cell in data["cells"]:
             assert "retry_count" in cell, f"retry_count missing from {cell}"
@@ -454,8 +452,6 @@ class TestRetryCount:
             ],
             obj=app,
         )
-        import json
-
         data = json.loads((tmp_path / "validation-matrix.json").read_text())
         cells = data["cells"]
         assert cells

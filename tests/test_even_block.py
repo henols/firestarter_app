@@ -6,66 +6,76 @@ Permission is hereby granted under MIT license.
 
 Phase 54 Plan 02 — Host pytest even-block suite (EVEN-01).
 
-Pins three properties:
+Pins two properties:
 
-1. No-remainder arithmetic (EVEN-01 SC2): a 65536-byte chip image divides into
-   whole even blocks at both Uno (512) and Leonardo (1024) sizes — no partial
-   last-chunk round trip.
+1. No-remainder write (EVEN-01 SC2): a 65536-byte image is sent as whole
+   blocks of the firmware-advertised chunk size, at both Uno (512) and
+   Leonardo (1024) sizes -- no partial last block.
 
 2. firmware_max_chunk parse contract (CAP-01): _calculate_buffer_size() returns
    firmware_max_chunk directly (no -2 arithmetic); absent field returns 512
    (Uno-floor safe default — Phase 54 D-05 reversed, NO FirmwareOutdatedError).
-
-3. Frame cap boundary (D-07 regression): a 512-byte data block + CRC8 COBS
-   round-trips to the original 512 bytes, confirming the MAIN-path decode cap
-   accommodates a full even block.
 """
 
 from types import SimpleNamespace
 
+import pytest
+
+from firestarter.chip_resolver import resolve_chip
 from firestarter.config import ConfigManager
+from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
-from firestarter.frame_parser import (  # type: ignore[attr-defined]
-    _crc8_ccitt,
-    cobs_decode,
-    cobs_encode,
+from firestarter.frame_parser import cobs_decode
+from firestarter.messages import (
+    MSG_END_DONE,
+    MSG_INIT_DONE,
+    MSG_MAIN_DONE,
+    MSG_OK_REQ_DATA,
 )
 
+from .conftest import build_frame, connect_via, fresh_serial_and_comm
 
-class TestEvenBlockNoRemainder:
-    """No-remainder arithmetic assertions (EVEN-01 SC2).
 
-    On a 65536-byte chip, full-buffer chunk sizes (512 Uno, 1024 Leonardo)
-    divide the image exactly — no odd-sized final remainder write.
-    Power-of-two chip sizes (32768, 131072, 262144) are included per Pitfall 5
-    (all power-of-two sizes are exact multiples of any power-of-two block size).
-    """
+class TestEvenBlockWriteChunks:
+    """No-remainder write (EVEN-01 SC2): a 64 KiB image goes to the
+    firmware as whole blocks of `firmware_max_chunk` bytes, at both the Uno
+    (512) and the Leonardo (1024) size. Drives the genuine
+    `EpromOperator.write_eprom` and decodes every data frame it sends."""
 
-    def test_full_chip_no_remainder_uno(self) -> None:
-        """65536-byte chip divides exactly into 512-byte Uno blocks."""
-        assert 65536 % 512 == 0, (
-            "65536-byte chip must divide exactly into 512-byte blocks"
-        )
+    @pytest.mark.parametrize("max_chunk", [512, 1024])
+    def test_a_64k_write_sends_only_full_blocks(self, tmp_path, max_chunk) -> None:
+        image = bytes(i & 0xFF for i in range(65536))
+        input_file = tmp_path / "image.bin"
+        input_file.write_bytes(image)
+        blocks = len(image) // max_chunk
 
-    def test_full_chip_no_remainder_leonardo(self) -> None:
-        """65536-byte chip divides exactly into 1024-byte Leonardo blocks."""
-        assert 65536 % 1024 == 0, (
-            "65536-byte chip must divide exactly into 1024-byte blocks"
-        )
+        serial, comm_factory = fresh_serial_and_comm()
+        serial.feed(build_frame(MSG_INIT_DONE, b""))
+        for _ in range(blocks):
+            serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+        serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        serial.feed(build_frame(MSG_END_DONE, b""))
 
-    def test_power_of_two_chip_sizes_uno(self) -> None:
-        """Power-of-two chip sizes all divide into 512-byte Uno blocks exactly."""
-        for chip_size in (32768, 65536, 131072, 262144):
-            assert chip_size % 512 == 0, (
-                f"{chip_size}-byte chip must divide exactly into 512-byte blocks"
+        def advertise(comm) -> None:
+            comm.firmware_max_chunk = max_chunk
+
+        operator = EpromOperator(ConfigManager())
+        with connect_via(comm_factory, on_connect=advertise):
+            ok = operator.write_eprom(
+                "m27c512",
+                resolve_chip("m27c512", db=EpromDatabase(skip_local_override=True)),
+                str(input_file),
+                blank_check_requested=False,
             )
 
-    def test_power_of_two_chip_sizes_leonardo(self) -> None:
-        """Power-of-two chip sizes all divide into 1024-byte Leonardo blocks exactly."""
-        for chip_size in (32768, 65536, 131072, 262144):
-            assert chip_size % 1024 == 0, (
-                f"{chip_size}-byte chip must divide exactly into 1024-byte blocks"
-            )
+        assert ok is True
+        sent = [
+            cobs_decode(frame[1:-1])[:-1]
+            for frame in serial.written
+            if frame.startswith(b"#") and frame.endswith(b"\x00")
+        ]
+        assert [len(block) for block in sent] == [max_chunk] * blocks
+        assert b"".join(sent) == image
 
 
 class TestFirmwareMaxChunkParse:
@@ -120,39 +130,3 @@ class TestFirmwareMaxChunkParse:
             f"Result {result} equals the obsolete buf-2 value {fw_buf_minus_2}; "
             "-2 arithmetic must be removed (EVEN-01/D-04)"
         )
-
-
-class TestEvenBlockFrameVectorsCapBoundary:
-    """Frame cap boundary regression (D-07): a 512-byte data block + CRC8 COBS
-    round-trips and decodes to the original 512 bytes, confirming the MAIN-path
-    decode cap (DATA_BUFFER_SIZE == 512) accommodates a full even block.
-
-    Mirrors the host-side encoding of the firmware MAIN-path decode at cap=512.
-    """
-
-    def test_512_byte_all_ff_round_trips(self) -> None:
-        """VEC_512_ALL_FF analog: 512-byte all-0xFF payload COBS encodes+decodes correctly."""
-        data = bytes([0xFF] * 512)
-        crc = _crc8_ccitt(data)
-        payload = data + bytes([crc])
-        frame = cobs_encode(payload) + b"\x00"
-
-        # Decode: strip delimiter, COBS decode
-        decoded = cobs_decode(frame[:-1])
-        assert decoded == payload, "COBS round-trip must preserve payload + CRC8"
-        assert decoded[:-1] == data, "Decoded data must match original 512 bytes"
-        assert decoded[-1] == crc, "Decoded CRC8 must match computed CRC8"
-        assert len(decoded[:-1]) == 512, "Decoded data length must be 512 bytes"
-
-    def test_512_byte_all_zero_round_trips(self) -> None:
-        """VEC_512_ALL_ZERO analog: 512-byte all-0x00 payload COBS encodes+decodes correctly."""
-        data = bytes([0x00] * 512)
-        crc = _crc8_ccitt(data)
-        payload = data + bytes([crc])
-        frame = cobs_encode(payload) + b"\x00"
-
-        decoded = cobs_decode(frame[:-1])
-        assert decoded == payload
-        assert decoded[:-1] == data
-        assert decoded[-1] == crc
-        assert len(decoded[:-1]) == 512

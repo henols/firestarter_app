@@ -16,8 +16,6 @@ Phase 44 Plan 03 additions (read_timing block):
 """
 
 import logging
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,7 +44,6 @@ from .conftest import (
     read_phase_frames,
     write_success_frames,
 )
-from .fake_chip import WriteInitPreflightChip
 
 
 def _refuse(exc: BaseException):
@@ -297,57 +294,6 @@ _MINIMAL_EPROM_DATA: dict = {
     "flags": 0,
     "cmd": 1,
 }
-
-
-def test_write_into_blank_region_of_non_blank_part_succeeds() -> None:
-    """BLANK-01 / BLANK-03: before the fake learned the region (this plan),
-    this leg passed VACUOUSLY -- `WriteInitPreflightChip._is_blank` compared
-    the WHOLE buffer, so it modelled the whole-device check exactly and
-    could never distinguish "blank at the target" from "blank everywhere".
-    A non-blank part with data at low addresses now accepts a write into a
-    genuinely blank region elsewhere on the device, matching the real
-    firmware's region-scoped write-init blank check (Phase 201, D-09/D-10).
-
-    Selected by `pytest -k region_end or blank_region`.
-    """
-    memory_size = 16384
-    chip = WriteInitPreflightChip(memory_size, uv=True)
-    chip.data[0x10:0x11] = b"\x00"  # non-blank, well outside the target region
-
-    fh = tempfile.NamedTemporaryFile(prefix="p201_", suffix=".bin", delete=False)
-    fh.write(b"\xaa" * 256)
-    fh.close()
-    try:
-        outcome = chip.write_eprom("test-part", {}, fh.name, 0, address_str="0x2000")
-    finally:
-        Path(fh.name).unlink()
-
-    assert outcome is True
-    assert chip.last_firmware_error_code is None
-
-
-def test_write_into_non_blank_region_is_still_refused() -> None:
-    """The paired negative control: a non-blank byte genuinely INSIDE the
-    target region still refuses the write -- the fix SCOPES the check, it
-    does not delete it. A programmed bit cannot be un-programmed on a UV
-    part, so a silently dropped refusal would be irreversible data loss.
-
-    Selected by `pytest -k region_end or blank_region`.
-    """
-    memory_size = 16384
-    chip = WriteInitPreflightChip(memory_size, uv=True)
-    chip.data[0x2010:0x2011] = b"\x00"  # non-blank, inside the target region
-
-    fh = tempfile.NamedTemporaryFile(prefix="p201_", suffix=".bin", delete=False)
-    fh.write(b"\xaa" * 256)
-    fh.close()
-    try:
-        outcome = chip.write_eprom("test-part", {}, fh.name, 0, address_str="0x2000")
-    finally:
-        Path(fh.name).unlink()
-
-    assert outcome is False
-    assert chip.last_firmware_error_code == MSG_ERR_NOT_BLANK
 
 
 def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:

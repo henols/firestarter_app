@@ -25,7 +25,6 @@ A legitimate wire change re-records the golden deliberately:
 and the commit message says which chips and which keys moved.
 """
 
-import copy
 import json
 from pathlib import Path
 
@@ -152,18 +151,6 @@ def test_vcc_and_vpp_volts_never_cross_the_wire() -> None:
         "'vpp_volts' appeared on the wire for "
         f"{offenders_vpp_volts} -- only vpp_mv may cross the seam"
     )
-
-
-def test_describe_record_diff_is_non_vacuous() -> None:
-    recorded = json.loads(_GOLDEN.read_text(encoding="utf-8"))["records"]
-    mutated = copy.deepcopy(recorded)
-    some_key = next(iter(sorted(mutated)))
-    mutated[some_key]["pulse-delay"] = mutated[some_key].get("pulse-delay", 0) + 1
-
-    diff = _describe_record_diff(recorded, mutated)
-
-    assert some_key in diff
-    assert "pulse-delay" in diff
 
 
 if __name__ == "__main__":

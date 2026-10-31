@@ -25,7 +25,7 @@ def test_normal_record_emits_message() -> None:
     )
     handler.format = lambda r: r.msg  # type: ignore[assignment]
     handler.emit(record)
-    assert "hello" in buf.getvalue()
+    assert buf.getvalue() == "hello\n"
 
 
 def test_status_start_then_end_overwrites_line() -> None:
@@ -45,7 +45,7 @@ def test_status_start_then_end_overwrites_line() -> None:
     )
     start_record.status = "start"
     handler.emit(start_record)
-    assert "working" in buf.getvalue()
+    assert buf.getvalue() == "working"
     assert handler._status_line_active is True
 
     end_record = logging.LogRecord(
@@ -59,7 +59,7 @@ def test_status_start_then_end_overwrites_line() -> None:
     )
     end_record.status = "end"
     handler.emit(end_record)
-    assert "done" in buf.getvalue()
+    assert buf.getvalue() == "working\rdone\n"
     assert handler._status_line_active is False
 
 
@@ -81,6 +81,7 @@ def test_normal_after_status_inserts_newline() -> None:
     )
     start_record.status = "start"
     handler.emit(start_record)
+    assert buf.getvalue() == "status_line"
 
     # Then emit a normal record — should reset status line first
     normal = logging.LogRecord(
@@ -93,10 +94,7 @@ def test_normal_after_status_inserts_newline() -> None:
         exc_info=None,
     )
     handler.emit(normal)
-    out = buf.getvalue()
-    # Both messages present, status flag cleared
-    assert "status_line" in out
-    assert "normal_msg" in out
+    assert buf.getvalue() == "status_line\nnormal_msg\n"
     assert handler._status_line_active is False
 
 
@@ -110,8 +108,8 @@ def test_emit_handles_exception_via_handle_error() -> None:
     buf = io.StringIO()
     handler = SingleLineStatusHandler(stream=buf)
     handler.setFormatter(FailingFormatter())
-    # Suppress the default handleError stderr noise
-    handler.handleError = lambda record: None  # type: ignore[method-assign]
+    seen = []
+    handler.handleError = seen.append  # type: ignore[method-assign]
 
     record = logging.LogRecord(
         name="t",
@@ -123,6 +121,8 @@ def test_emit_handles_exception_via_handle_error() -> None:
         exc_info=None,
     )
     handler.emit(record)  # Should not raise
+    assert seen == [record]
+    assert buf.getvalue() == ""
 
 
 def test_closed_pipe_stops_quietly_with_exit_1(capsys) -> None:

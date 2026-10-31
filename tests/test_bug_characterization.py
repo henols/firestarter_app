@@ -109,3 +109,4 @@ def test_eprom_operation_error_not_labeled_as_communication_error(
         "it is a programmer/hardware error, not a transport failure. "
         "Fix: split the except clause in _run_state_machine (Phase 42 ERR-01)."
     )
+    assert "Programmer error during test_operation" in caplog.text, caplog.text

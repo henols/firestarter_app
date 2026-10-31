@@ -14,8 +14,8 @@ get_response() and external generator yields. Do NOT modify serial_comm.py.
 Covers requirements:
   - TEST-02: _read_and_parse_lines preamble->body->terminator sequence
              (INIT->MAIN->END ack flow via the generator yield surface).
-  - TEST-02: Sliding-window timeout resets on every yield — both responses
-             yielded when second is fed after the first yield.
+  - TEST-02: Sliding-window timeout resets on every yield — the second
+             response still arrives after the original window has ended.
   - TEST-02: get_response(timeout=tiny) raises SerialTimeoutError quickly on
              an empty fake serial (tiny real-clock technique, RESEARCH Pattern 5).
 """
@@ -122,39 +122,46 @@ def test_timeout_raises_on_empty(make_comm, fake_serial):
     )
 
 
-def test_sliding_window_resets_on_yield(make_comm, fake_serial):
-    """Pin: each yield of _read_and_parse_lines resets the timeout window.
+class _FakeClock:
+    """A stand-in for the `time` module: `sleep` advances `time` at once."""
 
-    Invariant: if the window did NOT reset on yield, a second response fed after
-    the first yield would not be received before the original timeout expired —
-    only 1 response would be yielded. The test feeds a second frame immediately
-    after the first yield and asserts BOTH are yielded, proving the window reset.
+    def __init__(self) -> None:
+        self.now = 0.0
 
-    Uses a 50 ms per-call timeout so total runtime stays well under a second.
-    serial_comm.py is NOT modified (ring-fenced, GATE-1.8d).
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+def test_sliding_window_resets_on_yield(make_comm, fake_serial, monkeypatch):
+    """Pin: each yield of _read_and_parse_lines starts a new timeout window.
+
+    The consumer uses 90% of the 1 s window before it feeds the second frame,
+    then lets the original window expire. Only a window that restarts when the
+    generator resumes after the first yield can still deliver the second frame.
+    A fake clock replaces the module's `time`, so the result does not depend
+    on the machine load.
     """
+    import firestarter.serial_comm as serial_comm
     from firestarter.messages import MSG_OK_READY
 
+    clock = _FakeClock()
+    monkeypatch.setattr(serial_comm, "time", clock)
     comm = make_comm()
-    # Feed first response
     fake_serial.feed(build_frame(MSG_OK_READY, b""))
 
     results = []
-    # Iterate the generator with a small timeout; feed the second response
-    # immediately after the first yield to exercise the sliding-window reset.
-    for r in comm._read_and_parse_lines(0.05):
+    for r in comm._read_and_parse_lines(1.0):
         results.append(r)
         if len(results) == 1:
-            # Feed the second response right after the first yield —
-            # the window must reset here or the second will be missed
+            clock.sleep(0.9)
             fake_serial.feed(build_frame(MSG_OK_READY, b""))
+            clock.sleep(0.2)  # the original window ended at t=1.0
         if len(results) >= 2:
             break
 
-    # Both responses must be yielded; window reset verified by construction:
-    # if window did NOT reset after yield 1, timeout (50 ms) would have
-    # started before the second frame was fed and the second yield would
-    # never arrive within the window.
     assert len(results) == 2, (
         f"Expected 2 yielded responses (sliding-window reset); got {len(results)}"
     )

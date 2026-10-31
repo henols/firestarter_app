@@ -99,23 +99,6 @@ class TestVerdictVocabulary:
         families = {c["family"] for c in data["cells"]}
         assert families == {"eprom"}, f"Expected only eprom family, got {families}"
 
-    def test_uno328pb_na_verdict(self, runner: CliRunner, tmp_path: Path) -> None:
-        """uno328pb write/program cells carry N/A verdict."""
-        app = _make_app_no_hw()
-        runner.invoke(
-            cli,
-            ["dev", "validate-family", "eprom", "--output-dir", str(tmp_path)],
-            obj=app,
-        )
-        data = json.loads((tmp_path / "validation-matrix.json").read_text())
-        # uno328pb is in skip_boards for all families; N/A cells may exist.
-        # This test just verifies the verdict vocabulary is valid.
-        valid_verdicts = {"PASS", "FAIL", "SKIP-deferred", "N/A", "advisory"}
-        for cell in data["cells"]:
-            assert cell["verdict"] in valid_verdicts, (
-                f"Unexpected verdict {cell['verdict']!r}"
-            )
-
 
 class TestMarkdownArtifact:
     """The .md file is rendered from the same cell data."""

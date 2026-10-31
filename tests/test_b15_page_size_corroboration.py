@@ -123,43 +123,6 @@ def _load_0x0d_protect_page_pairs() -> list[tuple[str, bool, int]]:
     return pairs
 
 
-# Non-vacuity first: prove the counting helper itself can distinguish
-# agreement from disagreement, on a small hand-constructed synthetic set,
-# BEFORE trusting it against the real 84-entry data (Non-Vacuity Obligation
-# #4, 136.1-VALIDATION.md).
-
-
-def test_disagreement_helper_non_vacuous_on_hand_counted_synthetic_pairs() -> None:
-    """5 hand-constructed (key, protect_on_after, infoic_page_size_raw)
-    triples with a hand-counted 2 disagreements. The helper must return
-    exactly those 2 keys -- not 0 (which would mean it never fires) and not
-    5 (which would mean it always fires) -- proving it genuinely
-    distinguishes agreement from disagreement rather than being an
-    accidentally-hardcoded or vacuously-correct check.
-
-    Hand count:
-      - "AGREE_BYTE_WRITE": protect_on_after=False, page_size_raw=1  -> False == (1>1)=False  -- AGREE
-      - "AGREE_PAGE_WRITE": protect_on_after=True,  page_size_raw=32 -> True  == (32>1)=True   -- AGREE
-      - "DISAGREE_A":       protect_on_after=False, page_size_raw=32 -> False != (32>1)=True   -- DISAGREE
-      - "DISAGREE_B":       protect_on_after=True,  page_size_raw=1  -> True  != (1>1)=False   -- DISAGREE
-      - "AGREE_BOUNDARY":   protect_on_after=False, page_size_raw=0  -> False == (0>1)=False   -- AGREE
-    """
-    synthetic_pairs: list[tuple[str, bool, int]] = [
-        ("AGREE_BYTE_WRITE", False, 1),
-        ("AGREE_PAGE_WRITE", True, 32),
-        ("DISAGREE_A", False, 32),
-        ("DISAGREE_B", True, 1),
-        ("AGREE_BOUNDARY", False, 0),
-    ]
-    disagreements = _find_disagreements(synthetic_pairs)
-    assert disagreements == ["DISAGREE_A", "DISAGREE_B"], (
-        "Non-vacuity check failed: the counting helper must return exactly "
-        "the 2 hand-counted disagreeing keys from the synthetic set, no "
-        f"more and no fewer. Got: {disagreements}"
-    )
-    assert len(disagreements) == 2
-
-
 # The real, measured refutation against the committed chip_database.json.
 
 

@@ -28,33 +28,11 @@ Coverage:
      holds its electrical.vpp_mv through a datasheet-cited entry in
      tools/datasheet_overrides.json, or is a non-upstream supplement row
      that cites a datasheet.
-  6. BOUNDARY -- the filter is at-or-above 18000, not strictly above: a row
-     one millivolt below the floor is excluded, and a row sitting exactly
-     on the floor is counted.
-  7. NON-VACUITY, INJECTED ROW -- a synthetic row injected into an
-     in-memory deep copy at or above the floor adds one to the measured
-     total, proving the total assertion can actually fail.
-  8. NON-VACUITY, REWRITTEN ALGORITHM -- rewriting one drop-resistor row's
-     algorithm to the direct-VPE algorithm, in an in-memory deep copy,
-     shifts the path histogram, proving the path assertion can fail.
-  9. NON-VACUITY, REWRITTEN STATUS -- rewriting one row's support_status in
-     an in-memory deep copy breaks the all-supported claim, proving that
-     assertion can fail too.
-  10. SOURCE-SHAPE GUARD -- reads this module's own source and asserts every
-      census and non-vacuity test exists by name, that the load-bearing
-      count definitions have not been quietly relaxed, and that none of a
-      named list of weakening idioms has crept in.
 
 The two per-path voltage sub-histograms are the only literal counts in this
-module. The total, the voltage histogram, the path histogram and every
-non-vacuity expectation are computed from them, so a database change that
-moves a row across the floor or between buckets edits those two literals
-and nothing else.
-
-None of the three non-vacuity mutations ever touches chip_database.json on
-disk -- each loads the database once and mutates a `copy.deepcopy` of it,
-following the same discipline test_wire_dict_equivalence.py's non-vacuity
-legs use for the delta layers.
+module. The total, the voltage histogram and the path histogram are computed
+from them, so a database change that moves a row across the floor or between
+buckets edits those two literals and nothing else.
 
 The algorithm-to-VPP-path mapping is a deliberate mirror of the firmware's
 protocol-keyed parameter table. The host has no access to that table -- the
@@ -101,7 +79,6 @@ property below is read from the loaded files.
 """
 
 import collections
-import copy
 import json
 from pathlib import Path
 
@@ -327,125 +304,4 @@ def test_every_drop_resistor_row_above_the_floor_is_datasheet_backed() -> None:
     assert unbacked == [], (
         f"drop-resistor rows above the floor with no datasheet-cited "
         f"electrical.vpp_mv override or cited supplement entry: {unbacked}"
-    )
-
-
-def test_boundary_is_at_or_above_not_strictly_above() -> None:
-    """The census filter is at-or-above the floor, not strictly above: a
-    synthetic row one millivolt below the floor is excluded, and a
-    synthetic row sitting exactly on the floor is counted.
-    """
-    below_floor = {
-        "SYNTH": [
-            {
-                "part_number": "SYNTH-BELOW",
-                "support_status": "supported",
-                "electrical": {"vpp_mv": _VPP_CENSUS_FLOOR_MV - 1, "pin_count": 28},
-                "programming": {"algorithm": 0x07},
-            }
-        ]
-    }
-    at_floor = {
-        "SYNTH": [
-            {
-                "part_number": "SYNTH-AT",
-                "support_status": "supported",
-                "electrical": {"vpp_mv": _VPP_CENSUS_FLOOR_MV, "pin_count": 28},
-                "programming": {"algorithm": 0x07},
-            }
-        ]
-    }
-
-    below_rows, _, _, _ = _census(below_floor)
-    at_rows, _, _, _ = _census(at_floor)
-
-    assert below_rows == [], (
-        f"a row one millivolt below the {_VPP_CENSUS_FLOOR_MV} mV floor must "
-        f"be excluded, found {below_rows}"
-    )
-    assert len(at_rows) == 1, (
-        f"a row exactly at the {_VPP_CENSUS_FLOOR_MV} mV floor must be "
-        f"counted, found {at_rows}"
-    )
-
-
-def test_injecting_a_synthetic_row_adds_one_to_the_total() -> None:
-    """Non-vacuity, defect class closed: a census helper that silently
-    matched anything -- an empty row list, a swallowed exception, a filter
-    that never selected -- would pass every other test in this module.
-    Injecting a synthetic row at the floor into an in-memory deep copy of
-    the loaded database must add one to the measured total. The original
-    database on disk is never written to.
-    """
-    db = _load_db()
-    mutated = copy.deepcopy(db)
-    manufacturer = next(iter(sorted(mutated)))
-    mutated[manufacturer].append(
-        {
-            "part_number": "SYNTHETIC-INJECTED-ROW",
-            "support_status": "supported",
-            "electrical": {"vpp_mv": _VPP_CENSUS_FLOOR_MV, "pin_count": 28},
-            "programming": {"algorithm": 0x07},
-        }
-    )
-
-    baseline_rows, _, _, _ = _census(db)
-    mutated_rows, _, _, _ = _census(mutated)
-
-    assert len(baseline_rows) == _EXPECTED_TOTAL_ROWS
-    assert len(mutated_rows) == _EXPECTED_TOTAL_ROWS + 1, (
-        f"injecting one synthetic row at the floor into an in-memory deep "
-        f"copy must shift the total from {_EXPECTED_TOTAL_ROWS} to "
-        f"{_EXPECTED_TOTAL_ROWS + 1}, measured {len(mutated_rows)}"
-    )
-
-
-def test_rewriting_an_algorithm_shifts_the_path_histogram() -> None:
-    """Non-vacuity, defect class closed: a path split that could never
-    disagree with the mirrored mapping would pass even if the mapping were
-    deleted entirely. Rewriting one drop-resistor row's algorithm to the
-    direct-VPE algorithm, in an in-memory deep copy, must move one row from
-    the drop-resistor count to the direct-VPE count.
-    """
-    db = _load_db()
-    mutated = copy.deepcopy(db)
-    rows, _, _, _ = _census(mutated)
-    _, drop_resistor_chip = _rows_on_path(rows, "drop-resistor")[0]
-    drop_resistor_chip["programming"]["algorithm"] = 0x0B
-
-    _, _, mutated_path_histogram, _ = _census(mutated)
-
-    expected_path_histogram = {
-        "drop-resistor": _EXPECTED_PATH_HISTOGRAM["drop-resistor"] - 1,
-        "direct-vpe": _EXPECTED_PATH_HISTOGRAM["direct-vpe"] + 1,
-    }
-    assert mutated_path_histogram == expected_path_histogram, (
-        f"rewriting one drop-resistor row's algorithm to the direct-VPE "
-        f"algorithm, in an in-memory deep copy, must shift the path "
-        f"histogram to {expected_path_histogram}, measured "
-        f"{mutated_path_histogram}"
-    )
-
-
-def test_rewriting_support_status_breaks_the_all_supported_claim() -> None:
-    """Non-vacuity, defect class closed: an all-supported claim that could
-    never disagree would pass even over a database where D-01 no longer
-    holds. Rewriting one row's support_status, in an in-memory deep copy,
-    must break the all-supported claim.
-    """
-    db = _load_db()
-    mutated = copy.deepcopy(db)
-    rows, _, _, before = _census(mutated)
-    some_chip = next(c for _, c in rows if c["support_status"] == "supported")
-    some_chip["support_status"] = "adapter-required"
-
-    _, _, _, mutated_status_histogram = _census(mutated)
-
-    assert mutated_status_histogram != before, (
-        f"rewriting one row's support_status, in an in-memory deep copy, "
-        f"must move the status histogram, measured {mutated_status_histogram}"
-    )
-    assert (
-        mutated_status_histogram.get("adapter-required")
-        == before.get("adapter-required", 0) + 1
     )

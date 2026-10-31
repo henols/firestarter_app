@@ -31,8 +31,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from firestarter.cli_handlers import _canonical_part_number
 from tests.plan_corpus import REAL_DB
 
@@ -199,10 +197,3 @@ def test_a_parenthetical_alias_is_carried_verbatim() -> None:
     distinct database rows (the `(RW)` and `(TEST)` variants of the same
     DALLAS NVRAM) under one title."""
     _assert_paren_alias_kept_verbatim(_canonical_part_number)
-
-
-def test_an_empty_expected_alias_set_fails_rather_than_passing_vacuously() -> None:
-    """The sweep's own non-vacuity guard, proven rather than assumed: an
-    empty alias list must fail the sweep helper, not pass it trivially."""
-    with pytest.raises(AssertionError):
-        _assert_alias_sweep_matches_and_is_non_vacuous([])

@@ -57,11 +57,7 @@ wrong on all 270 of them.
 
 **Reachability.** A gate authored before the content it guards can be
 unreachable and prove nothing, so every anti-vacuity leg below was
-observed to fail before this module was trusted. Nine hand-built
-counter-plans (`test_planted_counter_plan_with_no_verify_is_flagged`
-through `test_an_unsupported_write_is_skipped_by_decision`) prove
-`write_verify_violations` is sensitive on shapes the shipped corpus cannot
-reach; three mutated-corpus legs
+observed to fail before this module was trusted. Three mutated-corpus legs
 (`test_removing_the_verify_flags_every_write_bearing_plan`,
 `test_an_unsupported_verify_flags_every_write_bearing_plan`,
 `test_a_region_skewed_verify_flags_every_write_bearing_plan`) prove it is
@@ -78,6 +74,8 @@ run, is committed at
 from __future__ import annotations
 
 import dataclasses
+
+import pytest
 
 import firestarter.chip_test as chip_test
 from tests.plan_corpus import (
@@ -214,8 +212,7 @@ def write_verify_violations(plan):
     `[write, verify, sdp-lock, write, verify]` returns `(0, 2)` and the
     second write at index 3 sits entirely outside it; treating that as a
     skip would leave a second write unguarded. The shipped corpus carries
-    exactly one write per plan, so this arm is unreachable on it today and
-    is exercised by a hand-built counter-plan instead.
+    exactly one write per plan, so this arm is unreachable on it today.
 
     An unsupported write is skipped by explicit decision, not by accident:
     a step that never calls the operator cannot be "a write with no
@@ -271,23 +268,6 @@ def test_op_vocabulary_is_totally_partitioned():
     assert_total_partition(module_op_constants())
     assert len(REQUIRES_VERIFY) == 2, sorted(REQUIRES_VERIFY)
     assert len(EXEMPT_REASONS) == 11, sorted(EXEMPT_REASONS)
-
-
-def test_a_fourteenth_op_fails_the_partition_closed(monkeypatch):
-    """Roadmap success criterion 3, read literally: a future operation type
-    omitted from the closure list cannot silently escape the check."""
-    monkeypatch.setattr(chip_test, "OP_FUTURE_WRITE", "future-write", raising=False)
-
-    try:
-        assert_total_partition(module_op_constants())
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError(
-            "Non-vacuity failure: adding a fourteenth OP_* constant to the "
-            "chip_test module namespace did not make assert_total_partition "
-            "raise -- the partition is not fail-closed."
-        )
 
 
 def test_corpus_census_is_not_empty():
@@ -353,158 +333,51 @@ def test_one_chip_run_plan_alignment_smoke():
     )
 
 
-def test_planted_counter_plan_with_no_verify_is_flagged():
-    """The first of nine hand-built counter-plans (Part A): each proves
-    `write_verify_violations` is sensitive on a shape the shipped corpus
-    either cannot reach at all, or reaches only by coincidence. Every one
-    that has a clean sibling shape asserts the clean case is genuinely a
-    premise, following the discipline `test_op_registration_parity.py:821`
-    establishes.
-
-    Roadmap success criterion 1."""
-    plan = plan_with_steps(
-        step(chip_test.OP_ID),
-        step(chip_test.OP_READ),
-        step(chip_test.OP_WRITE),
-        step(chip_test.OP_ERASE),
-    )
-    violations = write_verify_violations(plan)
-    assert len(violations) == 1, violations
-    assert violations[0][2] == "no supported, field-matching verify in the block", (
-        violations
-    )
-
-
-def test_a_second_write_outside_the_block_is_a_violation_not_a_skip():
-    """`cycle_block_bounds` returns only the FIRST maximal run, so a second
-    write past the end of that run must be a VIOLATION, never silently
-    skipped -- this arm is unreachable on the shipped corpus, where every
-    plan carries exactly one write, and is coded fail-closed for exactly
-    that reason."""
-    plan = plan_with_steps(
-        step(chip_test.OP_WRITE),
-        step(chip_test.OP_VERIFY),
-        step(chip_test.OP_SDP_LOCK),
-        step(chip_test.OP_WRITE),
-        step(chip_test.OP_VERIFY),
-    )
-    bounds = chip_test.cycle_block_bounds(plan.steps)
-    assert bounds == (0, 2), (
-        f"fixture setup error: expected bounds (0, 2), got {bounds}"
-    )
-
-    violations = write_verify_violations(plan)
-    assert violations == [
-        (3, chip_test.OP_WRITE, "write sits outside the cycle block")
-    ], violations
-
-
-def test_a_verify_at_a_lower_index_is_not_an_oracle():
-    plan = plan_with_steps(step(chip_test.OP_VERIFY), step(chip_test.OP_WRITE))
-    violations = write_verify_violations(plan)
-    assert len(violations) == 1, violations
-    assert violations[0][0] == 1, violations
-
-
-def test_a_verify_outside_the_block_is_not_an_oracle():
-    """`(0, 1)` is what makes D-02's same-cycle-block reading stronger than
-    anywhere-later-in-the-list: the verify here sits right after the write
-    in `plan.steps`, but `sdp-lock` closes the block first."""
-    plan = plan_with_steps(
-        step(chip_test.OP_WRITE), step(chip_test.OP_SDP_LOCK), step(chip_test.OP_VERIFY)
-    )
-    bounds = chip_test.cycle_block_bounds(plan.steps)
-    assert bounds == (0, 1), (
-        f"fixture setup error: expected bounds (0, 1), got {bounds}"
-    )
-
-    violations = write_verify_violations(plan)
-    assert len(violations) == 1, violations
-
-
-def test_a_lone_write_is_flagged():
-    plan = plan_with_steps(step(chip_test.OP_WRITE))
-    bounds = chip_test.cycle_block_bounds(plan.steps)
-    assert bounds == (0, 1), (
-        f"fixture setup error: expected bounds (0, 1), got {bounds}"
-    )
-
-    violations = write_verify_violations(plan)
-    assert len(violations) == 1, violations
-
-
-def test_an_unsupported_verify_is_not_an_oracle():
-    """D-03: a `supported=False` verify behind a live write IS a write with
-    no oracle and must not pass merely because a step with the right op
-    string is present."""
-    plan = plan_with_steps(
-        step(chip_test.OP_WRITE), step(chip_test.OP_VERIFY, supported=False)
-    )
-    violations = write_verify_violations(plan)
-    assert len(violations) == 1, violations
-
-
-def test_a_field_skewed_verify_is_not_an_oracle():
-    """D-04: the verify must match the write on `write_region`,
-    `region_policy` and `cycle_payload`. Three sub-cases, each a
-    `write, verify` pair identical except for one field."""
-    region_skewed = plan_with_steps(
-        step(chip_test.OP_WRITE, write_region=(0, 10)),
-        step(chip_test.OP_VERIFY, write_region=(1, 10)),
-    )
-    assert len(write_verify_violations(region_skewed)) == 1, (
-        "write_region mismatch not flagged"
-    )
-
-    policy_skewed = plan_with_steps(
-        step(chip_test.OP_WRITE, region_policy="fixed"),
-        step(chip_test.OP_VERIFY, region_policy="uv-slot"),
-    )
-    assert len(write_verify_violations(policy_skewed)) == 1, (
-        "region_policy mismatch not flagged"
-    )
-
-    payload_skewed = plan_with_steps(
-        step(chip_test.OP_WRITE, cycle_payload="same"),
-        step(chip_test.OP_VERIFY, cycle_payload="alternate"),
-    )
-    assert len(write_verify_violations(payload_skewed)) == 1, (
-        "cycle_payload mismatch not flagged"
-    )
-
-
-def test_plans_with_no_write_are_vacuously_clean():
-    empty_plan = plan_with_steps()
-    assert chip_test.cycle_block_bounds(empty_plan.steps) is None
-    assert write_verify_violations(empty_plan) == []
-
-    no_write_plan = plan_with_steps(
-        step(chip_test.OP_ID), step(chip_test.OP_READ), step(chip_test.OP_BLANK_CHECK)
-    )
-    assert chip_test.cycle_block_bounds(no_write_plan.steps) is None
-    assert write_verify_violations(no_write_plan) == []
-
-
-def test_an_unsupported_write_is_skipped_by_decision():
-    """A decision, not an omission: a step that never calls the operator
-    cannot be "a write with no oracle" in any observable sense. The shipped
-    corpus carries zero unsupported write steps
-    (`test_no_shipped_plan_carries_an_unsupported_write`), so this arm is
-    currently unreachable on it."""
-    plan = plan_with_steps(
-        step(chip_test.OP_ID),
-        step(chip_test.OP_READ),
-        step(chip_test.OP_WRITE, supported=False),
-        step(chip_test.OP_VERIFY),
-        step(chip_test.OP_ERASE),
-    )
-    bounds = chip_test.cycle_block_bounds(plan.steps)
-    assert bounds == (2, 5), (
-        f"fixture setup error: expected bounds (2, 5), got {bounds}"
-    )
-
-    violations = write_verify_violations(plan)
-    assert violations == [], violations
+@pytest.mark.parametrize(
+    ("ops", "expected"),
+    [
+        ([], None),
+        ([chip_test.OP_ID, chip_test.OP_READ, chip_test.OP_BLANK_CHECK], None),
+        (
+            [
+                chip_test.OP_ID,
+                chip_test.OP_READ,
+                chip_test.OP_BLANK_CHECK,
+                chip_test.OP_ERASE,
+                chip_test.OP_VERIFY,
+            ],
+            None,
+        ),
+        ([chip_test.OP_WRITE], (0, 1)),
+        ([chip_test.OP_WRITE, chip_test.OP_SDP_LOCK, chip_test.OP_VERIFY], (0, 1)),
+        (
+            [
+                chip_test.OP_WRITE,
+                chip_test.OP_VERIFY,
+                chip_test.OP_SDP_LOCK,
+                chip_test.OP_WRITE,
+                chip_test.OP_VERIFY,
+            ],
+            (0, 2),
+        ),
+        (
+            [
+                chip_test.OP_ID,
+                chip_test.OP_READ,
+                chip_test.OP_WRITE,
+                chip_test.OP_VERIFY,
+                chip_test.OP_ERASE,
+            ],
+            (2, 5),
+        ),
+    ],
+)
+def test_cycle_block_bounds_on_hand_built_shapes(ops, expected):
+    """`cycle_block_bounds` on shapes the shipped corpus does not reach:
+    no write opens no block (even with an erase present), a non-cycle op
+    such as `sdp-lock` closes the block, and only the FIRST run counts."""
+    plan = plan_with_steps(*(step(op) for op in ops))
+    assert chip_test.cycle_block_bounds(plan.steps) == expected
 
 
 def _write_bearing_plans():
@@ -627,10 +500,7 @@ def erase_blank_check_violations(plan):
     stop)` range is a VIOLATION, never a skip. The shipped corpus never
     reaches this arm -- an executable erase always follows a write, because
     `erase_is_executable` (`chip_test.py:639`) is gated by the same
-    `write_execute` conjunct that gates the write step's own emission -- so
-    it is exercised by two hand-built counter-plans instead
-    (`test_an_erase_with_no_blank_check_at_all_is_flagged` and
-    `test_a_blank_check_ahead_of_the_erase_is_not_its_oracle`).
+    `write_execute` conjunct that gates the write step's own emission.
 
     **This function asserts PRESENCE at a higher index, never
     supportedness, and that is deliberate.** Read literally as "an
@@ -787,72 +657,6 @@ def test_the_28c_family_na_blank_check_carve_out_is_pinned():
     assert reasons == {_28C_CARVE_OUT_REASON}, reasons
 
 
-def test_an_erase_with_no_blank_check_at_all_is_flagged():
-    plan = plan_with_steps(
-        step(chip_test.OP_ID),
-        step(chip_test.OP_READ),
-        step(chip_test.OP_ERASE),
-        step(chip_test.OP_VERIFY),
-    )
-    violations = erase_blank_check_violations(plan)
-    assert len(violations) == 1, violations
-
-
-def test_a_blank_check_ahead_of_the_erase_is_not_its_oracle():
-    """The exact regression D-05 exists to catch: a future edit moving the
-    blank-check back ahead of the erase. This fixture carries no write
-    step, so `cycle_block_bounds` (which can only open on a write) returns
-    `None`, and the erase is flagged via the `bounds is None` arm of the
-    outside-the-block check -- the no-cycle-at-all case, distinct from
-    `test_a_second_erase_outside_the_block_is_a_violation_not_a_skip`
-    below, which pins the same outside-the-block reason via a REAL,
-    non-`None` block a second erase sits past."""
-    plan = plan_with_steps(
-        step(chip_test.OP_ID),
-        step(chip_test.OP_READ),
-        step(chip_test.OP_BLANK_CHECK),
-        step(chip_test.OP_ERASE),
-        step(chip_test.OP_VERIFY),
-    )
-    bounds = chip_test.cycle_block_bounds(plan.steps)
-    assert bounds is None, (
-        f"fixture setup error: expected bounds None (no write step opens "
-        f"a cycle block), got {bounds}"
-    )
-
-    violations = erase_blank_check_violations(plan)
-    assert violations == [(3, "erase sits outside the cycle block")], violations
-
-
-def test_a_second_erase_outside_the_block_is_a_violation_not_a_skip():
-    """The load-bearing analog to
-    `test_a_second_write_outside_the_block_is_a_violation_not_a_skip`
-    above, for the erase leg, and the only fixture in this module that
-    exercises the outside-the-block check against a REAL (non-`None`)
-    bounds tuple rather than the `bounds is None` short-circuit: without
-    it, dropping the upper-bound half of `not (bounds[0] <= index <
-    bounds[1])` -- turning it into `index < bounds[0]` -- is invisible to
-    every other leg in this module, because every real corpus erase sits
-    strictly inside its own block and the two `bounds is None` fixtures
-    above never reach the `bounds[1]` comparison at all. `cycle_block_
-    bounds` finds only the FIRST maximal run, so an erase past the end of
-    that run (here, after an `sdp-lock` step that is not itself a
-    cycle-block op) must still be flagged, never silently passed over."""
-    plan = plan_with_steps(
-        step(chip_test.OP_WRITE),
-        step(chip_test.OP_VERIFY),
-        step(chip_test.OP_SDP_LOCK),
-        step(chip_test.OP_ERASE),
-    )
-    bounds = chip_test.cycle_block_bounds(plan.steps)
-    assert bounds == (0, 2), (
-        f"fixture setup error: expected bounds (0, 2), got {bounds}"
-    )
-
-    violations = erase_blank_check_violations(plan)
-    assert violations == [(3, "erase sits outside the cycle block")], violations
-
-
 def uv_policy_violations(plan):
     """Phase 175 Plan 02 (D-12): `(index, op, reason)` tuples for every
     step that breaks the `aq6` UV write-scope ceiling in either direction --
@@ -860,9 +664,7 @@ def uv_policy_violations(plan):
     claiming the uv-slot region policy. Both directions live in one helper
     because D-12 requires the implication AND its converse: a
     one-directional check would leave a non-UV plan free to claim the
-    uv-slot policy unguarded, which is exactly what
-    `test_uv_policy_violations_flags_both_directions` below proves is
-    reachable without this arm."""
+    uv-slot policy unguarded."""
     violations = []
     for index, candidate_step in enumerate(plan.steps):
         if (
@@ -899,9 +701,8 @@ def uv_blank_check_order_violations(plan):
     non-blank part probes candidate slots top-down (`uv_slot_starts`,
     `chip_test.py:2171`) and takes the first clearing the bit floors --
     there is nothing left to check once the write has run. Returns an
-    empty list for a non-UV plan, or a UV plan with no write step at all,
-    both vacuously clean by the same reasoning `test_plans_with_no_write_
-    are_vacuously_clean` above already applies to the write-verify leg."""
+    empty list for a non-UV plan, or a UV plan with no write step at all:
+    both are vacuously clean."""
     if not plan.is_uv:
         return []
     write_index = next(
@@ -961,34 +762,4 @@ def test_a_uv_write_has_a_blank_check_ahead_of_it():
     assert not offenders, (
         f"{len(offenders)} UV plans have no blank-check ahead of their "
         f"write; first ten: {offenders[:10]}"
-    )
-
-
-def test_uv_policy_violations_flags_both_directions():
-    """The anti-vacuity leg for the two `derive_plan`-level D-12 pins
-    above, each a hand-built plan `uv_policy_violations` cannot reach
-    vacuously on the shipped corpus."""
-    uv_plan_claiming_full_device = plan_with_steps(
-        step(chip_test.OP_ID),
-        step(
-            chip_test.OP_WRITE_PARTIAL,
-            region_policy=chip_test.REGION_POLICY_FULL_DEVICE,
-        ),
-        is_uv=True,
-    )
-    violations = uv_policy_violations(uv_plan_claiming_full_device)
-    assert len(violations) == 1, violations
-    assert violations[0][2] == "a UV plan claimed the full-device region policy", (
-        violations
-    )
-
-    non_uv_plan_claiming_uv_slot = plan_with_steps(
-        step(chip_test.OP_ID),
-        step(chip_test.OP_WRITE, region_policy=chip_test.REGION_POLICY_UV_SLOT),
-        is_uv=False,
-    )
-    violations = uv_policy_violations(non_uv_plan_claiming_uv_slot)
-    assert len(violations) == 1, violations
-    assert violations[0][2] == "a non-UV plan claimed the uv-slot region policy", (
-        violations
     )

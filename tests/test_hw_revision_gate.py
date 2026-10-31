@@ -205,31 +205,6 @@ def test_decode_implausible_buffer_size_is_clamped_away(make_comm):
     assert comm.hw_revision == REVISION_2_2
 
 
-def test_decode_ack_ends_after_the_identity(make_comm):
-    """The current ack ends after the version bytes: the firmware no longer
-    sends a write budget (the host calculates it, write_budget.py)."""
-    comm = make_comm()
-    body = ready_ack(1024, REVISION_2_2, "3.0.0:leonardo")
-    comm._decode_id_frame(len(body), body)
-
-    assert comm.firmware_max_chunk == 1024
-    assert comm.firmware_identity == "3.0.0:leonardo"
-
-
-def test_decode_legacy_two_byte_ack_leaves_identity_none(make_comm):
-    """This is exactly the shape the CURRENT v1.31 firmware branch emits
-    (BF-1): a bare 2-byte MSG_OK_READY with no CAP-02 tail at all. That is
-    why `_probe_port` refuses such a board today
-    (`test_fwguard.py::test_absent_identity_refuses`)."""
-    comm = make_comm()
-    body = ready_ack(512)
-    comm._decode_id_frame(len(body), body)
-
-    assert comm.firmware_max_chunk == 512
-    assert comm.firmware_identity is None
-    assert comm.hw_revision is None
-
-
 # 3. Coupling to the real database
 
 

@@ -43,19 +43,15 @@ import pytest
 from click.testing import CliRunner
 
 from firestarter.chip_test import (
-    _SDP_LEG_OPS,
     OP_WRITE,
-    OP_WRITE_PARTIAL,
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
     VERDICT_OK,
     StepResult,
-    derive_plan,
 )
 from firestarter.cli_handlers import (
     _ALWAYS_WRITES_PASS_COUNT,
-    _DEFAULT_RUNS,
     _dev_test_exit_code,
     cli,
 )
@@ -376,8 +372,8 @@ def make_restore_failed_operator() -> Mock:
     A full ALLOW-chip run makes exactly `_ALWAYS_WRITES_PASS_COUNT`
     `write_eprom` calls in a fixed order (the shipped `write` step's three
     runs, then the leg's four single-run writes: baseline-b, baseline-a,
-    inhibited, restored -- the SAME order `_ALWAYS_WRITES_PASS_COUNT`'s
-    own derivation proves) -- so the LAST call by GLOBAL index is always
+    inhibited, restored; `TestWritePassCountD09` pins the count on a real
+    run) -- so the LAST call by GLOBAL index is always
     `write-restored`, regardless of chip. This is a SEPARATE double from
     `make_leaked_lock_operator` (whose every call, including the last,
     persists for real -- so its `write-restored` step genuinely succeeds
@@ -490,25 +486,6 @@ def make_hardware_manager(
         hw_revision=hw_revision, fw_board_identity=fw_board_identity
     )
     return hw
-
-
-def test_make_hardware_manager_returns_a_spec_bound_double() -> None:
-    """Pins the property the D-03 rename's safety rests on (P-2), so a
-    future "simplification" cannot quietly reopen the absent-chip
-    false-green trap: the double is spec-bound (an attribute the real
-    HardwareManager does not define raises AttributeError, so a missed
-    rename anywhere in the suite fails loudly instead of passing
-    vacuously), and its read_programmer_identity() return value is a real
-    ProgrammerIdentity carrying exactly the strings the factory was given."""
-    hw = make_hardware_manager(
-        hw_revision="Rev 2.0-class", fw_board_identity="3.0.0b19:leonardo"
-    )
-    with pytest.raises(AttributeError):
-        hw.this_attribute_does_not_exist_on_hardware_manager
-    identity = hw.read_programmer_identity()
-    assert isinstance(identity, ProgrammerIdentity)
-    assert identity.hw_revision == "Rev 2.0-class"
-    assert identity.fw_board_identity == "3.0.0b19:leonardo"
 
 
 def _reports_dir() -> Path:
@@ -1779,44 +1756,24 @@ class TestExitFloorD15:
         assert exit_clean != exit_notrun
 
 
-class TestWritePassCountDerivedFromLivePlanD09:
-    """Renamed by quick task 260821-spg (was
-    `TestAlwaysWritesNoticeDerivedCountD09`): the always-writes console
-    notice this class used to also pin is gone, along with the two
-    wording-only tests that asserted its prose. What survives is the real
-    data invariant -- the write-pass count is DERIVED from a live plan,
-    never a restated literal -- which is exactly what
-    `_ALWAYS_WRITES_PASS_COUNT` still backs (it feeds no console output
-    now, but the seven-write-pass fact it pins is still true and still
-    measured here)."""
+class TestWritePassCountD09:
+    """`make_restore_failed_operator` treats the LAST `write_eprom` call
+    of a full ALLOW-chip run as `write-restored`, and finds it by the
+    count `_ALWAYS_WRITES_PASS_COUNT`. This pins that count against a
+    real `dev test` run, not against a count computed from the plan."""
 
-    def test_pass_count_is_derived_from_a_live_plan_never_a_literal(self) -> None:
-        """Derive the plan for AT28C256 (the module's own ALLOW chip) at
-        `write_scope="full"` -- the scope `dev test` itself resolves for a
-        non-UV chip -- and compute the number of write passes FROM the
-        plan: the CLI's own `_DEFAULT_RUNS` for the shipped multi-run
-        write step (`OP_WRITE`/`OP_WRITE_PARTIAL`), plus one pass for each
-        of the leg's four single-run write ops (`_SDP_LEG_OPS`) that are
-        `supported=True`. Never restate `7` (or any other number) as a
-        literal here -- if this ever measures a different number than
-        `_ALWAYS_WRITES_PASS_COUNT`, the constant is wrong, not this test.
-        """
-        plan = derive_plan(_CHIP_ALLOW, REAL_DB, write_scope="full")
-        runs = _DEFAULT_RUNS
-
-        write_passes = 0
-        for step in plan.steps:
-            if not step.supported:
-                continue
-            if step.op in (OP_WRITE, OP_WRITE_PARTIAL):
-                write_passes += runs
-            elif step.op in _SDP_LEG_OPS:
-                write_passes += 1
-
-        assert write_passes == _ALWAYS_WRITES_PASS_COUNT, (
-            write_passes,
-            _ALWAYS_WRITES_PASS_COUNT,
+    def test_a_full_allow_chip_run_makes_the_pinned_number_of_writes(
+        self, runner: CliRunner
+    ) -> None:
+        """Three runs of the shipped write step plus the SDP leg's four
+        single-run writes (baseline-b, baseline-a, inhibited, restored)."""
+        operator = make_held_lock_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        assert result.exit_code == 0, result.output
+        assert operator.write_eprom.call_count == _ALWAYS_WRITES_PASS_COUNT
 
 
 class TestSdpRecoveryOutcomesD12:

@@ -281,13 +281,15 @@ def test_read_vpp_voltage_finish_on_ok(hw_config, make_comm, fake_serial) -> Non
 
 
 def test_read_vpe_voltage_finish_on_ok(hw_config, make_comm, fake_serial) -> None:
-    """read_vpe_voltage mirrors read_vpp_voltage — same code path, different state."""
+    """read_vpe_voltage mirrors read_vpp_voltage — same code path, but it
+    connects with the COMMAND_READ_VPE state."""
     fake_serial.feed(_ok_frame_bytes())
     fake_serial.feed(b"OK: finished\n")
     hw = HardwareManager(hw_config)
-    with connect_via(make_comm):
+    with connect_via(make_comm) as captured:
         ok = hw.read_vpe_voltage()
     assert ok is True
+    assert captured[0]["state"] == COMMAND_READ_VPE
 
 
 def test_read_vpp_voltage_error_response_returns_false(

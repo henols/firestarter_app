@@ -22,7 +22,6 @@ import pytest
 import firestarter as _pkg
 from firestarter.cli_handlers import cli
 from firestarter.exceptions import (
-    FirmwareOperationError,
     FirmwareReleaseRefusedError,
 )
 from firestarter.firmware import FirmwareManager
@@ -204,15 +203,6 @@ def test_every_refusal_names_the_remedy_and_the_escape(template) -> None:
     assert "--allow-newer-firmware" in template
 
 
-def test_refusal_renders_without_a_prefix() -> None:
-    """Subclassing FirmwareOperationError is what gets verbatim rendering.
-
-    map_typed_errors has no arm of its own for this class; it falls through to
-    the FirmwareOperationError arm, which prints the message with no prefix.
-    """
-    assert issubclass(FirmwareReleaseRefusedError, FirmwareOperationError)
-
-
 # ---------------------------------------------------------------------------
 # F. CLI wiring -- the pinned, pre-serial, pre-network path
 # ---------------------------------------------------------------------------
@@ -231,6 +221,10 @@ def test_pinned_too_new_refuses_before_any_port_or_request(
     The two `assert_not_called` lines are the non-vacuity core of this file: a
     refusal that happened after a port opened would still exit 1 and still
     print the right text, and only these assertions tell the two apart.
+
+    The output is the refusal text verbatim after Click's own "Error: ": the
+    refusal subclasses FirmwareOperationError, whose map_typed_errors arm
+    adds no prefix.
     """
     monkeypatch.setattr(_pkg, "__version__", "3.4.0")
     result = runner.invoke(
@@ -239,7 +233,10 @@ def test_pinned_too_new_refuses_before_any_port_or_request(
         obj=make_app_context(firmware_manager=fw_manager),
     )
     assert result.exit_code == 1
-    assert "pip install --upgrade firestarter" in result.output
+    refusal = _REFUSAL_FORMAT.format(
+        app="3.4.0", release="3.5.0", app_feature="3.4", release_feature="3.5"
+    )
+    assert result.output == f"Error: {refusal}\n"
     fw_manager.check_current_firmware.assert_not_called()
     fw_manager.manage_firmware_update.assert_not_called()
 

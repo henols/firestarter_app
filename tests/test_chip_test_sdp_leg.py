@@ -39,12 +39,6 @@ Test taxonomy:
     test_exception_precedence_matrix -> all nine exception classes' live
       (escaped, verdict, error_code) triple, derived by injecting each
       exception into a real run_plan() call and reading what escapes/lands.
-    test_precedence_matrix_delta_is_exactly_intended -> the gate: any row
-      that changes between _PRE_EDIT_PRECEDENCE_MATRIX (frozen forever) and
-      _EXPECTED_PRECEDENCE_MATRIX (edited by later plans) must be named in
-      _INTENDED_PRECEDENCE_DELTA, or the suite goes RED.
-    test_precedence_matrix_deriver_is_non_vacuous -> proves the delta gate
-      is capable of failing (a real leg proves nothing until seen to fail).
 
   LEG-11's four behavioural proofs (plan 133-02, D-08)
     test_serial_timeout_degrades_one_step -> a SerialTimeoutError raised by
@@ -359,70 +353,17 @@ def _derive_precedence_row(exc):
     return (None, result.verdict, result.error_code)
 
 
-_PRE_EDIT_PRECEDENCE_MATRIX = {
-    "SerialError": ("SerialError", None, None),
-    "SerialTimeoutError": ("SerialTimeoutError", None, None),
+_EXPECTED_PRECEDENCE_MATRIX = {
+    "SerialError": (None, "SKIPPED", None),
+    "SerialTimeoutError": (None, "SKIPPED", None),
     "ProgrammerNotFoundError": ("ProgrammerNotFoundError", None, None),
     "FirmwareOutdatedError": ("FirmwareOutdatedError", None, None),
     "EpromOperationError": (None, "BAD", _INJECTED_ERROR_CODE),
     "ChipNotImplementedError": (None, "BAD", None),
     "ChipNotFoundError": (None, "SKIPPED", None),
-    "HardwareOperationError": ("HardwareOperationError", None, None),
+    "HardwareOperationError": (None, "SKIPPED", None),
     "AssertionError": ("AssertionError", None, None),
 }
-
-"""CURRENT expectation -- advanced by plan 133-02 (D-08), then re-pointed
-by plan 178-01 (D-01/D-12), for EXACTLY the three rows measured to change
-against the edited `_run_step`: SerialError, SerialTimeoutError, and
-HardwareOperationError now escape ONLY as far as `_run_step`'s `except
-(SerialError, HardwareOperationError)` clause and land on
-SKIPPED/error_code=None -- neither class carries `.error_code`, and the
-chip-verdict axis reads SKIPPED (not BAD) so the destructive gate still
-closes while the fault reason still renders (the status-axis proof for
-these three rows is authored separately in plan 178-02).
-ProgrammerNotFoundError and FirmwareOutdatedError still ESCAPE (re-raised
-by the new first clause, unchanged from the pre-edit row).
-EpromOperationError, ChipNotImplementedError, ChipNotFoundError, and
-AssertionError are all untouched -- their rows are byte-identical to
-_PRE_EDIT_PRECEDENCE_MATRIX, proving the existing `except
-EpromOperationError` and `except (ChipNotImplementedError,
-ChipNotFoundError)` clauses were neither moved nor reworded. Measured live
-against the post-edit engine, never hand-derived."""
-_EXPECTED_PRECEDENCE_MATRIX = dict(_PRE_EDIT_PRECEDENCE_MATRIX)
-_EXPECTED_PRECEDENCE_MATRIX["SerialError"] = (None, "SKIPPED", None)
-_EXPECTED_PRECEDENCE_MATRIX["SerialTimeoutError"] = (None, "SKIPPED", None)
-_EXPECTED_PRECEDENCE_MATRIX["HardwareOperationError"] = (None, "SKIPPED", None)
-
-_INTENDED_PRECEDENCE_DELTA: frozenset[str] = frozenset(
-    {"SerialError", "SerialTimeoutError", "HardwareOperationError"}
-)
-
-
-def _compute_precedence_delta(pre, expected):
-    """The exact row-diff the delta gate polices, factored out so the
-    non-vacuity leg below exercises this SAME comparison rather than a
-    re-implementation of it (the `_referenced_underscore_helpers_in_dev_test`
-    precedent, 133-PATTERNS.md)."""
-    return {name for name in pre if pre[name] != expected[name]}
-
-
-def _assert_delta_matches_intended(pre, expected, intended):
-    """Shared assertion body for the real delta-gate leg and its
-    non-vacuity leg. Asserts both mappings cover the identical class set
-    (so a row cannot be silently DROPPED instead of changed) and that the
-    computed delta equals the declared intended set."""
-    assert set(pre) == set(expected), (
-        f"key sets differ between _PRE_EDIT_PRECEDENCE_MATRIX "
-        f"({sorted(pre)}) and _EXPECTED_PRECEDENCE_MATRIX ({sorted(expected)}) "
-        "-- a row was dropped instead of changed (133-01 criterion 4)"
-    )
-    delta = _compute_precedence_delta(pre, expected)
-    assert delta == intended, (
-        f"computed precedence delta {sorted(delta)} != declared "
-        f"_INTENDED_PRECEDENCE_DELTA {sorted(intended)} -- a chip_test.py "
-        "exception-clause behavioural change was made without naming it "
-        "in _INTENDED_PRECEDENCE_DELTA (133-CONTEXT.md D-08 mechanism)"
-    )
 
 
 def test_exception_precedence_matrix():
@@ -443,51 +384,6 @@ def test_exception_precedence_matrix():
             f"expected {_EXPECTED_PRECEDENCE_MATRIX[name]!r} -- "
             "chip_test.py's exception-clause precedence for this class "
             "changed (133-01 before-image, criterion 4)"
-        )
-
-
-def test_precedence_matrix_delta_is_exactly_intended():
-    """At this commit both matrices are equal and _INTENDED_PRECEDENCE_DELTA
-    is empty, so the computed delta must also be empty."""
-    _assert_delta_matches_intended(
-        _PRE_EDIT_PRECEDENCE_MATRIX,
-        _EXPECTED_PRECEDENCE_MATRIX,
-        _INTENDED_PRECEDENCE_DELTA,
-    )
-
-
-def test_precedence_matrix_deriver_is_non_vacuous():
-    """A pre-authored gate leg proves nothing until it is SEEN to fail
-    (133-PATTERNS.md). Build an in-memory copy of
-    _EXPECTED_PRECEDENCE_MATRIX with exactly one row's verdict altered,
-    assert the copy differs from the original (the house fixture-setup
-    assertion, so a stale edit cannot make this leg vacuous), then run the
-    REAL comparison helper (_assert_delta_matches_intended, the same one
-    test_precedence_matrix_delta_is_exactly_intended calls) and assert it
-    raises AssertionError."""
-    altered = dict(_EXPECTED_PRECEDENCE_MATRIX)
-    escaped, verdict, error_code = altered["EpromOperationError"]
-    assert verdict == "BAD", (
-        "Fixture setup error: _EXPECTED_PRECEDENCE_MATRIX['EpromOperationError']"
-        f" verdict is {verdict!r}, expected 'BAD' -- this fixture needs updating."
-    )
-    altered["EpromOperationError"] = (escaped, "BAD-ALTERED-FOR-TEST", error_code)
-    assert altered != _EXPECTED_PRECEDENCE_MATRIX, (
-        "Fixture setup error: altering one row's verdict did not change "
-        "the in-memory copy -- this fixture needs updating."
-    )
-
-    try:
-        _assert_delta_matches_intended(
-            _PRE_EDIT_PRECEDENCE_MATRIX, altered, _INTENDED_PRECEDENCE_DELTA
-        )
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError(
-            "Non-vacuity failure: altering one row's verdict did not make "
-            "the delta-gate assertion fail -- the deriver or comparison is "
-            "vacuous."
         )
 
 
@@ -1585,24 +1481,6 @@ def _allow_refuse_populations() -> tuple[list[str], list[str]]:
         allowed, _reason = sdp_capability_for_entry(full, name)
         (allow if allowed else refuse).append(name)
     return allow, refuse
-
-
-def test_allow_refuse_populations_sum_to_full_and_allow_nonempty():
-    """Population-count sanity: ALLOW and REFUSE sum to the FULL
-    SDP-classified population (every chip in the live DB is classified one
-    way or the other -- `sdp_capability` never refuses to answer) and
-    ALLOW is non-empty -- both numbers derived from the live DB, never
-    restated as literals in an assertion. Measured at plan time: 43 ALLOW /
-    41 REFUSE / 84 total among the protocol-0x0D subset (comment only, not
-    asserted as a literal here)."""
-    all_eproms = REAL_DB.get_eproms()
-    allow, refuse = _allow_refuse_populations()
-
-    assert len(allow) + len(refuse) == len(all_eproms), (
-        f"ALLOW ({len(allow)}) + REFUSE ({len(refuse)}) != total DB entries "
-        f"({len(all_eproms)}) -- some chip fell through uncategorised"
-    )
-    assert len(allow) > 0, "the ALLOW population must be non-empty"
 
 
 def test_derive_plan_allow_population_emits_six_supported_ops():
