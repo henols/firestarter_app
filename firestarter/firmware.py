@@ -312,13 +312,14 @@ class FirmwareManager:
             )
             return False  # Treat as not up-to-date if parsing fails
 
-    def _fetch_all_releases(self, max_pages: int = 5) -> list:
+    def _fetch_all_releases(self, max_pages: int = 2, per_page: int = 75) -> list:
         """Paginate GET /releases via Link: rel="next" headers. Cap at max_pages.
 
         Returns a flat list of all release dicts from all pages fetched.
         Logs INFO when the cap is hit so operators know truncation occurred.
+        GitHub carries per_page into the rel="next" links.
         """
-        url = FIRESTARTER_RELEASES_URL
+        url: str | None = f"{FIRESTARTER_RELEASES_URL}?per_page={per_page}"
         all_releases = []
         pages_fetched = 0
 
@@ -337,7 +338,7 @@ class FirmwareManager:
         if url and pages_fetched >= max_pages:
             logger.info(
                 f"Firmware release list capped at {max_pages} pages "
-                f"({max_pages * 30} releases). More releases may exist."
+                f"({max_pages * per_page} releases). More releases may exist."
             )
 
         return all_releases
