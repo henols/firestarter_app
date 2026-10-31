@@ -8,8 +8,7 @@ four `0x0D` (EEPROM_PARALLEL) pinouts:
 
   firestarter/test/native/avr/_shared/sdp_bus_config.h
 
-Unlike `gen_validation_header.py` (whose "spec" is an authored JSON file), this
-generator's derivation is the HOST'S OWN LIVE CODE PATH — it imports
+This generator's derivation is the HOST'S OWN LIVE CODE PATH — it imports
 `EpromDatabase` from `firestarter.database` and calls `get_eprom()` /
 `convert_to_programmer()` for each chip, then translates the resulting
 programmer dict into `bus_config_t` fields exactly the way
@@ -18,7 +17,7 @@ reimplements `convert_to_programmer` — a reimplementation is a second thing
 that can be wrong, and the whole point of this generator is that the trace
 ground truth is NOT a transcription.
 
-Mirrors the established `tools/gen_validation_header.py` shape:
+Shape:
   - Validate-first: validate_rows() raises ValueError on any derivation
     violation BEFORE emission (T-116-02-STALE mitigation).
   - Deterministic: fixed chip order, no timestamps, LF endings.
@@ -53,8 +52,7 @@ _TARGET_DEFAULT = (
 )
 _PINOUTS_DEFAULT = _APP_ROOT / "firestarter" / "data" / "pinouts.json"
 
-# Make the `firestarter` package importable when this script is run directly
-# (mirrors the sibling-repo path derivation convention in gen_validation_header.py).
+# Make the `firestarter` package importable when this script is run directly.
 sys.path.insert(0, str(_APP_ROOT))
 
 # 2. REPRESENTATIVE CHIP SET
@@ -274,9 +272,8 @@ def validate_rows(rows: list) -> None:
 def emit_cpp_header(rows: list) -> str:
     """Emit the C++ header text from validated rows.
 
-    Matches the in-tree validation_matrix.h convention: banner, blank line,
-    #pragma once, includes, a *_COUNT define, a local row-struct typedef, then
-    a static const table. Does NOT re-declare bus_config_t (that lives in
+    Layout: banner, blank line, #pragma once, includes, a *_COUNT define, a
+    local row-struct typedef, then a static const table. Does NOT re-declare bus_config_t (that lives in
     include/firestarter.h) -- only a small wrapper row struct carrying the
     chip/pinout name and mem_size alongside the bus_config initializer.
     """
