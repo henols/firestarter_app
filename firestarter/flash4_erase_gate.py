@@ -33,7 +33,8 @@ not flash4 at all.
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping  # noqa: UP035
+from collections.abc import Mapping
+from typing import Any
 
 from firestarter.constants import COMMAND_ERASE, FLAG_CAN_ERASE
 

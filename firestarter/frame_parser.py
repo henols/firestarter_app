@@ -10,7 +10,7 @@ response types. Stdlib + typing only — no package-internal imports.
 
 import struct
 from collections import namedtuple
-from typing import Any, Tuple  # noqa: UP035
+from typing import Any
 
 # Define a structured object for responses to improve clarity over tuples.
 # `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
@@ -144,7 +144,7 @@ def cobs_decode(encoded: bytes) -> bytes:
     return bytes(out)
 
 
-def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:  # noqa: UP006
+def _decode_param(ptype: str, buf: bytes, cursor: int) -> tuple[Any, int]:
     """Decode one MSB-first parameter starting at `buf[cursor]`.
 
     Returns `(value, new_cursor)`. Raises ValueError on unknown ptype or

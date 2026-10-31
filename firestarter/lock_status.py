@@ -16,7 +16,7 @@ serial_comm nor eprom_operations.
 
 from __future__ import annotations
 
-from typing import Mapping  # noqa: UP035
+from collections.abc import Mapping
 
 from firestarter.protection_readability import GATE_TOKEN_READ_PERMITTED
 from firestarter.sdp_honesty import unreadable_state_caveat

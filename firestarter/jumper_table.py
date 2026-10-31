@@ -41,9 +41,10 @@ Sources:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Mapping  # noqa: UP035
+from typing import Any
 
 from firestarter.database import ROM_CE, ROM_OE, pin_conversions
 
