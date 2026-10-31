@@ -58,6 +58,7 @@ from firestarter.exceptions import (
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.jp5_gate import require_acknowledged
 from firestarter.messages import (
@@ -75,6 +76,7 @@ from firestarter.serial_comm import (
 from firestarter.timestamps import iso_cet_basic
 from firestarter.utils import extract_hex_to_decimal
 from firestarter.write_blank_guard import (
+    SRAM_PROTOCOL_IDS,
     incomplete_refusal_text,
     refusal_text,
     require_non_negative_address,
@@ -143,10 +145,6 @@ def _raise_for_error_response(response, message: str) -> None:
 # Boot-block region size: W29C040 §6.6 defines two 16K boot blocks (first and last).
 _BOOT_BLOCK_SIZE = 0x4000  # 16 KiB
 
-# Flash4 protocol ID.  Boot-block lockout is specific to the AMD/JEDEC SDP
-# page-write flash family (protocol 0x05, FLASH_AMD_STD).
-_FLASH4_PROTOCOL_ID = 5
-
 # Fallback write-path response timeout, for a protocol that has no 27C EPROM
 # row in write_budget.EPROM_ROWS. Those protocols (flash, 0x0D EEPROM, SRAM)
 # program a block in well under a second, so this is a generous ceiling.
@@ -184,7 +182,7 @@ def _boot_block_hint_message(response, protocol: int, mem_size: int) -> str | No
 
     if response.id != MSG_ERR_FL4_VERIFY_TIMEOUT:
         return None
-    if protocol != _FLASH4_PROTOCOL_ID:
+    if protocol != FLASH4_PROTOCOL_ID:  # boot-block lockout is flash4-only
         return None
 
     # Params: expected byte, failing address, read byte.
@@ -3190,16 +3188,6 @@ class EpromOperator:
                 )
             return is_ok
 
-    # Protocol IDs whose firmware handler (configure_sram) leaves a NULL
-    # firestarter_operation_main for the standalone blank-check command's
-    # wire ordinal. Before 3.1.0 that produced 0xA4 MSG_ERR_EMPTY_INPUT;
-    # after Phase 204 retired that ordinal, EVERY protocol handler leaves
-    # the pointer NULL for it, not only configure_sram -- this set stays
-    # SRAM-specific because these are the families with no factory-blank
-    # concept at all, which is what the short-circuit below exists for.
-    # These are all SRAM families (host-side fix).
-    _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
-
     def check_eprom_blank(
         self,
         eprom_name: str,
@@ -3259,7 +3247,7 @@ class EpromOperator:
         # wire protocol or firmware.
         etype = eprom_data_dict.get("electrical-type", "")
         proto = eprom_data_dict.get("protocol-id", 0)
-        if etype in ("SRAM", "FRAM") or proto in self._SRAM_PROTO_IDS:
+        if etype in ("SRAM", "FRAM") or proto in SRAM_PROTOCOL_IDS:
             logger.warning(
                 f"Blank check is not applicable to {eprom_name.upper()} "
                 f"(electrical type: {etype or 'unknown'}, protocol: 0x{proto:02X}). "
