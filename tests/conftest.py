@@ -36,9 +36,9 @@ reference and fail the test suite.
 from __future__ import annotations
 
 import importlib.util
-import io
 import os
 import struct
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, cast
 from unittest.mock import Mock
 
@@ -131,6 +131,24 @@ def _short_drain_window(monkeypatch):
     monkeypatch.setattr(SerialCommunicator, "consume_remaining_input", _short_drain)
 
 
+# Every test gets its own empty config directory and a fresh ConfigManager
+# singleton, so no test reads the developer's ~/.firestarter (config, local
+# database or pin-map overrides) or sees another test's settings.
+@pytest.fixture(autouse=True)
+def _isolated_config(tmp_path, monkeypatch):
+    from firestarter import config, firmware
+
+    config_dir = str(tmp_path / "firestarter-config")
+    monkeypatch.setenv("FIRESTARTER_CONFIG_DIR", config_dir)
+    monkeypatch.delenv("FIRESTARTER_DEV_ALLOW_PRE_V12", raising=False)
+    monkeypatch.setattr(config, "HOME_PATH", config_dir)
+    monkeypatch.setattr(config, "DATABASE_FILE", f"{config_dir}/database.json")
+    monkeypatch.setattr(config, "PIN_MAP_FILE", f"{config_dir}/pin-maps.json")
+    monkeypatch.setattr(firmware, "HOME_PATH", config_dir)
+    monkeypatch.setattr(config.ConfigManager, "_instances", {})
+    monkeypatch.setattr(config.ConfigManager, "_initialized_configs", {})
+
+
 # Module-level reference constants — independent of firestarter.serial_comm
 # so tests do not pass tautologically on a bug in the production constant.
 MAGIC_PREAMBLE_REF: bytes = b"\xaa\x55\xaa\x55"
@@ -184,46 +202,38 @@ def decoded_response(msg_id: int, params: bytes):
 
 
 class _FakeSerial:
-    """BytesIO-backed stand-in for a `serial.Serial` instance.
+    """Stand-in for a `serial.Serial` instance.
 
-    Implements only the surface that `SerialCommunicator._read_and_parse_lines`
-    consumes: `read(n)` returning up to n bytes (b'' on empty — matches pyserial
-    timeout-empty semantics), `is_open`, `in_waiting`, `port`, `timeout`,
-    `write(...)`, `flush()`, and `close()`.
+    The two directions are separate, as on a real port: `feed()` queues bytes
+    for the host to read, and every host `write()` is recorded in `written`.
+    Implements only the surface that `SerialCommunicator` uses: `read(n)`
+    (b'' when empty, as a pyserial timeout), `readline()`, `in_waiting`,
+    `is_open`, `port`, `timeout`, `write()`, `flush()` and `close()`.
     """
 
     def __init__(self) -> None:
-        self._buf = io.BytesIO()
-        self._read_pos = 0
-        self._write_pos = 0
+        self._rx = bytearray()
+        self.written: list[bytes] = []
         self.is_open = True
         self.port = "/dev/null"
         self.timeout = 0.1
 
-    # --- read side ---
     def read(self, n: int = 1) -> bytes:
-        self._buf.seek(self._read_pos)
-        data = self._buf.read(n)
-        self._read_pos = self._buf.tell()
+        data = bytes(self._rx[:n])
+        del self._rx[:n]
         return data
 
     def readline(self) -> bytes:
-        self._buf.seek(self._read_pos)
-        data = self._buf.readline()
-        self._read_pos = self._buf.tell()
-        return data
+        end = self._rx.find(b"\n")
+        return self.read(len(self._rx) if end < 0 else end + 1)
 
     @property
     def in_waiting(self) -> int:
-        end = self._write_pos
-        return max(0, end - self._read_pos)
+        return len(self._rx)
 
-    # --- write side (unused by decoder tests, but kept for completeness) ---
     def write(self, data: bytes) -> int:
-        self._buf.seek(self._write_pos)
-        n = self._buf.write(data)
-        self._write_pos = self._buf.tell()
-        return n
+        self.written.append(bytes(data))
+        return len(data)
 
     def flush(self) -> None:
         pass
@@ -231,48 +241,121 @@ class _FakeSerial:
     def close(self) -> None:
         self.is_open = False
 
-    # --- test-side helper ---
     def feed(self, data: bytes) -> None:
-        """Append bytes to the readable buffer (test-side injection)."""
-        self._buf.seek(self._write_pos)
-        self._buf.write(data)
-        self._write_pos = self._buf.tell()
+        """Queue bytes for the host to read (test-side injection)."""
+        self._rx += data
 
 
 @pytest.fixture
 def fake_serial() -> _FakeSerial:
-    """Return a fresh BytesIO-backed fake serial port."""
+    """Return a fresh fake serial port."""
     return _FakeSerial()
+
+
+def comm_on(serial: _FakeSerial, *, port_name: str = "/dev/null"):
+    """A real `SerialCommunicator` whose port is `serial`.
+
+    The real `__init__` runs; only `serial.Serial` (the one I/O call in it)
+    and the port-settle delay are replaced.
+    """
+    from unittest.mock import patch
+
+    from firestarter import serial_comm
+
+    with (
+        patch.object(serial_comm.serial, "Serial", return_value=serial),
+        patch.object(serial_comm, "CONNECTION_STABILIZE_DELAY", 0),
+    ):
+        return serial_comm.SerialCommunicator(port_name)
+
+
+def fresh_serial_and_comm(*, port_name: str = "/dev/null"):
+    """A new fake port and a factory of communicators on it.
+
+    For tests that drive more than one operation: a finished operation closes
+    its port, so each drive needs its own pair.
+    """
+    serial = _FakeSerial()
+    return serial, lambda: comm_on(serial, port_name=port_name)
 
 
 @pytest.fixture
 def make_comm(fake_serial):
-    """Factory: build a SerialCommunicator wired to the fake serial port.
+    """Factory: build a SerialCommunicator wired to the `fake_serial` port."""
+    return lambda: comm_on(fake_serial)
 
-    Uses `__new__` to bypass `__init__` (which would try to open a real
-    serial.Serial). Per PATTERNS §"firestarter_app/tests/test_decoder.py".
+
+@contextmanager
+def connect_via(factory, on_connect=None):
+    """Patch `SerialCommunicator.find_and_connect` to return `factory()`.
+
+    Yields the list of command dicts the operator connected with, so a test
+    can assert on what the host composed. `on_connect(comm)` runs on each new
+    communicator before the operator uses it.
     """
-    from firestarter.serial_comm import SerialCommunicator
+    from unittest.mock import patch
 
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = fake_serial
-        instance.port_name = "/dev/null"
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        # mirror SerialCommunicator.__init__ attribute (T-53-03 default)
-        instance._fault_inject_outgoing = None
-        # firmware-advertised DATA_BUFFER_SIZE (None until probed)
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.firmware_identity = None
-        instance.hw_revision = None
-        instance.seen_message_ids = set()
-        instance.setup_refusal = None
-        return instance
+    captured: list[dict] = []
 
-    return _factory
+    def _fake(command_dict, config, **kwargs):
+        captured.append(dict(command_dict))
+        comm = factory()
+        if on_connect is not None:
+            on_connect(comm)
+        return comm
+
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake,
+    ):
+        yield captured
+
+
+def write_success_frames() -> list[bytes]:
+    """Firmware replies for one complete, successful write operation."""
+    from firestarter.messages import (
+        MSG_END_DONE,
+        MSG_INIT_DONE,
+        MSG_MAIN_DONE,
+        MSG_OK_REQ_DATA,
+    )
+
+    return [
+        build_frame(MSG_INIT_DONE, b""),
+        build_frame(MSG_OK_REQ_DATA, b""),
+        build_frame(MSG_MAIN_DONE, b""),
+        build_frame(MSG_END_DONE, b""),
+    ]
+
+
+def read_phase_frames(payload: bytes, chunk: int = 512) -> list[bytes]:
+    """Firmware replies for one complete read that delivers `payload`.
+
+    INIT_DONE, the payload as DATA_CHUNK frames of `chunk` bytes, MAIN_DONE,
+    END_DONE.
+    """
+    from firestarter.messages import (
+        MSG_DATA_CHUNK,
+        MSG_END_DONE,
+        MSG_INIT_DONE,
+        MSG_MAIN_DONE,
+    )
+
+    chunks = [payload[i : i + chunk] for i in range(0, len(payload), chunk)] or [b""]
+    return [
+        build_frame(MSG_INIT_DONE, b""),
+        *(build_frame(MSG_DATA_CHUNK, c) for c in chunks),
+        build_frame(MSG_MAIN_DONE, b""),
+        build_frame(MSG_END_DONE, b""),
+    ]
+
+
+@pytest.fixture
+def runner():
+    """A Click test runner."""
+    from click.testing import CliRunner
+
+    return CliRunner()
 
 
 def make_app_context(

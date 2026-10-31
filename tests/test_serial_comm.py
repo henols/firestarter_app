@@ -167,8 +167,7 @@ def test_send_command_emits_cobs_frame(make_comm, fake_serial) -> None:
     comm.send_command(cmd)
 
     # Read what was written to the fake serial
-    fake_serial._buf.seek(0)
-    written = fake_serial._buf.read()
+    written = b"".join(fake_serial.written)
 
     # Must end with the COBS delimiter
     assert written[-1:] == b"\x00", "Frame must end with 0x00 delimiter"
@@ -229,8 +228,7 @@ def test_send_command_version_probe_is_framed(make_comm, fake_serial) -> None:
     comm = make_comm()
     comm.send_command({"state": COMMAND_FW_VERSION})
 
-    fake_serial._buf.seek(0)
-    written = fake_serial._buf.read()
+    written = b"".join(fake_serial.written)
 
     assert written[-1:] == b"\x00", "Version probe must end with 0x00 (framed)"
     assert not written.startswith(b"{"), (
