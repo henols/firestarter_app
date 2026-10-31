@@ -261,6 +261,12 @@ def test_progress_frame_is_not_acked(tmp_path, make_comm, fake_serial) -> None:
         "HOST-02: the zero-progress-frame control drive must itself "
         f"succeed (sanity check on the driver, not on D-05); got ok={ok_zero}"
     )
+    # Floor: the acks are counted by their bytes on the wire, so a change to
+    # what an ack looks like must fail here, not compare 0 with 0 below.
+    assert ack_count_zero == 4, (
+        "a completed write acks INIT-start, MAIN-start, END-start and the "
+        f"final frame; counted {ack_count_zero} OK acks on the wire"
+    )
 
     serial2, comm2 = fresh_serial_and_comm()
     ok_frames, _positions_frames, ack_count_frames = _drive_write_with_progress_frames(

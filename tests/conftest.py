@@ -260,19 +260,22 @@ class AnsweringSerial(_FakeSerial):
 
 
 class PortDropSerial(_FakeSerial):
-    """A fake port that raises `serial.SerialException` once, on the first
-    read after its fed bytes run out: a port drop mid-operation, not a plain
-    timeout. After that it returns empty reads, so the disconnect drain does
-    not see a second exception."""
+    """A fake port that raises once, on the first read after its fed bytes
+    run out: by default a `serial.SerialException`, a port drop mid-operation
+    rather than a plain timeout. After that it returns empty reads, so the
+    disconnect drain does not see a second exception."""
 
-    def __init__(self) -> None:
+    def __init__(self, error: BaseException | None = None) -> None:
         super().__init__()
+        self._error = error
         self._raised_once = False
 
     def read(self, n: int = 1) -> bytes:
         data = super().read(n)
         if not data and not self._raised_once:
             self._raised_once = True
+            if self._error is not None:
+                raise self._error
             import serial
 
             raise serial.SerialException("simulated port drop mid-operation")

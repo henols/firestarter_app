@@ -31,6 +31,16 @@ from firestarter import submit
 # sanitize_dict -- one test per leak vector (A3 fails-open discipline)
 
 
+def _capturing_console() -> tuple[Mock, list]:
+    """A console double and the list of the first argument of each print."""
+    printed: list = []
+    console = Mock()
+    console.print.side_effect = lambda *args, **kwargs: printed.append(
+        args[0] if args else ""
+    )
+    return console, printed
+
+
 def test_sanitize_home_dir_path():
     d = {"reason": "failed reading /home/alice/scratch/file.bin"}
     out = submit.sanitize_dict(d, user="somebody")
@@ -683,9 +693,7 @@ def test_submit_via_gh_failure_prints_captured_stderr():
             stderr="GraphQL: Resource not accessible by personal access token",
         )
     )
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
     result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
     assert result is None
     assert any(
@@ -696,9 +704,7 @@ def test_submit_via_gh_failure_prints_captured_stderr():
 
 def test_submit_via_gh_failure_with_blank_stderr_still_reports():
     run_fn = Mock(return_value=Mock(returncode=3, stdout="", stderr=""))
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
     result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
     assert result is None
     assert any(m.strip() and "3" in m for m in printed)
@@ -984,9 +990,7 @@ def test_browser_unreachable_returns_none_and_prints_url_and_local_path():
 
     browser_open = Mock(return_value=False)
     saved = Path("/home/alice/.firestarter/reports/dev-test-x.json")
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
 
     result = submit.submit_via_browser(
         "My Title", _small_body(), saved, browser_open=browser_open, console=console
@@ -1073,9 +1077,7 @@ def _submit(
     given). A keyword in `overrides` replaces that seam or argument. Returns
     every seam, plus `printed`: the messages sent to the default console.
     """
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
     seams = {
         "which_fn": Mock() if gh is _SEAM_DEFAULT else Mock(return_value=gh),
         "run_fn": Mock(),
@@ -1206,9 +1208,7 @@ def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
     # it. A single shared `printed` list (fed by both console.print AND a
     # browser_open side_effect sentinel) is the only way a mocked test can
     # honestly prove ordering across two different injected seams.
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
 
     def _browser_open_sentinel(url):
         printed.append("BROWSER_OPEN_SENTINEL")

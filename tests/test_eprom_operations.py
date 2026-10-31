@@ -36,6 +36,9 @@ from firestarter.messages import (
 )
 
 from .conftest import (
+    AnsweringSerial,
+    PortDropSerial,
+    _FakeSerial,
     build_frame,
     comm_on,
     connect_via,
@@ -1596,24 +1599,14 @@ class TestFaultInjectCycle:
 
 
 class TestMeasureCommandNakLatency:
-    def test_pass_arms_hook_only_for_corrupt_send(
-        self, tmp_path, monkeypatch, fake_serial
-    ):
+    def test_pass_arms_hook_only_for_corrupt_send(self, tmp_path, monkeypatch):
         # The board answers each command when it arrives (baseline OK, an
         # error for the corrupted frame, recovery OK), so the drain between
         # commands never sees a reply ahead of its command.
-        replies = iter([b"OK: Ready\n", b"ERROR: Empty input\n", b"OK: Ready\n"])
-        record = fake_serial.write
-
-        def _answer(data: bytes) -> int:
-            written = record(data)
-            fake_serial.feed(next(replies))
-            return written
-
-        monkeypatch.setattr(fake_serial, "write", _answer)
+        board = AnsweringSerial(b"OK: Ready\n", b"ERROR: Empty input\n", b"OK: Ready\n")
         monkeypatch.setattr(
             "firestarter.eprom_operations.SerialCommunicator",
-            lambda port: comm_on(fake_serial, port_name=port),
+            lambda port: comm_on(board, port_name=port),
         )
         op = EpromOperator(ConfigManager())
         out = tmp_path / "nak"
@@ -1625,10 +1618,10 @@ class TestMeasureCommandNakLatency:
         assert result is True, "baseline OK + corrupt ERROR + recovery OK -> True"
         # 3 sends: baseline, corrupt, recovery. The hook is armed ONLY for the
         # corrupted (2nd) send and cleared after it.
-        baseline, corrupt, recovery = fake_serial.written
+        baseline, corrupt, recovery = board.written
         assert corrupt != baseline
         assert recovery == baseline
-        assert fake_serial.is_open is False
+        assert board.is_open is False
         log = (out / "fault-inject-corrupt-crc8-latency.txt").read_text()
         assert "corrupted_frame_surfaced_error_no_silent_accept: True" in log
         assert "per_frame_nak_latency:" in log
@@ -2261,28 +2254,23 @@ def test_default_read_file_takes_lowest_free_suffix(tmp_path, monkeypatch):
 _READ_BYTES = b"\x01\x02\x03\x04"
 
 
-def _read_four_bytes_then(serial, outcome):
-    """Script a read that delivers 4 bytes, then completes (True), fails on
-    a firmware error (False) or raises `outcome` at the next empty read."""
+def _read_four_bytes_then(outcome):
+    """A port scripted with a read that delivers 4 bytes, then completes
+    (True), fails on a firmware error (False) or raises `outcome` at the next
+    empty read."""
     if outcome is True:
+        serial = _FakeSerial()
         serial.feed(b"".join(read_phase_frames(_READ_BYTES)))
-        return
+        return serial
+    if isinstance(outcome, BaseException):
+        serial = PortDropSerial(outcome)
+    else:
+        serial = _FakeSerial()
     serial.feed(build_frame(MSG_INIT_DONE, b""))
     serial.feed(build_frame(MSG_DATA_CHUNK, _READ_BYTES))
     if not isinstance(outcome, BaseException):
         serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
-        return
-    read = serial.read
-    raised = []
-
-    def _read(n: int = 1) -> bytes:
-        data = read(n)
-        if not data and not raised:
-            raised.append(outcome)
-            raise outcome
-        return data
-
-    serial.read = _read
+    return serial
 
 
 def _read_eprom(*args):
@@ -2292,25 +2280,21 @@ def _read_eprom(*args):
     )
 
 
-def test_read_with_default_name_keeps_the_file(
-    tmp_path, monkeypatch, make_comm, fake_serial
-):
+def test_read_with_default_name_keeps_the_file(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    _read_four_bytes_then(fake_serial, True)
-    with connect_via(make_comm):
+    serial = _read_four_bytes_then(True)
+    with connect_via(lambda: comm_on(serial)):
         assert _read_eprom()
     assert (tmp_path / "W27C512.bin").read_bytes() == _READ_BYTES
 
 
 @pytest.mark.parametrize("outcome", [False, KeyboardInterrupt()])
-def test_failed_read_with_default_name_leaves_no_file(
-    tmp_path, monkeypatch, make_comm, fake_serial, outcome
-):
+def test_failed_read_with_default_name_leaves_no_file(tmp_path, monkeypatch, outcome):
     """A failed or interrupted read frees its name, so the next read takes it."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "W27C512.bin").write_bytes(b"earlier read")
-    _read_four_bytes_then(fake_serial, outcome)
-    with connect_via(make_comm):
+    serial = _read_four_bytes_then(outcome)
+    with connect_via(lambda: comm_on(serial)):
         if isinstance(outcome, BaseException):
             with pytest.raises(KeyboardInterrupt):
                 _read_eprom()
@@ -2320,10 +2304,10 @@ def test_failed_read_with_default_name_leaves_no_file(
     assert (tmp_path / "W27C512.bin").read_bytes() == b"earlier read"
 
 
-def test_failed_read_with_named_file_keeps_it(tmp_path, make_comm, fake_serial):
+def test_failed_read_with_named_file_keeps_it(tmp_path):
     """A file the user named is not removed: it is theirs."""
     out = tmp_path / "mine.bin"
-    _read_four_bytes_then(fake_serial, False)
-    with connect_via(make_comm):
+    serial = _read_four_bytes_then(False)
+    with connect_via(lambda: comm_on(serial)):
         assert _read_eprom(str(out)) is False
     assert out.read_bytes() == _READ_BYTES

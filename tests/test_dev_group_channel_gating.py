@@ -80,10 +80,11 @@ def test_simulated_stable_help_lists_only_read_and_test() -> None:
 
 
 def test_simulated_stable_dev_commands_is_exactly_read_and_test() -> None:
-    """CHAN-02: the exact command set that `dev --help` lists, not just
-    'excludes the gated set'."""
+    """CHAN-02: the exact command set that the `dev` group registers (hidden
+    commands included) and that `dev --help` lists, not just 'excludes the
+    gated set'."""
     result = run_cli_fresh(_STABLE_VERSION, "dev", "--help")
-    assert set(result.commands) == _STABLE_NAMES
+    assert result.registered == result.listed == _STABLE_NAMES
 
 
 def test_simulated_stable_gated_command_refuses_with_channel_message() -> None:
@@ -123,7 +124,7 @@ def test_simulated_prerelease_help_lists_every_name() -> None:
 
 def test_simulated_prerelease_dev_commands_is_every_name() -> None:
     result = run_cli_fresh(_PRERELEASE_VERSION, "dev", "--help")
-    assert set(result.commands) == _ALL_GATED_PLUS_STABLE_NAMES
+    assert result.registered == result.listed == _ALL_GATED_PLUS_STABLE_NAMES
 
 
 def test_dev_help_differs_between_channels_and_is_pinned_each_way() -> None:
@@ -143,8 +144,8 @@ def test_dev_help_differs_between_channels_and_is_pinned_each_way() -> None:
     prerelease = run_cli_fresh(_PRERELEASE_VERSION, "dev", "--help")
 
     assert stable.output != prerelease.output
-    assert set(stable.commands) == _STABLE_NAMES
-    assert set(prerelease.commands) == _ALL_GATED_PLUS_STABLE_NAMES
+    assert stable.registered == stable.listed == _STABLE_NAMES
+    assert prerelease.registered == prerelease.listed == _ALL_GATED_PLUS_STABLE_NAMES
 
     # Pin each channel's own output independently -- both directions.
     for gated in _GATED_NAMES:
@@ -161,7 +162,7 @@ def test_simulated_stable_with_env_override_registers_every_gated_name() -> None
     result = run_cli_fresh(
         _STABLE_VERSION, "dev", "--help", env={"FIRESTARTER_DEV_TOOLS": "1"}
     )
-    assert set(result.commands) == _ALL_GATED_PLUS_STABLE_NAMES
+    assert result.registered == result.listed == _ALL_GATED_PLUS_STABLE_NAMES
     for gated in _GATED_NAMES:
         assert gated in result.output
 
@@ -183,4 +184,4 @@ def test_simulated_stable_dev_tools_env_override_absent_by_default() -> None:
     an ambient FIRESTARTER_DEV_TOOLS from this test session's own shell --
     `run_cli_fresh` strips it before every call, override or not."""
     result = run_cli_fresh(_STABLE_VERSION, "dev", "--help")
-    assert set(result.commands) == _STABLE_NAMES
+    assert result.registered == result.listed == _STABLE_NAMES

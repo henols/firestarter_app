@@ -5,8 +5,9 @@
 release channel therefore needs a process in which the version is set before
 that import; patching the version in this process would leave them stale.
 
-The child strips an inherited FIRESTARTER_DEV_TOOLS, so only an explicit
-`env` can enable the dev tools.
+The child inherits no FIRESTARTER_* variable and gets its own empty config
+directory, so a result depends only on the arguments: only an explicit `env`
+can enable the dev tools, and a cached result is safe to share between tests.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,6 +28,7 @@ _CHILD_PROGRAM = """
 import json
 import sys
 
+import click
 import firestarter
 
 assert "firestarter.cli_handlers" not in sys.modules, (
@@ -36,11 +39,14 @@ firestarter.__version__ = {version!r}
 from click.testing import CliRunner
 from firestarter import cli_handlers
 
-result = CliRunner().invoke(cli_handlers.cli, {argv!r})
+argv = {argv!r}
+result = CliRunner().invoke(cli_handlers.cli, argv)
+group = cli_handlers.cli.commands.get(argv[0]) if argv else None
 print(json.dumps({{
     "version": firestarter.__version__,
     "exit_code": result.exit_code,
     "output": result.output,
+    "registered": sorted(group.commands) if isinstance(group, click.Group) else None,
 }}))
 """
 
@@ -49,6 +55,8 @@ print(json.dumps({{
 class CliResult:
     exit_code: int
     output: str
+    # The subcommands registered on the group named by argv[0], hidden or not.
+    registered: frozenset[str] | None
 
     @property
     def board_choices(self) -> list[str]:
@@ -58,7 +66,7 @@ class CliResult:
         return match.group(1).split("|")
 
     @property
-    def commands(self) -> set[str]:
+    def listed(self) -> set[str]:
         """The subcommand names in the `Commands:` section of a group's help."""
         section = self.output.split("Commands:\n", 1)[1]
         return {
@@ -79,20 +87,30 @@ def run_cli_fresh(
 def _run(
     version: str, argv: tuple[str, ...], env: tuple[tuple[str, str], ...]
 ) -> CliResult:
-    child_env = {k: v for k, v in os.environ.items() if k != "FIRESTARTER_DEV_TOOLS"}
-    child_env.update(env)
-    completed = subprocess.run(
-        [sys.executable, "-c", _CHILD_PROGRAM.format(version=version, argv=list(argv))],
-        cwd=str(_APP_DIR),
-        capture_output=True,
-        text=True,
-        timeout=120,
-        env=child_env,
-    )
+    child_env = {
+        k: v for k, v in os.environ.items() if not k.startswith("FIRESTARTER_")
+    }
+    with tempfile.TemporaryDirectory(prefix="fresh-cli-") as config_dir:
+        child_env["FIRESTARTER_CONFIG_DIR"] = config_dir
+        child_env.update(env)
+        program = _CHILD_PROGRAM.format(version=version, argv=list(argv))
+        completed = subprocess.run(
+            [sys.executable, "-c", program],
+            cwd=str(_APP_DIR),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=child_env,
+        )
     assert completed.returncode == 0, (
         f"child for version={version!r} argv={argv!r} env={dict(env)!r} exited "
         f"{completed.returncode}:\n{completed.stderr}"
     )
     report = json.loads(completed.stdout.strip().splitlines()[-1])
     assert report["version"] == version
-    return CliResult(exit_code=report["exit_code"], output=report["output"])
+    registered = report["registered"]
+    return CliResult(
+        exit_code=report["exit_code"],
+        output=report["output"],
+        registered=None if registered is None else frozenset(registered),
+    )
