@@ -107,6 +107,15 @@ def cobs_encode(payload: bytes) -> bytes:
     return bytes(out)
 
 
+def encode_crc_frame(payload: bytes) -> bytes:
+    """``COBS(payload + CRC8) + 0x00``: the CRC is over the raw payload.
+
+    The order is load-bearing: CRC first, then COBS over payload and CRC
+    together. The firmware verifies the CRC after it decodes the COBS.
+    """
+    return cobs_encode(payload + bytes([_crc8_ccitt(payload)])) + b"\x00"
+
+
 def cobs_decode(encoded: bytes) -> bytes:
     """Decode a COBS body (NO trailing ``0x00`` delimiter).
 

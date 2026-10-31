@@ -74,7 +74,7 @@ from firestarter.constants import (
     FLAG_CHIP_ENABLE,
     FLAG_OUTPUT_ENABLE,
 )
-from firestarter.database import EpromDatabase
+from firestarter.database import EpromDatabase, _strip_mode
 from firestarter.diagnostic_report import (
     AutoCapture,
     DiagnosticReport,
@@ -3144,11 +3144,6 @@ def _canonical_part_number(part_number: str | None, raw_token: str) -> str | Non
     if not part_number:
         return None
 
-    import re
-
-    def _strip_paren(s: str) -> str:
-        return re.sub(r"\([^)]*\)", "", s).strip().lower()
-
     # A manufacturer qualifier (PART@MANUFACTURER) is not part of the name.
     raw_token = raw_token.partition("@")[0].strip()
     query = raw_token.lower()
@@ -3160,10 +3155,10 @@ def _canonical_part_number(part_number: str | None, raw_token: str) -> str | Non
         for alias in aliases:
             if alias.lower() == query:
                 return alias
-        query_stripped = _strip_paren(raw_token)
+        query_stripped = _strip_mode(raw_token)
         if query_stripped:
             for alias in aliases:
-                if _strip_paren(alias) == query_stripped:
+                if _strip_mode(alias) == query_stripped:
                     return alias
 
     return part_number.split(",")[0].strip()

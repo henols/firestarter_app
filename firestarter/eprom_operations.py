@@ -59,7 +59,7 @@ from firestarter.exceptions import (
     SerialTimeoutError,
 )
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
-from firestarter.frame_parser import _crc8_ccitt, cobs_encode
+from firestarter.frame_parser import encode_crc_frame
 from firestarter.jp5_gate import require_acknowledged
 from firestarter.messages import (
     MSG_DATA_PROTECTION_STATUS,
@@ -121,6 +121,27 @@ CONNECT_COST_STRUCTURAL_FLOOR_S = (
 # false 2 refuses the write as a guard-read failure, which is fail-closed.
 # `TestVerifyEpromReadAbort` pins both sides of the boundary.
 READ_ABORT_ACCEPTANCE_WINDOW_S = 3.0
+
+
+def _corrupt_crc8(frame: bytes) -> bytes:
+    """Flip the CRC8 byte (frame[-2]) — frame[-1] is the 0x00 delimiter."""
+    return frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\x00"
+
+
+def _drop_delimiter(frame: bytes) -> bytes:
+    """Drop trailing 0x00 delimiter — firmware inter-byte timeout fires."""
+    return frame[:-1]
+
+
+_OUTGOING_FAULT_HOOKS = {
+    "corrupt-crc8": _corrupt_crc8,
+    "drop-delimiter": _drop_delimiter,
+}
+
+
+def _outgoing_fault_hook(fault_form: str):
+    """The outgoing frame corrupter for `fault_form`; corrupt-crc8 by default."""
+    return _OUTGOING_FAULT_HOOKS.get(fault_form, _corrupt_crc8)
 
 
 def _raise_for_error_response(response, message: str) -> None:
@@ -1143,9 +1164,7 @@ class EpromOperator:
 
                 if file_handle.tell() < file_size:
                     data_chunk = file_handle.read(buffer_size)
-                    crc = _crc8_ccitt(data_chunk)
-                    body = cobs_encode(data_chunk + bytes([crc]))
-                    frame = b"#" + body + b"\x00"
+                    frame = b"#" + encode_crc_frame(data_chunk)
 
                     # Firmware decodes the COBS frame via rurp_communication_read_data
                     # (rurp_serial_utils.cpp): reads bytes until the 0x00 delimiter,
@@ -1684,20 +1703,7 @@ class EpromOperator:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        # Build fault hooks for the outgoing path
-        def _corrupt_crc8(frame: bytes) -> bytes:
-            """Flip the CRC8 byte (frame[-2]) — frame[-1] is the 0x00 delimiter."""
-            return frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\x00"
-
-        def _drop_delimiter(frame: bytes) -> bytes:
-            """Drop trailing 0x00 delimiter — firmware inter-byte timeout fires."""
-            return frame[:-1]
-
-        fault_hooks: dict = {
-            "corrupt-crc8": _corrupt_crc8,
-            "drop-delimiter": _drop_delimiter,
-        }
-        hook = fault_hooks.get(fault_form, _corrupt_crc8)
+        hook = _outgoing_fault_hook(fault_form)
 
         # --- Corrupted transfer ---
         # Outgoing: the hook is threaded into _operation_context so it corrupts the
@@ -1951,15 +1957,7 @@ class EpromOperator:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        def _corrupt_crc8(frame: bytes) -> bytes:
-            return frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\x00"
-
-        def _drop_delimiter(frame: bytes) -> bytes:
-            return frame[:-1]
-
-        hook = {"corrupt-crc8": _corrupt_crc8, "drop-delimiter": _drop_delimiter}.get(
-            fault_form, _corrupt_crc8
-        )
+        hook = _outgoing_fault_hook(fault_form)
 
         fw_cmd = {"state": COMMAND_FW_VERSION}
         comm = None

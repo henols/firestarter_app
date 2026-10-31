@@ -58,6 +58,7 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
     _crc8_ccitt,
     _decode_param,
     cobs_encode,
+    encode_crc_frame,
 )
 from firestarter.messages import (
     CATALOG,
@@ -256,9 +257,7 @@ class SerialCommunicator:
         The full frame is assembled as a single ``bytes`` object and passed to
         ``send_bytes()`` in ONE call — a split write is forbidden.
         """
-        crc = _crc8_ccitt(payload)
-        body = cobs_encode(payload + bytes([crc]))
-        frame = body + b"\x00"
+        frame = encode_crc_frame(payload)
         # FAULT INJECTION — only active when _fault_inject_outgoing is set.
         # Production path: attribute is None by default → no-op.
         # Hook is set only within fault_inject_cycle / dev fault-inject scope and
