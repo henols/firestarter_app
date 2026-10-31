@@ -133,7 +133,7 @@ def _read_config_file(filename: str) -> dict:
         return {}
 
 
-def _strip_mode(name: str) -> str:
+def strip_mode(name: str) -> str:
     """'DS1245AB(RW)' -> 'ds1245ab': the name without its mode annotation."""
     return re.sub(r"\([^)]*\)", "", name).strip().lower()
 
@@ -494,7 +494,7 @@ class EpromDatabase:
         if at and manufacturer_wanted is None:
             return []
         query = name.strip().lower()
-        query_stripped = _strip_mode(name)
+        query_stripped = strip_mode(name)
         exact: list[tuple[dict, str]] = []
         stripped: list[tuple[dict, str]] = []
         for manufacturer, ics in self.proms.items():
@@ -508,7 +508,7 @@ class EpromDatabase:
                 ):
                     exact.append((ic_config, manufacturer))
                 elif query_stripped and query_stripped in (
-                    _strip_mode(a) for a in aliases
+                    strip_mode(a) for a in aliases
                 ):
                     stripped.append((ic_config, manufacturer))
         return exact or stripped
@@ -553,7 +553,7 @@ class EpromDatabase:
         alias = next(
             (a for a in aliases if a.lower() == name.lower()),
             next(
-                (a for a in aliases if _strip_mode(a) == _strip_mode(name)),
+                (a for a in aliases if strip_mode(a) == strip_mode(name)),
                 aliases[0],
             ),
         )
