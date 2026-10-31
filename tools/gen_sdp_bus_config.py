@@ -272,8 +272,8 @@ def validate_rows(rows: list) -> None:
 def emit_cpp_header(rows: list) -> str:
     """Emit the C++ header text from validated rows.
 
-    Layout: banner, blank line, #pragma once, includes, a *_COUNT define, a local row-struct typedef, then
-    a static const table. Does NOT re-declare bus_config_t (that lives in
+    Layout: banner, blank line, #pragma once, includes, a *_COUNT define, a
+    local row-struct typedef, then a static const table. Does NOT re-declare bus_config_t (that lives in
     include/firestarter.h) -- only a small wrapper row struct carrying the
     chip/pinout name and mem_size alongside the bus_config initializer.
     """
