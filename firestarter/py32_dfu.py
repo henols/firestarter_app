@@ -33,9 +33,9 @@ import enum
 import logging
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, Tuple  # noqa: UP035
+from typing import Any
 
 logger = logging.getLogger("Py32Dfu")
 
@@ -162,7 +162,7 @@ class ImageError(DfuError):
 # --------------------------------------------------------------------------
 
 
-def load_image(path: str) -> Tuple[int, bytes]:  # noqa: UP006
+def load_image(path: str) -> tuple[int, bytes]:
     """Load a firmware image, returning ``(base_address, payload)``.
 
     Accepts Intel HEX (`.hex`) and raw binary (`.bin`). HEX carries its own load
@@ -189,7 +189,7 @@ def _read_text(path: str) -> str:
         return handle.read()
 
 
-def parse_intel_hex(text: str) -> Tuple[int, bytes]:  # noqa: UP006
+def parse_intel_hex(text: str) -> tuple[int, bytes]:
     """Parse Intel HEX into ``(base_address, contiguous_payload)``.
 
     Supports record types 00 (data), 01 (EOF), 02 (extended segment address),
@@ -279,7 +279,7 @@ class SectorRange:
         return self.address + self.count * self.size
 
 
-def parse_dfuse_layout(name: Optional[str]) -> List[SectorRange]:  # noqa: UP006,UP045
+def parse_dfuse_layout(name: str | None) -> list[SectorRange]:
     """Parse a DfuSe alt-setting mapping string into erase sectors.
 
     Returns an empty list when ``name`` is absent or is not a mapping string,
@@ -316,7 +316,7 @@ def parse_dfuse_layout(name: Optional[str]) -> List[SectorRange]:  # noqa: UP006
 
 def erase_addresses(
     layout: Sequence[SectorRange], base: int, length: int, fallback_page: int
-) -> List[int]:  # noqa: UP006
+) -> list[int]:
     """Sector start addresses that must be erased to hold ``length`` bytes at ``base``.
 
     Falls back to a uniform ``fallback_page`` grid when the device published no
@@ -363,7 +363,7 @@ class DfuInterface:
     interface: int
     alt_setting: int
     protocol: int
-    name: Optional[str] = None  # noqa: UP045
+    name: str | None = None
     transfer_size: int = _DEFAULT_TRANSFER_SIZE
     dfu_version: int = 0x0100
     attributes: int = 0
@@ -391,8 +391,8 @@ class DfuInterface:
 def _require_usb() -> Any:
     """Import pyusb lazily so the dependency is only needed for DFU boards."""
     try:
-        import usb.core  # noqa: PLC0415
-        import usb.util  # noqa: PLC0415
+        import usb.core
+        import usb.util
     except ImportError as exc:
         raise PyusbMissingError(
             "USB firmware install needs pyusb. Install it with:\n"
@@ -404,7 +404,7 @@ def _require_usb() -> Any:
     return usb
 
 
-def _parse_functional_descriptor(blob: bytes) -> Optional[Tuple[int, int, int]]:  # noqa: UP006,UP045
+def _parse_functional_descriptor(blob: bytes) -> tuple[int, int, int] | None:
     """Pull ``(attributes, transfer_size, dfu_version)`` out of extra descriptors."""
     index = 0
     while index + 1 < len(blob):
@@ -427,9 +427,9 @@ def _extra_descriptor_bytes(holder: Any) -> bytes:
 
 
 def find_dfu_interfaces(
-    vendor_id: Optional[int] = None,  # noqa: UP045
-    product_id: Optional[int] = None,  # noqa: UP045
-) -> List[DfuInterface]:  # noqa: UP006
+    vendor_id: int | None = None,
+    product_id: int | None = None,
+) -> list[DfuInterface]:
     """Enumerate every DFU interface currently attached.
 
     Discovery is by **interface class** (0xFE/0x01), not by VID/PID, because the
@@ -479,7 +479,7 @@ def find_dfu_interfaces(
                 if interface.iInterface:
                     try:
                         name = usb.util.get_string(device, interface.iInterface)
-                    except Exception:  # noqa: BLE001 — string descriptors are optional
+                    except Exception:  # string descriptors are optional
                         name = None
 
                 found.append(
@@ -512,7 +512,7 @@ def dfu_device_present() -> bool:
             interface.protocol == DFU_PROTOCOL_DFU_MODE
             for interface in find_dfu_interfaces()
         )
-    except Exception:  # noqa: BLE001 — a hint must never break the install path
+    except Exception:  # a hint must never break the install path
         return False
 
 
@@ -564,7 +564,7 @@ class Py32DfuFlasher:
 
     def __init__(
         self,
-        usb_id: Optional[str] = None,  # noqa: UP045
+        usb_id: str | None = None,
         base_address: int = FLASH_BASE,
         erase_page_size: int = DEFAULT_ERASE_PAGE_SIZE,
         leave: bool = True,
@@ -573,11 +573,11 @@ class Py32DfuFlasher:
         self.base_address = base_address
         self.erase_page_size = erase_page_size
         self.leave = leave
-        self._interface: Optional[DfuInterface] = None  # noqa: UP045
+        self._interface: DfuInterface | None = None
         # set by `_verify_readback` once `flash()` has run;
         # `None` means verification has not happened yet. See `VerifyResult`.
-        self.verify_result: Optional[VerifyResult] = None  # noqa: UP045
-        self.verify_reason: Optional[str] = None  # noqa: UP045
+        self.verify_result: VerifyResult | None = None
+        self.verify_reason: str | None = None
 
     # -- discovery ---------------------------------------------------------
 
@@ -648,7 +648,7 @@ class Py32DfuFlasher:
         self._interface = dfu_mode[0]
         return self._interface
 
-    def probe(self) -> List[str]:  # noqa: UP006
+    def probe(self) -> list[str]:
         """Describe every DFU interface on the bus, for the first bench session.
 
         This is the instrument that settles the two open unknowns: the USB ID the
@@ -760,11 +760,11 @@ class Py32DfuFlasher:
             interface.device.ctrl_transfer(
                 _OUT, DFU_DETACH, 1000, interface.interface, None
             )
-        except Exception as exc:  # noqa: BLE001 — many stacks fault on DETACH
+        except Exception as exc:  # many stacks fault on DETACH
             logger.debug("DETACH raised (often expected): %s", exc)
         _sleep(1.0)
 
-    def _get_status(self) -> Tuple[int, int, int]:  # noqa: UP006
+    def _get_status(self) -> tuple[int, int, int]:
         """Return ``(bStatus, poll_timeout_ms, bState)``."""
         raw = self._dev.ctrl_transfer(_IN, DFU_GETSTATUS, 0, self._index, 6)
         data = bytes(raw)
@@ -817,7 +817,7 @@ class Py32DfuFlasher:
                 return
             _sleep(min(poll_ms / 1000.0, _STATUS_POLL_CEILING_S))
 
-    def _dfuse_command(self, command: int, address: Optional[int] = None) -> None:  # noqa: UP045
+    def _dfuse_command(self, command: int, address: int | None = None) -> None:
         payload = bytearray([command])
         if address is not None:
             payload += address.to_bytes(4, "little")
@@ -920,7 +920,7 @@ class Py32DfuFlasher:
 
     def _download_dfuse(
         self, interface: DfuInterface, base: int, payload: bytes
-    ) -> Tuple[Optional[int], int]:  # noqa: UP006,UP045
+    ) -> tuple[int | None, int]:
         layout = parse_dfuse_layout(interface.name)
         if not layout:
             logger.warning(
@@ -950,7 +950,7 @@ class Py32DfuFlasher:
 
     def _download_plain(
         self, interface: DfuInterface, payload: bytes
-    ) -> Tuple[Optional[int], int]:  # noqa: UP006,UP045
+    ) -> tuple[int | None, int]:
         chunk_size = interface.transfer_size
         block = 0
         for offset in range(0, len(payload), chunk_size):
@@ -959,7 +959,7 @@ class Py32DfuFlasher:
             block += 1
         return None, block
 
-    def _finish(self, base: Optional[int], next_block: int, dfuse: bool) -> None:  # noqa: UP045
+    def _finish(self, base: int | None, next_block: int, dfuse: bool) -> None:
         """End the download with a zero-length DNLOAD, then leave DFU mode.
 
         After a successful leave the device resets and disappears from the bus,
@@ -973,7 +973,7 @@ class Py32DfuFlasher:
 
         try:
             self._dnload(next_block, b"")
-        except Exception as exc:  # noqa: BLE001 — device may reset immediately
+        except Exception as exc:  # device may reset immediately
             logger.debug("Zero-length DNLOAD raised (device may have reset): %s", exc)
             return
 
@@ -987,11 +987,11 @@ class Py32DfuFlasher:
                 )
         except DfuProtocolError:
             raise
-        except Exception as exc:  # noqa: BLE001 — reset during manifest is success
+        except Exception as exc:  # reset during manifest is success
             logger.debug("Device left the bus during manifest (expected): %s", exc)
 
 
-def _split_usb_id(usb_id: Optional[str]) -> Tuple[Optional[int], Optional[int]]:  # noqa: UP006,UP045
+def _split_usb_id(usb_id: str | None) -> tuple[int | None, int | None]:
     """Parse a ``VID:PID`` string (hex, optional ``0x``) into two ints."""
     if not usb_id:
         return None, None

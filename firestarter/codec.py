@@ -10,7 +10,7 @@ silkscreen table.
 
 import logging
 import struct
-from typing import Any, List  # noqa: UP035
+from typing import Any
 
 from firestarter.command_frame import REFUSALS
 from firestarter.constants import (
@@ -97,7 +97,7 @@ _REVISION_SILKSCREEN = {
 }
 
 
-def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | None:  # noqa: UP006
+def format_message(msg_id: int, params: list[Any], entry: MessageDef) -> str | None:
     """Sentinel-aware message renderer for P-02/P-03 shaped IDs and
     MSG_DEBUG sub-payloads (currently DBG_CMD gets symbolic-name
     annotation; other DBG_* sub_ids render via DEBUG_CATALOG).
@@ -203,7 +203,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | N
         # seen yet so unknown debug emits still appear in the log.
         if sub_entry is not None:
             try:
-                values: List[Any] = []  # noqa: UP006
+                values: list[Any] = []
                 cursor = 0
                 for ptype, _prender in sub_entry.params:
                     value, cursor = _decode_param(ptype, sub_body, cursor)
@@ -297,7 +297,7 @@ def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
         return None
 
     # Decode each param per the catalog grammar.
-    values: List[Any] = []  # noqa: UP006
+    values: list[Any] = []
     cursor = 0
     try:
         for ptype, _prender in entry.params:

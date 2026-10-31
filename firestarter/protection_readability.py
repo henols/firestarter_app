@@ -33,22 +33,23 @@ disagreement is recorded in AMBIGUOUS_DOC_CITATIONS rather than erased.
 
 from __future__ import annotations
 
-# Import purity: this module's top-level imports are limited to __future__,
-# typing and firestarter.sdp_capability. That third is admitted only because it
-# is itself import-pure, keeping the tree shallow and checkable, and because
-# exactly one name is needed from it -- `split_part_number_tokens`, whose
+from collections.abc import Mapping
+
+# Import purity: this module's top-level imports are limited to the standard
+# library (__future__, collections.abc, typing) and firestarter.sdp_capability.
+# That last one is admitted only because it is itself import-pure, keeping the
+# tree shallow and checkable, and because exactly one name is needed from it --
+# `split_part_number_tokens`, whose
 # no-parenthetical-stripping rule is a measured correctness requirement that
 # must not be copied a second time.
 #
 # No click, no json, no pathlib, no firestarter.database, no
 # firestarter.sdp_honesty: the composed refusal PROSE lives one layer up in
 # lock_status.py, so the caveat sentence keeps its single home.
-#
-# Mapping comes from typing, not collections.abc, to keep that list literal.
-from typing import Any, Mapping  # noqa: UP035
+from typing import Any
 
 # The one import the declared purity invariant admits beyond {__future__,
-# typing}: `split_part_number_tokens` is not re-implemented
+# collections.abc, typing}: `split_part_number_tokens` is not re-implemented
 # here because its no-parenthetical-stripping rule
 # (`120-SDP-PARTITION.md` §5) is a measured correctness requirement, and a
 # second copy would be exactly the drift this codebase keeps removing.

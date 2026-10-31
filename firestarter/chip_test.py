@@ -68,8 +68,13 @@ from firestarter.exceptions import (
     ProgrammerNotFoundError,
     SerialError,
 )
+from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 from firestarter.log_capture import step_scope
-from firestarter.sdp_capability import sdp_capability  # the SDP leg's derivation source
+from firestarter.sdp_capability import (  # the SDP leg's derivation source
+    SDP_PROTOCOL_ID,
+    sdp_capability,
+)
+from firestarter.write_blank_guard import SRAM_PROTOCOL_IDS
 
 # ---------------------------------------------------------------------------
 # Address-derived pattern generator
@@ -221,18 +226,16 @@ def _synthesized_match_fingerprint(region_length: int) -> Fingerprint:
 
 # Protocol 0x05 (FLASH_AMD_STD / "flash4") auto-erases per page during the
 # page-write; convert_to_programmer() deliberately clears FLAG_CAN_ERASE for
-# this protocol (database.py:582-595) because setting it would route a 12V
-# bulk-erase onto a 5V-only part (Pitfall 6). No named constant for this
-# protocol id exists in constants.py -- mirror database.py's own `algo != 5`
-# check rather than introduce a new cross-module constant.
-_PROTOCOL_FLASH4 = 0x05
+# this protocol because setting it would route a 12V bulk-erase onto a 5V-only
+# part (Pitfall 6).
+_PROTOCOL_FLASH4 = FLASH4_PROTOCOL_ID
 
 # Protocol 0x0D. Kept as a defensive fallthrough: the arm is still reachable
 # for a 0x0D row whose electrical-type falls outside {EEPROM, Flash/EEPROM} --
 # a user-override database shape. Routing such a row into the generic
 # flag-keyed fallback would name an internal wire flag in a report a community
 # tester reads, which is forbidden.
-_PROTOCOL_EEPROM_28C = 0x0D
+_PROTOCOL_EEPROM_28C = SDP_PROTOCOL_ID
 
 # The two protocols whose family auto-erases per page during the write, so no
 # step in a full/partial plan can EVER leave the device blank. There is no
@@ -246,7 +249,6 @@ _AUTO_ERASE_ON_WRITE_PROTOCOLS = frozenset({_PROTOCOL_FLASH4, _PROTOCOL_EEPROM_2
 # on check_eprom_blank's own short-circuit (eprom_operations.py:1656-1676),
 # which the plan mirrors here for the SAME protocol-id set.
 _SRAM_FRAM_ETYPES = frozenset({"SRAM", "FRAM"})
-_SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
 # Ordered op vocabulary (id-check FIRST). Seven strings:
 # `OP_WRITE_PARTIAL` is in the vocabulary so
@@ -509,7 +511,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str) -> Plan:
     # ask it for an impossible 0->1 transition.
     if is_uv:
         cycle_payload = CYCLE_PAYLOAD_UV_TRANCHE
-    elif etype in _SRAM_FRAM_ETYPES or protocol in _SRAM_PROTO_IDS:
+    elif etype in _SRAM_FRAM_ETYPES or protocol in SRAM_PROTOCOL_IDS:
         cycle_payload = CYCLE_PAYLOAD_ALTERNATE
     else:
         cycle_payload = CYCLE_PAYLOAD_SAME
@@ -595,7 +597,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str) -> Plan:
     #   4. Everything else, including UV-EPROM -- supported, at this position. UV
     #      keeps it here deliberately: the write is irrecoverable and only UV
     #      light erases, so "not blank" is a real pre-write finding.
-    if etype in _SRAM_FRAM_ETYPES or protocol in _SRAM_PROTO_IDS:
+    if etype in _SRAM_FRAM_ETYPES or protocol in SRAM_PROTOCOL_IDS:
         blank_check_step = Step(
             op=OP_BLANK_CHECK,
             supported=False,
@@ -2978,7 +2980,7 @@ def _sample(sampler: Any, phase: str) -> None:
         return
     try:
         sampler(phase)
-    except Exception:  # noqa: BLE001 -- best-effort diagnostic, swallow all
+    except Exception:  # best-effort diagnostic, swallow all
         pass
 
 

@@ -11,10 +11,11 @@ import logging
 import os
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Literal  # noqa: UP035
+from typing import Any, Literal
 
 import click
 import click.shell_completion
@@ -74,7 +75,7 @@ from firestarter.constants import (
     FLAG_CHIP_ENABLE,
     FLAG_OUTPUT_ENABLE,
 )
-from firestarter.database import EpromDatabase
+from firestarter.database import EpromDatabase, strip_mode
 from firestarter.diagnostic_report import (
     AutoCapture,
     DiagnosticReport,
@@ -97,7 +98,6 @@ from firestarter.exceptions import (
     Pin1HazardRefusedError,
     ProtocolNotImplementedError,
     SerialError,
-    SerialTimeoutError,
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.fw_release_gate import require_installable_release
@@ -159,14 +159,14 @@ class AppContext:
 
 def _complete_eprom(
     ctx: click.Context, param: click.Parameter, incomplete: str
-) -> List[click.shell_completion.CompletionItem]:  # noqa: UP006
+) -> list[click.shell_completion.CompletionItem]:
     """Click shell_complete callback — chip names matching `incomplete` (case-insensitive prefix).
 
     Runs out-of-process during shell completion; instantiates its own
     EpromDatabase rather than going through ctx.obj (ctx is not constructed
     by Click during completion). Mirrors the argcomplete EpromCompleter
     semantics at main.py:39-45.
-    """  # noqa: E501
+    """
     db = EpromDatabase()
     qualified = db.names_needing_qualifier()
     # A row whose name also names chips that program differently is offered
@@ -239,50 +239,36 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return f(*args, **kwargs)
-        except ChipNotFoundError as e:
+        except (
+            ChipNotFoundError,
+            ChipNotImplementedError,
+            FirmwareOperationError,
+            PageSizeUnavailableError,
+            PageAlignmentError,
+            NegativeStartAddressError,
+            Pin1HazardRefusedError,
+        ) as e:
+            # These messages are already the operator-facing text: the chip
+            # status reason, the DFU instructions, or a host-voiced refusal.
+            # They are rendered verbatim, ahead of the arms below that would
+            # prefix them ("Programmer error: " would read as a hardware
+            # fault).
             raise click.ClickException(str(e)) from e
         except FirmwareFrameVersionError as e:
             raise click.ClickException(f"Command frame version mismatch: {e}") from e
         except FirmwareOutdatedError as e:
             raise click.ClickException(f"Firmware outdated: {e}") from e
-        except (SerialError, SerialTimeoutError) as e:
+        except SerialError as e:
             raise click.ClickException(f"Communication error: {e}") from e
         except ProtocolNotImplementedError as e:
             raise click.ClickException(
                 f"Unsupported protocol: {e} — this protocol is recognized but not yet implemented in the firmware."
             ) from e
-        except ChipNotImplementedError as e:
-            # Render the reason string verbatim.
-            # The unsupported_reason strings begin with the
-            # required wording, so str(e) = "<name>: <reason>" is already
-            # the authoritative status-specific message. Drop the generic
-            # "Chip not usable:" prefix so the DB string is the single source
-            # of truth for both info display and chip-op refusal.
-            raise click.ClickException(str(e)) from e
-        except FirmwareOperationError as e:
-            # Raised by the USB DFU install path. The message is already
-            # operator-actionable (how to enter the bootloader, or how to install
-            # pyusb), so it is rendered verbatim rather than prefixed.
-            raise click.ClickException(str(e)) from e
-        except PageSizeUnavailableError as e:
-            raise click.ClickException(str(e)) from e
-        except PageAlignmentError as e:
-            raise click.ClickException(str(e)) from e
-        except NegativeStartAddressError as e:
-            # Rendered verbatim, above the generic EpromOperationError arm
-            # below -- that arm prefixes "Programmer error: ", which would
-            # make this host-voiced refusal (write_blank_guard.py) read as a
-            # hardware fault instead of an input-validation refusal.
-            raise click.ClickException(str(e)) from e
         except CommandEncodeError as e:
             # The host refused the command before any byte reached the port.
-            # Above the EpromOperationError arm: "Programmer error" would read
-            # as a hardware fault for an input the frame cannot carry.
             raise click.ClickException(f"Refused before sending: {e}") from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
-        except Pin1HazardRefusedError as e:
-            raise click.ClickException(str(e)) from e
         except HardwareOperationError as e:
             raise click.ClickException(f"Hardware error: {e}") from e
 
@@ -475,7 +461,7 @@ def _cli_start_time() -> float | None:
     "-p",
     "--port",
     default=None,
-    help="Serial port to use (e.g. /dev/ttyACM1). Overrides the saved port in config.json for this invocation.",  # noqa: E501
+    help="Serial port to use (e.g. /dev/ttyACM1). Overrides the saved port in config.json for this invocation.",
 )
 @click.version_option(version=version, prog_name="Firestarter")
 @click.pass_context
@@ -1543,7 +1529,7 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
         found_eproms_for_detected_id = app.db.search_chip_id(detected_id_value)
         if found_eproms_for_detected_id:
             logger.info(
-                f"The detected Chip ID 0x{detected_id_value:X} matches the following EPROMs in the database:"  # noqa: E501
+                f"The detected Chip ID 0x{detected_id_value:X} matches the following EPROMs in the database:"
             )
             mapped_found_eproms = [
                 app.db.map_chip_record(ic, ic.get("manufacturer", "Unknown"))
@@ -1832,7 +1818,7 @@ def _maybe_auto_route_to_pre_click(
 @click.option(
     "--stable",
     is_flag=True,
-    help="Explicitly select stable channel. With --list, filters to stable releases only.",  # noqa: E501
+    help="Explicitly select stable channel. With --list, filters to stable releases only.",
 )
 @click.option(
     "--list",
@@ -1876,7 +1862,7 @@ def _maybe_auto_route_to_pre_click(
     "avrdude_config_path",
     type=str,
     default=None,
-    help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",  # noqa: E501
+    help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",
 )
 @click.option(
     "-f",
@@ -1996,7 +1982,7 @@ def fw(
             print(f"{'Version':<12} {'Channel':<14} {'Published':<25} Asset URL")
             for r in releases:
                 print(
-                    f"{r['version']:<12} {r['channel']:<14} {r['published']:<25} {r['asset_url']}"  # noqa: E501
+                    f"{r['version']:<12} {r['channel']:<14} {r['published']:<25} {r['asset_url']}"
                 )
             if not releases:
                 print(f"No releases found for board {board}.")
@@ -2284,7 +2270,7 @@ if _DEV_TOOLS_ENABLED:
         "output_dir",
         type=str,
         default=None,
-        help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
+        help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",
     )
     @click.option(
         "--keep-files/--no-keep-files",
@@ -2309,7 +2295,7 @@ if _DEV_TOOLS_ENABLED:
         "-f",
         "--force",
         is_flag=True,
-        help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",  # noqa: E501
+        help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",
     )
     @click.option(
         "--read-settling",
@@ -2382,7 +2368,7 @@ if _DEV_TOOLS_ENABLED:
         "output_dir",
         type=str,
         default=None,
-        help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
+        help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",
     )
     @click.option(
         "-f",
@@ -2662,17 +2648,17 @@ def _load_validation_spec() -> dict[str, Any]:
 
 def _families_for_selection(
     family_arg: str,
-    spec: Dict[str, Any],  # noqa: UP006
-) -> List[Dict[str, Any]]:  # noqa: UP006
+    spec: dict[str, Any],
+) -> list[dict[str, Any]]:
     """Return the list of family dicts matching the CLI argument."""
-    families: List[Dict[str, Any]] = spec["families"]  # noqa: UP006
+    families: list[dict[str, Any]] = spec["families"]
     if family_arg == "all":
         return families
     return [f for f in families if f["id"] == family_arg]
 
 
 def _emit_skip_deferred_artifact(
-    families: List[Dict[str, Any]],  # noqa: UP006
+    families: list[dict[str, Any]],
     output_dir: str | None,
     reason: str = "no board/chip/source provided",
 ) -> None:
@@ -2681,11 +2667,11 @@ def _emit_skip_deferred_artifact(
     A milestone remains closeable at partial bench coverage.
     Artifact name is validation-matrix.{json,md} (hyphen, NEVER underscore).
     """
-    cells: List[Dict[str, Any]] = []  # noqa: UP006
+    cells: list[dict[str, Any]] = []
     for fam in families:
         tier3 = fam.get("tier3", {})
-        boards: List[str] = tier3.get("boards", [])  # noqa: UP006
-        skip_boards: List[str] = tier3.get("skip_boards", [])  # noqa: UP006
+        boards: list[str] = tier3.get("boards", [])
+        skip_boards: list[str] = tier3.get("skip_boards", [])
         # Emit one cell per board in the tier3 boards list
         for board in boards:
             cells.append(
@@ -2717,7 +2703,7 @@ def _emit_skip_deferred_artifact(
 
 
 def _write_artifact(
-    cells: List[Dict[str, Any]],  # noqa: UP006
+    cells: list[dict[str, Any]],
     output_dir: str | None,
 ) -> None:
     """Write validation-matrix.json and validation-matrix.md to output_dir.
@@ -2728,7 +2714,7 @@ def _write_artifact(
     out_path = Path(output_dir) if output_dir else Path(".")
     out_path.mkdir(parents=True, exist_ok=True)
 
-    artifact: Dict[str, Any] = {  # noqa: UP006
+    artifact: dict[str, Any] = {
         "generated": iso_cet(),
         "harness_version": "71",
         "cells": cells,
@@ -2741,7 +2727,7 @@ def _write_artifact(
     md_file.write_text(_render_markdown(cells), encoding="utf-8")
 
 
-def _render_markdown(cells: List[Dict[str, Any]]) -> str:  # noqa: UP006
+def _render_markdown(cells: list[dict[str, Any]]) -> str:
     """Render a Markdown table from the cell list."""
     lines = [
         "# Validation Matrix Results",
@@ -2768,7 +2754,7 @@ def _classify_sha_result(
     readback_sha: str,
     source_sha: str,
     board: str,
-) -> Dict[str, Any]:  # noqa: UP006
+) -> dict[str, Any]:
     """Classify a post-write SHA comparison result per oracle rules.
 
     Leonardo: authoritative PASS/FAIL.
@@ -2855,7 +2841,7 @@ if _DEV_TOOLS_ENABLED:
 
         # uno328pb hard N/A for write/program cells (brownout 999.2 — backlog 999.2).
         if board == _UNO328PB_BOARD:
-            cells: List[Dict[str, Any]] = []  # noqa: UP006
+            cells: list[dict[str, Any]] = []
             for fam in families:
                 cells.append(
                     {
@@ -2896,7 +2882,7 @@ if _DEV_TOOLS_ENABLED:
             sys.exit(2)
 
         # Compose cycle methods for each family -- reuse, not reimplement.
-        hw_cells: List[Dict[str, Any]] = []  # noqa: UP006
+        hw_cells: list[dict[str, Any]] = []
         overall_verdict = 0
 
         for fam in families:
@@ -3144,11 +3130,6 @@ def _canonical_part_number(part_number: str | None, raw_token: str) -> str | Non
     if not part_number:
         return None
 
-    import re
-
-    def _strip_paren(s: str) -> str:
-        return re.sub(r"\([^)]*\)", "", s).strip().lower()
-
     # A manufacturer qualifier (PART@MANUFACTURER) is not part of the name.
     raw_token = raw_token.partition("@")[0].strip()
     query = raw_token.lower()
@@ -3160,10 +3141,10 @@ def _canonical_part_number(part_number: str | None, raw_token: str) -> str | Non
         for alias in aliases:
             if alias.lower() == query:
                 return alias
-        query_stripped = _strip_paren(raw_token)
+        query_stripped = strip_mode(raw_token)
         if query_stripped:
             for alias in aliases:
-                if _strip_paren(alias) == query_stripped:
+                if strip_mode(alias) == query_stripped:
                     return alias
 
     return part_number.split(",")[0].strip()

@@ -15,13 +15,12 @@ Bit 15 is NOT a page-write proxy: it disagrees with `page_size > 1` on
 
 from __future__ import annotations
 
-# Import purity: the module's top-level import set is a subset of
-# {"__future__", "typing"} — no click, no serial, no firestarter.* imports.
-# `Mapping` is imported from `typing` (not `collections.abc`) to keep that
-# invariant literal; ruff's UP035 (prefer collections.abc) is suppressed
-# below since this file has no runtime dependency on the deprecated alias
-# beyond a lazily-evaluated annotation (`from __future__ import annotations`).
-from typing import Any, Mapping  # noqa: UP035
+from collections.abc import Mapping
+
+# Import purity: the module's top-level imports are standard library only
+# ({"__future__", "collections.abc", "typing"}) — no click, no serial, no
+# firestarter.* imports.
+from typing import Any
 
 # The DB's `protocol-id` value (mirrored from `programming.algorithm` by
 # `database.py:_map_data`) that identifies the `0x0D` / EEPROM_PARALLEL

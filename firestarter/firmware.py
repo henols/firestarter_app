@@ -11,7 +11,7 @@ import logging
 import os
 import re
 import time
-from typing import List, Literal, Tuple, TypedDict  # noqa: UP035
+from typing import Literal, TypedDict
 
 import requests
 from packaging.version import InvalidVersion, Version
@@ -118,7 +118,7 @@ def flash_method(board: str | None) -> str:
     return _BOARD_FLASH_METHODS.get((board or "").lower(), FLASH_METHOD_AVRDUDE)
 
 
-def asset_candidates(board: str) -> List[str]:  # noqa: UP006
+def asset_candidates(board: str) -> list[str]:
     """Release-asset filenames to accept for a board, most preferred first.
 
     Every board — AVR and DFU alike — publishes `firestarter_<board>.hex`, so
@@ -184,7 +184,7 @@ class FirmwareManager:
         self,
         preferred_port: str | None = None,
         flags: int = 0,
-    ) -> Tuple[str | None, str | None, str | None]:  # noqa: UP006
+    ) -> tuple[str | None, str | None, str | None]:
         """
         Checks the currently installed firmware version on the programmer.
         Returns: (port_name, current_version, board_name) or (None, None, None) on failure.
@@ -200,7 +200,7 @@ class FirmwareManager:
         The waiver is scoped to the version refusals only; the shield-revision
         gate is untouched, and the chip-operation paths still refuse because
         they never pass this argument.
-        """  # noqa: E501
+        """
         logger.info("Reading current firmware version...")
         command_dict = {"state": COMMAND_FW_VERSION}
         if flags:
@@ -214,7 +214,7 @@ class FirmwareManager:
                 allow_outdated_firmware=True,
             )
             # find_and_connect gets the initial OK from the programmer.
-            # The firmware then executes the fw_version command and sends a second OK with the payload.  # noqa: E501
+            # The firmware then executes the fw_version command and sends a second OK with the payload.
             is_ok, msg = comm.expect_ack()
 
             # Firmware emits the legacy text line "OK: FW: <version>:<board>".
@@ -236,12 +236,12 @@ class FirmwareManager:
                 board_name = parts[1].strip()
 
                 logger.info(
-                    f"Current firmware version: {current_version}, for controller: {board_name} on port {comm.port_name}"  # noqa: E501
+                    f"Current firmware version: {current_version}, for controller: {board_name} on port {comm.port_name}"
                 )
                 return comm.port_name, current_version, board_name
             else:
                 logger.error(
-                    f"Failed to read firmware version: Invalid response from programmer: '{msg}'"  # noqa: E501
+                    f"Failed to read firmware version: Invalid response from programmer: '{msg}'"
                 )
                 return None, None, None
         except FirmwareFrameVersionError as e:
@@ -255,7 +255,7 @@ class FirmwareManager:
             logger.warning(f"{e} The current firmware version cannot be read.")
             return e.port, None, None
         except FirmwareOutdatedError:
-            raise  # surface lockstep refuse to operator (do NOT swallow)  # noqa: E501
+            raise  # surface lockstep refuse to operator (do NOT swallow)
         except (ProgrammerNotFoundError, SerialError) as e:
             logger.error(f"Failed to read firmware version: {e}")
             return None, None, None
@@ -265,7 +265,7 @@ class FirmwareManager:
 
     def fetch_latest_release_info(
         self, board: str = "uno"
-    ) -> Tuple[str | None, str | None]:  # noqa: UP006
+    ) -> tuple[str | None, str | None]:
         """
         Fetches the latest firmware version and download URL for the specified board.
         Returns: (latest_version_str, download_url_str) or (None, None) on failure.
@@ -282,12 +282,12 @@ class FirmwareManager:
 
             if not latest_version or not download_url:
                 logger.error(
-                    f"Could not find firmware version or URL for board '{board}' in the latest release."  # noqa: E501
+                    f"Could not find firmware version or URL for board '{board}' in the latest release."
                 )
                 return None, None
 
             logger.debug(
-                f"Latest firmware version for {board}: {latest_version}, URL: {download_url}"  # noqa: E501
+                f"Latest firmware version for {board}: {latest_version}, URL: {download_url}"
             )
             return latest_version, download_url
         except requests.RequestException as e:
@@ -301,24 +301,25 @@ class FirmwareManager:
 
         Returns True if current >= latest. Handles pre-release strings (e.g., '3.1.0b1',
         '3.1.0rc2', '2.0.7_dev') correctly. Returns False on unparseable input.
-        """  # noqa: E501
+        """
         if not current_version_str or not latest_version_str:
             return False  # Cannot compare if one is missing
         try:
             return Version(current_version_str) >= Version(latest_version_str)
         except InvalidVersion:
             logger.warning(
-                f"Could not parse version strings for comparison: '{current_version_str}', '{latest_version_str}'"  # noqa: E501
+                f"Could not parse version strings for comparison: '{current_version_str}', '{latest_version_str}'"
             )
             return False  # Treat as not up-to-date if parsing fails
 
-    def _fetch_all_releases(self, max_pages: int = 5) -> list:
+    def _fetch_all_releases(self, max_pages: int = 2, per_page: int = 75) -> list:
         """Paginate GET /releases via Link: rel="next" headers. Cap at max_pages.
 
         Returns a flat list of all release dicts from all pages fetched.
         Logs INFO when the cap is hit so operators know truncation occurred.
+        GitHub carries per_page into the rel="next" links.
         """
-        url = FIRESTARTER_RELEASES_URL
+        url: str | None = f"{FIRESTARTER_RELEASES_URL}?per_page={per_page}"
         all_releases = []
         pages_fetched = 0
 
@@ -337,7 +338,7 @@ class FirmwareManager:
         if url and pages_fetched >= max_pages:
             logger.info(
                 f"Firmware release list capped at {max_pages} pages "
-                f"({max_pages * 30} releases). More releases may exist."
+                f"({max_pages * per_page} releases). More releases may exist."
             )
 
         return all_releases
@@ -348,7 +349,7 @@ class FirmwareManager:
         version: str | None = None,
         board: str = "uno",
         app_version: str | None = None,
-    ) -> Tuple[str | None, str | None]:  # noqa: UP006
+    ) -> tuple[str | None, str | None]:
         """Router: returns (resolved_version, download_url) or (None, None) on failure.
 
         channel='stable'  → for a stable app_version, the highest stable release on
@@ -357,7 +358,7 @@ class FirmwareManager:
         channel='pre'     → paginates /releases, takes the highest non-draft release by
                             PEP 440, stable or pre-release; falls back to stable if none.
         channel='pinned'  → fetches /releases/tags/{version} directly.
-        """  # noqa: E501
+        """
         if channel == "stable":
             app_feature = feature_version(app_version)
             if is_prerelease_version(app_version) is False and app_feature:
@@ -384,7 +385,7 @@ class FirmwareManager:
             download_url = _pick_asset(release_data.get("assets", []), board)
             if not download_url:
                 logger.error(
-                    f"Release {version!r} has no asset {_asset_label(board)} for board {board!r}."  # noqa: E501
+                    f"Release {version!r} has no asset {_asset_label(board)} for board {board!r}."
                 )
                 return None, None
             return release_data.get("tag_name"), download_url
@@ -431,13 +432,13 @@ class FirmwareManager:
 
         else:
             logger.error(
-                f"Unknown firmware channel {channel!r}; expected 'stable', 'pre', or 'pinned'."  # noqa: E501
+                f"Unknown firmware channel {channel!r}; expected 'stable', 'pre', or 'pinned'."
             )
             return None, None
 
     def _fetch_matching_stable_release_info(
         self, app_feature: tuple[int, int], board: str
-    ) -> Tuple[str | None, str | None]:  # noqa: UP006
+    ) -> tuple[str | None, str | None]:
         """The highest non-draft stable release whose feature version is app_feature."""
         line = f"{app_feature[0]}.{app_feature[1]}.x"
         try:
@@ -477,7 +478,7 @@ class FirmwareManager:
         self,
         channel_filter: Literal["all", "pre", "stable"] = "all",
         board: str = "uno",
-    ) -> List[ReleaseInfo] | None:  # noqa: UP006
+    ) -> list[ReleaseInfo] | None:
         """Enumerate available firmware releases sorted by PEP 440 version descending.
 
         Omits draft releases and releases without a board-matching .hex asset.
@@ -499,7 +500,7 @@ class FirmwareManager:
             logger.error(f"Failed to fetch releases for list: {e}")
             return None
 
-        out: List[ReleaseInfo] = []  # noqa: UP006
+        out: list[ReleaseInfo] = []
         for r in all_releases:
             # Skip drafts.
             if r.get("draft"):
@@ -562,13 +563,13 @@ class FirmwareManager:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             logger.info(
-                f"Firmware downloaded to: {firmware_path} ({time.time() - start_time:.2f}s)"  # noqa: E501
+                f"Firmware downloaded to: {firmware_path} ({time.time() - start_time:.2f}s)"
             )
             return firmware_path
         except requests.RequestException as e:
             logger.error(f"Error downloading firmware: {e}")
             return None
-        except IOError as e:  # noqa: UP024
+        except OSError as e:
             logger.error(f"Error saving downloaded firmware: {e}")
             return None
 
@@ -606,7 +607,7 @@ class FirmwareManager:
             partno, programmer_id, baud_rate = ("atmega328pb", "urclock", 115200)
 
         # Determine port: use target_port if provided, else try saved port, else scan.
-        # This logic might be better in SerialCommunicator._list_potential_ports if generalized.  # noqa: E501
+        # This logic might be better in SerialCommunicator._list_potential_ports if generalized.
         ports_to_try = []
         if target_port:
             ports_to_try.append(target_port)
@@ -616,18 +617,18 @@ class FirmwareManager:
                 ports_to_try.append(saved_port)
             # Add scanned ports if no specific/saved port works
             # This part is tricky as avrdude needs a specific port.
-            # For now, let's assume if target_port is None, we use the saved port or fail.  # noqa: E501
+            # For now, let's assume if target_port is None, we use the saved port or fail.
             # A more robust solution would involve listing ports and trying.
             # The original code iterated `find_comports()`.
             # For simplicity here, we'll prioritize `target_port` then configured port.
-            # If neither, this will likely fail unless Avrdude can auto-detect (unlikely for all setups).  # noqa: E501
-            # Let's assume `target_port` will be the one identified by `check_current_firmware` if not overridden.  # noqa: E501
+            # If neither, this will likely fail unless Avrdude can auto-detect (unlikely for all setups).
+            # Let's assume `target_port` will be the one identified by `check_current_firmware` if not overridden.
 
         if (
             not ports_to_try and not target_port
         ):  # If target_port was None and no saved port
             logger.error(
-                "No specific port provided for Avrdude and no port saved in config. Please specify a port."  # noqa: E501
+                "No specific port provided for Avrdude and no port saved in config. Please specify a port."
             )
             # Could attempt to list ports here, but Avrdude needs one.
             # For now, require a port to be known.
@@ -649,7 +650,7 @@ class FirmwareManager:
 
         for port_to_flash in ports_to_try:  # Usually, this will be a single port.
             logger.info(
-                f"Attempting to flash firmware to {board} on port {port_to_flash} using Avrdude..."  # noqa: E501
+                f"Attempting to flash firmware to {board} on port {port_to_flash} using Avrdude..."
             )
             try:
                 avrdude = Avrdude(
@@ -666,7 +667,7 @@ class FirmwareManager:
                 )
                 if return_code == 0:
                     logger.info(
-                        f"Firmware successfully updated on {port_to_flash} ({time.time() - start_time:.2f}s)"  # noqa: E501
+                        f"Firmware successfully updated on {port_to_flash} ({time.time() - start_time:.2f}s)"
                     )
                     # Save the successful port — via remember_port, so a typed
                     # --port is not promoted into the saved config.
@@ -682,7 +683,7 @@ class FirmwareManager:
                     return True
                 else:
                     logger.error(
-                        f"Firmware update failed on port {port_to_flash}. Avrdude stderr:"  # noqa: E501
+                        f"Firmware update failed on port {port_to_flash}. Avrdude stderr:"
                     )
                     for line in stderr_output.splitlines():
                         logger.error(f"  {line}")
@@ -692,7 +693,7 @@ class FirmwareManager:
                 Exception
             ) as e:  # Catch other potential errors from Avrdude instantiation/execution
                 logger.error(
-                    f"An unexpected error occurred with Avrdude on port {port_to_flash}: {e}"  # noqa: E501
+                    f"An unexpected error occurred with Avrdude on port {port_to_flash}: {e}"
                 )
 
         logger.error("Firmware installation failed on all attempted ports.")
@@ -777,11 +778,11 @@ class FirmwareManager:
                     "bootloader mode, install with: firestarter fw --install "
                     "--board py32f071"
                 )
-        except Exception:  # noqa: BLE001 — a hint must never break the flow
+        except Exception:  # a hint must never break the flow
             pass
 
     @staticmethod
-    def probe_dfu(usb_id: str | None = None) -> List[str]:  # noqa: UP006
+    def probe_dfu(usb_id: str | None = None) -> list[str]:
         """Describe attached DFU devices. Raises FirmwareOperationError on failure.
 
         This is the instrument for the first bench session with real PY32F071
@@ -851,12 +852,12 @@ class FirmwareManager:
         channel='stable'  → uses /releases/latest (default, INST-01 non-regression).
         channel='pre'     → selects the highest release, stable or pre-release.
         channel='pinned'  → uses exact tag from pinned_version.
-        """  # noqa: E501
+        """
         connected_port, current_version, current_board = self.check_current_firmware(
             preferred_port=port_override, flags=flags
         )
 
-        # Use board detected from firmware if available, else use CLI override or default  # noqa: E501
+        # Use board detected from firmware if available, else use CLI override or default
         # Resolved BEFORE the port check: a DFU board sitting in its bootloader
         # answers no identity query and exposes no serial port, so the board is
         # what decides whether a port is required at all.
@@ -947,7 +948,7 @@ class FirmwareManager:
         force_install = flags & FLAG_FORCE
         if not current_version and not install_flag and not force_install:
             logger.error(
-                "Could not determine current firmware version. Use --install or --force to proceed with installation."  # noqa: E501
+                "Could not determine current firmware version. Use --install or --force to proceed with installation."
             )
             return False  # Failed to get current version and no intent to install
 
@@ -1003,7 +1004,7 @@ class FirmwareManager:
 
         if is_up_to_date and not force_install:
             logger.info(
-                f"Firmware is already up to date (version {current_version} for {board_to_use}). Use --force to reinstall."  # noqa: E501
+                f"Firmware is already up to date (version {current_version} for {board_to_use}). Use --force to reinstall."
             )
             return True  # Successfully checked, no update needed
 
@@ -1015,21 +1016,21 @@ class FirmwareManager:
         elif install_flag:
             if not is_up_to_date:
                 logger.info(
-                    f"Proceeding with firmware update for {board_to_use} (current: {current_version}, latest: {latest_version})."  # noqa: E501
+                    f"Proceeding with firmware update for {board_to_use} (current: {current_version}, latest: {latest_version})."
                 )
                 should_install_now = True
             else:  # install_flag is true, but already up-to-date
                 logger.info(
-                    f"Firmware for {board_to_use} is already version {latest_version}. Use --force to reinstall."  # noqa: E501
+                    f"Firmware for {board_to_use} is already version {latest_version}. Use --force to reinstall."
                 )
                 # No installation needed unless forced
         elif (
             not is_up_to_date and current_version and latest_version
         ):  # No flags, but update available
             prompt = (
-                f"Install firmware {latest_version} for {board_to_use} (current: {current_version})?"  # noqa: E501
+                f"Install firmware {latest_version} for {board_to_use} (current: {current_version})?"
                 if mismatched
-                else f"New firmware {latest_version} available for {board_to_use} (current: {current_version}). Update now?"  # noqa: E501
+                else f"New firmware {latest_version} available for {board_to_use} (current: {current_version}). Update now?"
             )
             if Confirm.ask(prompt, default=False):
                 should_install_now = True
@@ -1039,14 +1040,14 @@ class FirmwareManager:
             install_flag or force_install
         ):  # No current version, but user wants to install
             logger.info(
-                f"No current firmware version detected. Proceeding with installation of latest version for {board_to_use}."  # noqa: E501
+                f"No current firmware version detected. Proceeding with installation of latest version for {board_to_use}."
             )
             should_install_now = True
 
         if should_install_now:
             if not download_url or not latest_version:
                 logger.error(
-                    f"Cannot install: latest firmware URL or version for {board_to_use} is not available."  # noqa: E501
+                    f"Cannot install: latest firmware URL or version for {board_to_use} is not available."
                 )
                 return False
 

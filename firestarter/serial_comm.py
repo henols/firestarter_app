@@ -12,7 +12,8 @@ import os
 import re
 import struct
 import time
-from typing import Any, Callable, Generator, List, Optional, Tuple  # noqa: UP035
+from collections.abc import Callable, Generator
+from typing import Any, Optional
 
 import serial
 import serial.serialutil
@@ -58,6 +59,7 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
     _crc8_ccitt,
     _decode_param,
     cobs_encode,
+    encode_crc_frame,
 )
 from firestarter.messages import (
     CATALOG,
@@ -143,7 +145,6 @@ class SerialCommunicator:
         self.programmer_info: str | None = None
         # Fault-injection hook — None by default; production path is byte-identical.
         # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
-        # getattr-guarded in _send_framed; this attribute is the formal default.
         self._fault_inject_outgoing: Callable[[bytes], bytes] | None = None
         # DEPRECATED: firmware_buffer_size was set by the earlier
         # identity-string parse (3rd colon-field). That parse block is removed; capacity
@@ -169,15 +170,6 @@ class SerialCommunicator:
         # _probe_port does.
         self.firmware_identity: str | None = None
         self.hw_revision: int | None = None
-        # The firmware's advertised worst-case seconds for
-        # one write block. The firmware ALREADY pads this figure -- only it
-        # knows its own delay(500) VPE settle, the final full-block verify
-        # pass and the per-pulse settle -- so the host applies no multiplier
-        # of its own on top. None means "not advertised", and
-        # downstream that means a safe default applies, never an error and
-        # never a refusal (mirroring the buffer-size field's own reversal of
-        # FirmwareOutdatedError into a safe default). Populated by
-        # _decode_id_frame below. Consumed only on the write path.
         # Bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
@@ -256,16 +248,13 @@ class SerialCommunicator:
         The full frame is assembled as a single ``bytes`` object and passed to
         ``send_bytes()`` in ONE call — a split write is forbidden.
         """
-        crc = _crc8_ccitt(payload)
-        body = cobs_encode(payload + bytes([crc]))
-        frame = body + b"\x00"
+        frame = encode_crc_frame(payload)
         # FAULT INJECTION — only active when _fault_inject_outgoing is set.
         # Production path: attribute is None by default → no-op.
         # Hook is set only within fault_inject_cycle / dev fault-inject scope and
         # cleared after the single corrupted transfer.
-        _hook = getattr(self, "_fault_inject_outgoing", None)
-        if _hook is not None:
-            frame = _hook(frame)
+        if self._fault_inject_outgoing is not None:
+            frame = self._fault_inject_outgoing(frame)
         return self.send_bytes(frame)
 
     def _parse_response_line(self, line_bytes: bytes) -> Response | None:
@@ -548,7 +537,7 @@ class SerialCommunicator:
             if response.type and response.type not in NON_RESPONSE_PREFIXES:
                 return response
 
-        # If the generator finishes without yielding a significant response, it's a timeout.  # noqa: E501
+        # If the generator finishes without yielding a significant response, it's a timeout.
         transport_counters.record_response_timeout()
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
@@ -571,11 +560,11 @@ class SerialCommunicator:
                 if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
                     raise ProtocolNotImplementedError(response.message)
                 return response
-            # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
+            # Other significant responses are ignored by this loop, which is the intended behavior.
 
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Tuple[bool, str | None]:  # noqa: UP006
+    ) -> tuple[bool, str | None]:
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
@@ -646,7 +635,7 @@ class SerialCommunicator:
     def _list_potential_ports(
         preferred_port: str | None = None,
         restrict_to_preferred: bool = False,
-    ) -> List[str]:  # noqa: UP006
+    ) -> list[str]:
         """Candidate ports to probe, most preferred first.
 
         `restrict_to_preferred` makes `preferred_port` the ONLY candidate. Set
@@ -701,7 +690,7 @@ class SerialCommunicator:
             return current >= required
         except (ValueError, AttributeError):
             logger.warning(
-                f"Could not parse version string for comparison: '{current_version_str}'"  # noqa: E501
+                f"Could not parse version string for comparison: '{current_version_str}'"
             )
             return False  # If parsing fails, assume it's not sufficient.
 
@@ -729,17 +718,17 @@ class SerialCommunicator:
             major = 0
         if major < 3 and not allow_pre_v12:
             raise FirmwareOutdatedError(
-                f"Firmware version {version_str} is pre-v1.2 (text-format logging). "  # noqa: E501
-                f"This host expects v1.2+ firmware emitting ID-encoded log frames. "  # noqa: E501
-                f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "  # noqa: E501
-                f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "  # noqa: E501
+                f"Firmware version {version_str} is pre-v1.2 (text-format logging). "
+                f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
+                f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
+                f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
                 f'see PROJECT.md "Constraints".)'
             )
         if not SerialCommunicator._is_version_sufficient(version_str, "2.0.0"):
             raise FirmwareOutdatedError(
                 f"Firmware version {version_str} is outdated. "
                 f"Version 2.0.0 or higher is required. "
-                f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                f"Please upgrade the firmware using 'firestarter fw --install'."
             )
 
     # Bus line 11 is where socket pin 21 lands on the 24-pin RURP wiring, and
@@ -937,7 +926,7 @@ class SerialCommunicator:
                     "Programmer did not report a firmware version in its "
                     "operation-setup ack. This host requires firmware that "
                     "carries the version and hardware revision in that ack. "
-                    "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                    "Please upgrade the firmware using 'firestarter fw --install'."
                 )
             logger.debug(
                 f"{self.port_name}: ack carries no firmware identity "
@@ -945,9 +934,9 @@ class SerialCommunicator:
                 f"firmware-update read path."
             )
         elif not allow_outdated_firmware:
-            # Refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
-            # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
-            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
+            # Refuse pre-v1.2 firmware. The firmware bumped
+            # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when
+            # bench-testing a current host against a historical (v2.x) firmware build.
             SerialCommunicator._validate_firmware_version(
                 version_match.group(0).rstrip("."),
                 allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
@@ -1206,7 +1195,7 @@ class SerialCommunicator:
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
-                    # The "Programmer found on..." message is logged by _probe_port on a new line.  # noqa: E501
+                    # The "Programmer found on..." message is logged by _probe_port on a new line.
                     return communicator
             except (
                 FirmwareOutdatedError,
@@ -1289,43 +1278,3 @@ class FaultInjectingSerialCommunicator(SerialCommunicator):
             # Flip last byte (CRC8 position) before decode — causes CRC8 mismatch.
             body = body[:-1] + bytes([body[-1] ^ 0x01])
         return super()._decode_id_frame(frame_len, body)
-
-
-# Example usage (for testing this module directly)
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
-    )
-
-    config = ConfigManager()
-
-    # Test data for finding programmer
-    test_command = {"state": COMMAND_FW_VERSION}
-
-    comm = None
-    try:
-        # To test, you might need to specify a port if auto-detection is tricky
-        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")  # noqa: E501
-        comm = SerialCommunicator.find_and_connect(test_command, config)
-
-        logger.info(
-            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"  # noqa: E501
-        )
-
-        # Example: Send another command after connection
-        # comm.send_command({"state": STATE_HW_VERSION})
-        ok, msg = comm.expect_ack()
-        if ok:
-            logger.info(f"Hardware version: {msg}")
-        else:
-            logger.error(f"Failed to get hardware version: {msg}")
-
-    except ProgrammerNotFoundError:
-        logger.error("Test failed: Could not find the programmer.")
-    except SerialError as e:
-        logger.error(f"Test failed: Serial communication error: {e}")
-    except Exception as e:
-        logger.error(f"An unexpected error occurred during test: {e}")
-    finally:
-        if comm and comm.is_connected():
-            comm.disconnect()

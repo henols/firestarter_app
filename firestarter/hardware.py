@@ -7,9 +7,8 @@ Hardware Management Module
 """
 
 import logging
-import statistics
 import time
-from typing import NamedTuple, Tuple, TypedDict  # noqa: UP035
+from typing import NamedTuple, TypedDict
 
 from firestarter.codec import volts
 from firestarter.config import ConfigManager
@@ -29,9 +28,7 @@ from firestarter.constants import (
 )
 from firestarter.exceptions import (
     HardwareOperationError,
-    ProgrammerNotFoundError,
     SerialError,
-    SerialTimeoutError,
 )
 from firestarter.frame_parser import Response
 from firestarter.messages import (
@@ -156,6 +153,14 @@ def _scrub_identity(raw: str | None) -> str | None:
     return scrubbed if scrubbed else None
 
 
+def _command(state: int, flags: int = 0, **fields: int) -> dict[str, int]:
+    """A command dict: the state, any fields, and the flags only when set."""
+    command = {"state": state, **fields}
+    if flags:
+        command["flags"] = flags
+    return command
+
+
 class HardwareManager:
     """
     Manages interactions with the EPROM programmer hardware for non-EPROM
@@ -169,7 +174,7 @@ class HardwareManager:
 
     def _execute_simple_command(
         self, command_dict: dict, operation_name: str
-    ) -> Tuple[bool, str | None]:  # noqa: UP006
+    ) -> tuple[bool, str | None]:
         """
         Connects, sends a command, expects an OK, and disconnects.
         Returns (success_status, message_from_programmer).
@@ -177,28 +182,16 @@ class HardwareManager:
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(command_dict, self.config)
-            # The command_dict itself is the initial command sent by find_and_connect.
-            # If find_and_connect succeeds, it means the programmer acknowledged the command.  # noqa: E501
-            # The 'msg' from find_and_connect's expect_ack is the programmer_info.
-            # For simple state commands, the programmer_info IS the response.
-
-            # If the command sent by find_and_connect was just to establish connection,
-            # and the actual data command needs to be sent *after* connection,
-            # then we'd do:
-            # comm.send_command(actual_data_command_dict)
-            # is_ok, msg = comm.expect_ack()
-            # For HW_VERSION, FW_VERSION, CONFIG, the initial command IS the data command.  # noqa: E501
-
-            # The `find_and_connect` already sends `command_dict` and expects an OK.
-            # The `comm.programmer_info` holds the message part of that OK response.
+            # find_and_connect sends command_dict and expects an OK; the
+            # message part of that OK is the response.
             if comm.programmer_info is not None:
                 logger.info(f"{operation_name}: {comm.programmer_info}")
                 return True, comm.programmer_info
             else:
-                # This case should ideally be caught by find_and_connect if expect_ack fails.  # noqa: E501
+                # This case should ideally be caught by find_and_connect if expect_ack fails.
                 logger.error(f"Failed to {operation_name.lower()}. No valid response.")
                 return False, None
-        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+        except SerialError as e:
             logger.error(f"{operation_name} failed: {e}")
             return False, None
         finally:
@@ -211,23 +204,25 @@ class HardwareManager:
         Returns True if successful, False otherwise.
         """
         logger.info("Reading hardware revision...")
-        command = {"state": COMMAND_HW_VERSION}
-        if flags:
-            command["flags"] = flags
+        return self._query_ack(_command(COMMAND_HW_VERSION, flags), "Hardware revision")
 
+    def _query_ack(self, command: dict, label: str) -> bool:
+        """Connect, log the data ack that follows the setup ack, disconnect.
+
+        find_and_connect consumes the first OK. The second response carries
+        the data. Logs "<Label>: <msg>" or "Failed to read <label>: <msg>".
+        """
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(command, self.config)
-            # The first OK is handled by find_and_connect. Now wait for the second response with the data.  # noqa: E501
             is_ok, msg = comm.expect_ack()
             if is_ok:
-                logger.info(f"Hardware revision: {msg}")
+                logger.info(f"{label}: {msg}")
                 return True
-            else:
-                logger.error(f"Failed to read hardware revision: {msg}")
-                return False
-        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
-            logger.error(f"Failed to read hardware revision: {e}")
+            logger.error(f"Failed to read {label.lower()}: {msg}")
+            return False
+        except SerialError as e:
+            logger.error(f"Failed to read {label.lower()}: {e}")
             return False
         finally:
             if comm:
@@ -258,10 +253,7 @@ class HardwareManager:
         built without HARDWARE_REVISION answers MSG_ERR_UNKNOWN_CMD here and
         is exactly the board a triager most needs to identify (F-16).
         """
-        command = {"state": COMMAND_HW_VERSION}
-        if flags:
-            command["flags"] = flags
-
+        command = _command(COMMAND_HW_VERSION, flags)
         comm = None
         fw_board_identity = None
         try:
@@ -276,7 +268,7 @@ class HardwareManager:
             return ProgrammerIdentity(
                 hw_revision=None, fw_board_identity=fw_board_identity
             )
-        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+        except SerialError as e:
             logger.error(f"Failed to read hardware revision: {e}")
             return ProgrammerIdentity(
                 hw_revision=None, fw_board_identity=fw_board_identity
@@ -304,9 +296,7 @@ class HardwareManager:
         if refusal:
             logger.error(f"Hardware configuration refused: {refusal}")
             return False
-        command = {"state": COMMAND_CONFIG}
-        if flags:
-            command["flags"] = flags
+        command = _command(COMMAND_CONFIG, flags)
         log_parts = []
         if rev is not None:
             if rev == -1:  # Special value to disable override
@@ -328,28 +318,9 @@ class HardwareManager:
             logger.info(f"Setting hardware configuration: {', '.join(log_parts)}")
 
         if not log_parts:
-            # This is a GET operation, needs special handling for the second response
-            comm = None
-            try:
-                comm = SerialCommunicator.find_and_connect(command, self.config)
-                # find_and_connect got the first OK. Now get the second with the data.
-                is_ok, msg = comm.expect_ack()
-                if is_ok:
-                    logger.info(f"Hardware configuration: {msg}")
-                    return True
-                else:
-                    logger.error(f"Failed to read hardware configuration: {msg}")
-                    return False
-            except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
-                logger.error(f"Failed to read hardware configuration: {e}")
-                return False
-            finally:
-                if comm:
-                    comm.disconnect()
-        else:
-            # This is a SET operation, the simple command execution is sufficient.
-            success, _ = self._execute_simple_command(command, "Hardware configuration")
-            return success
+            return self._query_ack(command, "Hardware configuration")
+        success, _ = self._execute_simple_command(command, "Hardware configuration")
+        return success
 
     def read_calibration(self, flags: int = 0) -> Calibration | None:
         """Read r1, r2, the calibrated bandgap and the raw bandgap count.
@@ -361,9 +332,7 @@ class HardwareManager:
         Returns None on any transport error, or when the reply is not a
         MSG_OK_CFG.
         """
-        command: dict[str, int] = {"state": COMMAND_CONFIG}
-        if flags:
-            command["flags"] = flags
+        command = _command(COMMAND_CONFIG, flags)
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(command, self.config)
@@ -377,7 +346,7 @@ class HardwareManager:
                 "bandgap_mv": bandgap_mv,
                 "bandgap_adc": bandgap_adc,
             }
-        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+        except SerialError as e:
             logger.debug(f"Failed to read calibration: {e}")
             return None
         finally:
@@ -397,9 +366,7 @@ class HardwareManager:
                 f"outside {CONFIG_BANDGAP_MIN_MV}-{CONFIG_BANDGAP_MAX_MV} mV."
             )
             return False
-        command: dict[str, int] = {"state": COMMAND_CONFIG, "bg": bandgap_mv}
-        if flags:
-            command["flags"] = flags
+        command = _command(COMMAND_CONFIG, flags, bg=bandgap_mv)
         success, _ = self._execute_simple_command(command, "Calibration")
         return success
 
@@ -419,15 +386,13 @@ class HardwareManager:
         else:
             logger.info("Reading continuously. Press Ctrl+C to stop.")
 
-        command_for_connect = {"state": state_to_set}
-        if flags:
-            command_for_connect["flags"] = flags
+        command_for_connect = _command(state_to_set, flags)
         comm = None
 
         try:
             comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
 
-            # Wait for the firmware to signal it's ready before we start the reading loop.  # noqa: E501
+            # Wait for the firmware to signal it's ready before we start the reading loop.
             # This establishes a handshake and prevents a race condition.
             is_ok, msg = comm.expect_ack()
             if not is_ok:
@@ -437,7 +402,7 @@ class HardwareManager:
                 return False
             logger.debug(f"Firmware ready for voltage reading: {msg}")
 
-            # After receiving ready, send an ACK to start the reading loop on the firmware.  # noqa: E501
+            # After receiving ready, send an ACK to start the reading loop on the firmware.
             comm.send_ack()
 
             # The VCC warning is printed once per command, not once per
@@ -464,7 +429,7 @@ class HardwareManager:
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
                         print()  # Newline after continuous printing
                         logger.info(
-                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."  # noqa: E501
+                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."
                         )
                         return True
 
@@ -472,7 +437,7 @@ class HardwareManager:
                 elif response_type == "OK":
                     print()
                     logger.info(
-                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"  # noqa: E501
+                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"
                     )
                     return True
                 elif response_type == "WARN":
@@ -488,15 +453,10 @@ class HardwareManager:
                 else:  # Timeout or unexpected
                     print()
                     logger.error(
-                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"  # noqa: E501
+                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"
                     )
                     return False
-        except (
-            ProgrammerNotFoundError,
-            SerialError,
-            SerialTimeoutError,
-            HardwareOperationError,
-        ) as e:
+        except (SerialError, HardwareOperationError) as e:
             print()
             logger.error(f"Failed to read {voltage_type_str} voltage: {e}")
             return False
@@ -555,9 +515,7 @@ class HardwareManager:
         response, or when no sample could be parsed (honest fallback, never
         a fabricated 0).
         """
-        command_for_connect = {"state": state}
-        if flags:
-            command_for_connect["flags"] = flags
+        command_for_connect = _command(state, flags)
         comm = None
         samples: list = []
         try:
@@ -590,17 +548,14 @@ class HardwareManager:
             # Tell the firmware to end the command now, rather than letting
             # it stay active until its own watchdog times it out.
             comm.send_done()
-        except (
-            ProgrammerNotFoundError,
-            SerialError,
-            SerialTimeoutError,
-            HardwareOperationError,
-        ) as e:
+        except (SerialError, HardwareOperationError) as e:
             logger.debug(f"Failed to sample voltage: {e}")
             return None
         finally:
             if comm:
                 comm.disconnect()
+
+        import statistics
 
         return int(statistics.median(samples)) if samples else None
 
@@ -618,9 +573,7 @@ class HardwareManager:
         """
         comm = None
         frames: list[dict[str, int]] = []
-        command: dict[str, int] = {"state": COMMAND_DEV_ADC}
-        if flags:
-            command["flags"] = flags
+        command = _command(COMMAND_DEV_ADC, flags)
         try:
             # No expect_ack() here. find_and_connect consumes the firmware's
             # MSG_OK_READY as part of the handshake, and dt_read_adc sends no
@@ -646,12 +599,7 @@ class HardwareManager:
                         "r2": r2,
                     }
                 )
-        except (
-            ProgrammerNotFoundError,
-            SerialError,
-            SerialTimeoutError,
-            HardwareOperationError,
-        ) as e:
+        except (SerialError, HardwareOperationError) as e:
             logger.debug(f"Failed to read raw ADC: {e}")
             return None
         finally:
