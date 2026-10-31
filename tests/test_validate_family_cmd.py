@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
-import pytest
 from click.testing import CliRunner
 
 from firestarter.cli_handlers import AppContext, cli
@@ -67,11 +66,6 @@ def make_app_context(
         firmware_manager=firmware_manager,
         eprom_presenter=eprom_presenter,
     )
-
-
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
 
 
 class TestSkipDeferredPath:

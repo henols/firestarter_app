@@ -6,32 +6,24 @@ Permission is hereby granted under MIT license.
 
 Phase 36 Plan 04 — Bug characterization suite (TEST-05).
 
-Pins two latent bugs using pytest.mark.xfail(strict=True) asserting the
-CORRECTED behavior. Each test auto-flips to XPASS when the fix lands
-(strict=True makes XPASS a suite ERROR, forcing marker removal).
+Two regression tests for bugs that are now fixed. Each test asserts the
+corrected behavior.
 
-BUG-1: main.py:497 build_arg_flags uses 'in' not getattr -> fix Phase 41 (CLI-03)
-  The expression `args.force if "force" in args else False` calls `__contains__`
-  on the args object. argparse.Namespace supports this (coincidentally), but any
-  plain Python object lacking `__contains__` raises TypeError. Click-provided
-  objects (Phase 41) will not be argparse.Namespace, making this a forward
-  compatibility bug. Corrected pattern: `getattr(args, "force", False)`.
+BUG-1 (fixed Phase 41, CLI-03): build_arg_flags used `"force" in args`.
+  argparse.Namespace supports `__contains__` (coincidentally), but any plain
+  Python object lacking `__contains__` raises TypeError, and Click-provided
+  objects are not argparse.Namespace. Corrected pattern:
+  `getattr(args, "force", False)`.
 
-BUG-2: eprom_operations.py:265 EpromOperationError lumped with SerialError ->
-  fix Phase 42 (ERR-01)
-  The except clause `except (SerialError, SerialTimeoutError, EpromOperationError)`
-  logs all three as "Communication error during <op>". EpromOperationError means
-  the firmware executed the command and reported a hardware failure — the serial
-  link is healthy. Lumping it with transport errors produces a misleading
-  "Communication error" log entry. Corrected behaviour: split the except clause
-  so EpromOperationError is logged as "Programmer error during <op>".
+BUG-2 (fixed Phase 42, ERR-01): EpromOperationError was lumped with
+  SerialError. The except clause
+  `except (SerialError, SerialTimeoutError, EpromOperationError)` logged all
+  three as "Communication error during <op>". EpromOperationError means the
+  firmware executed the command and reported a hardware failure — the serial
+  link is healthy. Corrected behaviour: EpromOperationError is not logged as
+  a communication error.
   Operator-reported: "app always reports that the communication is broken when
   the hw returns an error."
-
-Each test asserts the CORRECTED behavior. With the bug present the test fails
-(XFAIL, suite stays green). When the fix lands the test passes (XPASS) and
-strict=True makes XPASS a suite ERROR, forcing the Phase 41 / Phase 42 plan
-executor to remove the corresponding xfail marker.
 """
 
 import logging

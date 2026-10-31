@@ -51,9 +51,8 @@ from __future__ import annotations
 
 import copy
 import logging
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
-import pytest
 from click.testing import CliRunner
 
 from firestarter.chip_resolver import resolve_chip
@@ -64,15 +63,8 @@ from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
-from firestarter.messages import (
-    MSG_END_DONE,
-    MSG_INIT_DONE,
-    MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
-)
-from firestarter.serial_comm import SerialCommunicator
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import connect_via, fresh_serial_and_comm, write_success_frames
 from .conftest import make_app_context as _make_app_context
 
 # Real 27C part used throughout this module -- see the module docstring.
@@ -83,37 +75,6 @@ def _w27c512_programmer_dict() -> dict:
     """A real w27c512 programmer dict via resolve_chip (protocol 0x07 / algorithm 7)."""
     db = EpromDatabase(skip_local_override=True)
     return resolve_chip(_REAL_27C_CHIP, db=db)
-
-
-def _fresh_serial_and_comm():
-    """Build an independent ``(fake_serial, make_comm)`` pair.
-
-    Mirrors ``tests/conftest.py``'s ``fake_serial``/``make_comm`` fixtures.
-    Needed only by ``test_no_new_wire_field_is_added``, which drives two
-    full writes: a successful write's ``SerialCommunicator`` closes its
-    fake serial port at the end (``_FakeSerial.close()`` sets
-    ``is_open = False``), so the second drive cannot reuse the same
-    fixture-injected ``fake_serial`` instance. Precedent:
-    ``tests/test_write_skip_sdp_unlock.py``'s own ``_fresh_serial_and_comm``.
-    """
-    serial = _FakeSerial()
-
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = serial
-        instance.port_name = "/dev/null"
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        instance._fault_inject_outgoing = None
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.firmware_identity = None
-        instance.hw_revision = None
-        instance.seen_message_ids = set()
-        return instance
-
-    return serial, _factory
 
 
 def _drive_write_for_pulse_override(
@@ -133,28 +94,17 @@ def _drive_write_for_pulse_override(
     adapted to call ``write_eprom`` DIRECTLY -- no ``CliRunner`` here (plan
     143-07 adds the CLI cases to this same module).
 
-    Returns ``(ok, captured)`` where ``captured["command_dict"]`` is the
-    dict ``SerialCommunicator.find_and_connect`` received.
+    Returns ``(ok, captured)`` where ``captured[0]`` is the dict
+    ``SerialCommunicator.find_and_connect`` received.
     """
     input_file = tmp_path / f"{_REAL_27C_CHIP}.bin"
     input_file.write_bytes(b"\x01\x02\x03\x04")
 
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    captured: dict = {}
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        captured["command_dict"] = command_dict
-        return make_comm()
+    for frame in write_success_frames():
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(make_comm) as captured:
         ok = operator.write_eprom(
             _REAL_27C_CHIP,
             eprom_data_dict,
@@ -173,9 +123,9 @@ def test_override_rides_the_db_dict(tmp_path, make_comm, fake_serial) -> None:
         tmp_path, make_comm, fake_serial, _w27c512_programmer_dict(), pulse_us=1234
     )
     assert ok is True, "HOST-04: the driven write must complete successfully"
-    assert captured["command_dict"]["pulse-delay"] == 1234, (
+    assert captured[0]["pulse-delay"] == 1234, (
         "HOST-04/D-14: pulse_us must override the wire 'pulse-delay' value "
-        f"verbatim; got {captured['command_dict'].get('pulse-delay')!r}"
+        f"verbatim; got {captured[0].get('pulse-delay')!r}"
     )
 
 
@@ -219,14 +169,14 @@ def test_no_new_wire_field_is_added(tmp_path, make_comm, fake_serial) -> None:
     )
     assert without_ok is True, "HOST-04: the driven write must complete successfully"
 
-    fresh_serial, fresh_comm = _fresh_serial_and_comm()
+    fresh_serial, fresh_comm = fresh_serial_and_comm()
     with_ok, with_captured = _drive_write_for_pulse_override(
         tmp_path, fresh_comm, fresh_serial, _w27c512_programmer_dict(), pulse_us=1234
     )
     assert with_ok is True, "HOST-04: the driven write must complete successfully"
 
-    without_keys = set(without_captured["command_dict"])
-    with_keys = set(with_captured["command_dict"])
+    without_keys = set(without_captured[0])
+    with_keys = set(with_captured[0])
     assert with_keys == without_keys, (
         "HOST-04: --pulse-us must add NO new wire key -- the override "
         f"run's key set {with_keys} must equal the no-override run's key "
@@ -250,10 +200,10 @@ def test_absent_flag_leaves_db_pulse(tmp_path, make_comm, fake_serial) -> None:
         tmp_path, make_comm, fake_serial, programmer_dict, pulse_us=0
     )
     assert ok is True, "HOST-04: the driven write must complete successfully"
-    assert captured["command_dict"]["pulse-delay"] == db_pulse_delay, (
+    assert captured[0]["pulse-delay"] == db_pulse_delay, (
         "HOST-04: an absent --pulse-us must leave the database pulse-delay "
         f"value ({db_pulse_delay}) unchanged; got "
-        f"{captured['command_dict'].get('pulse-delay')!r}"
+        f"{captured[0].get('pulse-delay')!r}"
     )
 
 
@@ -268,9 +218,7 @@ def make_app_context(
 ) -> AppContext:
     """Typed local delegate onto ``tests/conftest.py``'s shared factory --
     copied from ``tests/test_write_skip_sdp_unlock.py``'s own module-level
-    helper of the same name (not imported across test modules; duplicated,
-    matching this module's own existing ``_fresh_serial_and_comm``
-    precedent above). Preserves that helper's one non-default behaviour:
+    helper of the same name (not imported across test modules). Preserves that helper's one non-default behaviour:
     ``eprom_operator`` defaults to a REAL ``EpromOperator``, not a
     ``Mock``, because ``_drive_write_via_cli`` below proves a value reaches
     the composed wire ``command_dict``, which only a real ``EpromOperator``
@@ -290,11 +238,6 @@ def make_app_context(
     )
 
 
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
-
-
 def _drive_write_via_cli(
     runner: CliRunner,
     tmp_path,
@@ -311,12 +254,10 @@ def _drive_write_via_cli(
     half, above): that driver calls ``write_eprom`` DIRECTLY with no CLI in
     the loop, so it cannot exercise Click's own ``--pulse-us`` option, its
     ``IntRange`` bounds, or the D-17 report line -- all three are this
-    plan's job. Modelled on ``tests/test_write_skip_sdp_unlock.py``'s
-    ``_drive_write``: the same four-frame ``INIT_DONE`` -> ``OK_REQ_DATA``
-    -> ``MAIN_DONE`` -> ``END_DONE`` feed sequence and the same
-    ``captured["command_dict"]`` closure. That dict stays EMPTY if the
-    write is refused before ``find_and_connect`` is ever called -- the
-    ready-made oracle HOST-05's no-port-opened claim needs (case 4, below).
+    plan's job. Feeds ``write_success_frames()`` and captures through
+    ``connect_via``. The captured list stays EMPTY if the write is refused
+    before ``find_and_connect`` is ever called -- the ready-made oracle
+    HOST-05's no-port-opened claim needs (case 4, below).
 
     Always passes ``obj=app`` (a pre-built ``AppContext``): ``cli()``'s own
     group callback special-cases this (``if ctx.obj is not None and
@@ -331,23 +272,12 @@ def _drive_write_via_cli(
     input_file = tmp_path / f"{_REAL_27C_CHIP}.bin"
     input_file.write_bytes(b"\x01\x02\x03\x04")
 
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    captured: dict = {}
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        captured["command_dict"] = command_dict
-        return make_comm()
+    for frame in write_success_frames():
+        fake_serial.feed(frame)
 
     app = make_app_context()
     args = ["write", _REAL_27C_CHIP, str(input_file), *(extra_args or [])]
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(make_comm) as captured:
         result = runner.invoke(cli, args, obj=app)
     return result, captured
 
@@ -366,10 +296,10 @@ def test_override_reaches_the_wire_through_the_cli(
         f"expected a successful write; got exit {result.exit_code}, "
         f"output:\n{result.output}"
     )
-    assert captured["command_dict"]["pulse-delay"] == 1234, (
+    assert captured[0]["pulse-delay"] == 1234, (
         "HOST-04: --pulse-us must reach the wire's existing 'pulse-delay' "
         f"key verbatim through the real CLI; got "
-        f"{captured['command_dict'].get('pulse-delay')!r}"
+        f"{captured[0].get('pulse-delay')!r}"
     )
 
 
@@ -491,7 +421,7 @@ def test_refusal_opens_no_port(
             fake_serial,
             extra_args=["--pulse-us", bad_value],
         )
-        assert captured == {}, (
+        assert captured == [], (
             f"HOST-05: --pulse-us {bad_value!r} must be refused before "
             f"find_and_connect is ever called -- no serial byte may be "
             f"sent; got captured={captured!r}"
@@ -516,10 +446,10 @@ def test_write_without_pulse_us_still_works(
         f"Pitfall 3 regression: a bare `write` with no --pulse-us must "
         f"exit 0; got {result.exit_code}, output:\n{result.output}"
     )
-    assert captured["command_dict"]["pulse-delay"] == 100, (
+    assert captured[0]["pulse-delay"] == 100, (
         "with no --pulse-us, the wire 'pulse-delay' must equal the "
         f"database value (100 us for w27c512); got "
-        f"{captured['command_dict'].get('pulse-delay')!r}"
+        f"{captured[0].get('pulse-delay')!r}"
     )
 
 

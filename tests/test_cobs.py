@@ -33,6 +33,8 @@ from firestarter.frame_parser import (  # type: ignore[attr-defined]
     cobs_encode,
 )
 
+from .conftest import _ref_crc8_ccitt
+
 # Local helpers
 
 
@@ -48,22 +50,6 @@ def build_cobs_frame(payload: bytes) -> bytes:
     crc = _crc8_ccitt(payload)
     body = cobs_encode(payload + bytes([crc]))
     return b"#" + body + b"\x00"
-
-
-def _ref_crc8_ccitt(data: bytes) -> int:
-    """Table-free CRC8 reference — poly 0x07, seed 0x00, no reflection, no final XOR.
-
-    Used to cross-check _crc8_ccitt independently.
-    """
-    crc = 0
-    for b in data:
-        crc ^= b
-        for _ in range(8):
-            if crc & 0x80:
-                crc = ((crc << 1) ^ 0x07) & 0xFF
-            else:
-                crc = (crc << 1) & 0xFF
-    return crc
 
 
 class TestCobsRoundtrip:

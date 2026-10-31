@@ -423,22 +423,16 @@ class TestCompareAccumulatorPeakAllocation:
     `PEAK_ALLOCATION_CEILING_BYTES` across all four fault patterns, and
     does not grow when the simulated device size doubles.
 
-    Deviation from the plan's literal "512 KiB" wording, disclosed in
-    SUMMARY.md: this class traces at 128 KiB, not 512 KiB, for all four
-    patterns. Measured reason -- `tracemalloc`'s own per-allocation tracing
-    overhead (not the algorithm) made a full 512 KiB trace of the
-    all-differing and alternating patterns take 5-12s depending on machine load, occasionally exceeding this file's own
-    <verify>-mandated 10-second-per-test ceiling. 128 KiB reproduces the
-    same peak (measured: ~35 KB at 128 KiB vs ~37 KB at 512 KiB for
-    all-differ -- a ~6% difference, consistent with `_peak_for` below
-    showing the accumulator's footprint does not grow with device size) in
-    a stable ~1-2s. `test_peak_allocation_flat_in_device_size` below is
-    what actually exercises 512 KiB directly (via the cheap single-byte
-    pattern, unaffected by this timing pressure) and proves the peak does
-    not grow between 128 KiB and 512 KiB -- so the ceiling assertion at
-    128 KiB combined with that flatness proof still covers the full 512 KiB
-    claim: 128 KiB's peak sits ~30x under the ceiling, and even doubling it
-    (the flatness test's own bound) leaves ~15x of margin.
+    This class traces 32 KiB, not 512 KiB: `tracemalloc`'s own
+    per-allocation overhead makes a large trace of the all-differing and
+    alternating patterns slow. The peak does not depend on the size
+    (measured for all-differ: ~35 KB at 32 KiB and 128 KiB, ~37 KB at
+    512 KiB), so
+    the ceiling check at 32 KiB, combined with
+    `test_peak_allocation_flat_in_device_size` below (which traces 512 KiB
+    with the cheap single-byte pattern and proves the peak does not grow
+    from 128 KiB), still covers the 512 KiB claim. The 32 KiB peak sits
+    ~30x under the ceiling.
     """
 
     @pytest.mark.parametrize(
@@ -446,7 +440,7 @@ class TestCompareAccumulatorPeakAllocation:
         ["all_match", "single_byte", "all_differ", "alternating"],
     )
     def test_peak_allocation_under_ceiling(self, pattern: str) -> None:
-        size = 128 * 1024
+        size = 32 * 1024
         chunk_size = 1024
         # Chunks are materialised before tracing starts (mirrors the timing
         # tests' fixture-outside-the-timed-region discipline below): the

@@ -42,29 +42,27 @@ non-recoverable decode error still fails the probe, bounded by the same
 deadline rather than hanging.
 """
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
+from firestarter import serial_comm
 from firestarter.messages import MSG_ERR_EMPTY_INPUT, MSG_OK_READY
 from firestarter.serial_comm import SerialCommunicator
 
 from .conftest import _FakeSerial, build_frame
 
 
-def _make_init(fake_ser: _FakeSerial):
-    def _init(self, port=None, baud_rate=None, **kwargs):
-        self.connection = fake_ser
-        self.port_name = port or "/dev/fake"
-        self.baud_rate = baud_rate or 250000
-        self.timeout = 0.1
-        self.programmer_info = None
-        self._fault_inject_outgoing = None
-        self.firmware_buffer_size = None
-        self.firmware_max_chunk = None
-        self.firmware_identity = None
-        self.hw_revision = None
-        self.seen_message_ids = set()
-
-    return _init
+@contextmanager
+def _on_port(fake_ser: _FakeSerial):
+    """The probe's own SerialCommunicator opens `fake_ser`; the board-reset
+    drain before the send is skipped, so the queued frames stay for the ack
+    read."""
+    with (
+        patch.object(serial_comm.serial, "Serial", return_value=fake_ser),
+        patch.object(serial_comm, "CONNECTION_STABILIZE_DELAY", 0),
+        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
+    ):
+        yield
 
 
 def test_probe_port_recovers_from_spurious_empty_input_ahead_of_real_ack() -> None:
@@ -75,11 +73,7 @@ def test_probe_port_recovers_from_spurious_empty_input_ahead_of_real_ack() -> No
     fake_ser.feed(build_frame(MSG_ERR_EMPTY_INPUT, b""))
     fake_ser.feed(build_frame(MSG_OK_READY, b""))
 
-    with (
-        patch.object(SerialCommunicator, "__init__", _make_init(fake_ser)),
-        patch.object(SerialCommunicator, "send_command", return_value=15),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-    ):
+    with _on_port(fake_ser):
         comm = SerialCommunicator._probe_port(
             port_name="/dev/fake",
             baud_rate=250000,
@@ -105,11 +99,7 @@ def test_probe_port_recovers_from_two_spurious_empty_input_frames_ahead_of_real_
     fake_ser.feed(build_frame(MSG_ERR_EMPTY_INPUT, b""))
     fake_ser.feed(build_frame(MSG_OK_READY, b""))
 
-    with (
-        patch.object(SerialCommunicator, "__init__", _make_init(fake_ser)),
-        patch.object(SerialCommunicator, "send_command", return_value=15),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-    ):
+    with _on_port(fake_ser):
         comm = SerialCommunicator._probe_port(
             port_name="/dev/fake",
             baud_rate=250000,
@@ -130,10 +120,7 @@ def test_probe_port_still_fails_on_a_genuine_unrecoverable_error() -> None:
     fake_ser.feed(build_frame(MSG_ERR_EMPTY_INPUT, b""))
 
     with (
-        patch.object(SerialCommunicator, "__init__", _make_init(fake_ser)),
-        patch.object(SerialCommunicator, "send_command", return_value=15),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-        patch.object(SerialCommunicator, "disconnect", return_value=None),
+        _on_port(fake_ser),
         # The window is spent on an empty wire either way; its length is
         # not what this test checks.
         patch("firestarter.serial_comm.SETUP_ACK_RECOVERY_TIMEOUT_S", 0.1),
@@ -147,3 +134,4 @@ def test_probe_port_still_fails_on_a_genuine_unrecoverable_error() -> None:
         )
 
     assert comm is None
+    assert not fake_ser.is_open

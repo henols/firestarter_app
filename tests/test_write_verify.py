@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from firestarter.chip_resolver import resolve_chip
@@ -32,18 +31,22 @@ from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator, build_flags
 from firestarter.exceptions import ProgrammerNotFoundError
-from firestarter.messages import (
-    MSG_DATA_CHUNK,
-    MSG_END_DONE,
-    MSG_ERR_SETUP,
-    MSG_INIT_DONE,
-    MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
-)
+from firestarter.messages import MSG_ERR_SETUP, MSG_INIT_DONE
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import (
+    PortDropSerial,
+    build_frame,
+    comm_on,
+    connect_via,
+    fresh_serial_and_comm,
+    read_phase_frames,
+    write_success_frames,
+)
 from .conftest import make_app_context as _make_app_context
 from .test_write_blank_guard import _m27c512_data
+
+_FIND_AND_CONNECT = "firestarter.serial_comm.SerialCommunicator.find_and_connect"
+_NOT_FOUND = ProgrammerNotFoundError("No compatible programmer found on any port.")
 
 # ---------------------------------------------------------------------------
 # Shared chip fixtures
@@ -65,62 +68,6 @@ def _at28c256_data() -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _comm_factory_for(serial: _FakeSerial):
-    """Build a `SerialCommunicator` factory wired to one fake serial port,
-    mirroring `tests/test_write_blank_guard.py::_comm_factory_for`."""
-    from firestarter.serial_comm import SerialCommunicator
-
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = serial
-        instance.port_name = "/dev/null"
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        instance._fault_inject_outgoing = None
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.firmware_identity = None
-        instance.hw_revision = None
-        instance.seen_message_ids = set()
-        return instance
-
-    return _factory
-
-
-class _PortDropSerial(_FakeSerial):
-    """A fake serial port that behaves normally until its pre-fed bytes are
-    exhausted, then raises `serial.SerialException` ONCE on the next
-    `read()` instead of returning `b""` -- simulating a genuine port drop
-    mid-operation, as opposed to a plain pyserial-timeout empty read. After
-    that one raise it reverts to plain empty reads, so `_operation_context`'s
-    teardown (`disconnect()` -> `consume_remaining_input()`, which tolerates
-    a timeout) does not see a second, unrelated exception."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._raised_once = False
-
-    def read(self, n: int = 1) -> bytes:
-        data = super().read(n)
-        if not data and not self._raised_once:
-            self._raised_once = True
-            import serial
-
-            raise serial.SerialException("simulated port drop mid-operation")
-        return data
-
-
-def _write_success_frames() -> list[bytes]:
-    """One complete, otherwise-successful COMMAND_WRITE main phase."""
-    return [
-        build_frame(MSG_INIT_DONE, b""),
-        build_frame(MSG_OK_REQ_DATA, b""),
-        build_frame(MSG_MAIN_DONE, b""),
-        build_frame(MSG_END_DONE, b""),
-    ]
-
-
 def _drive_write(
     tmp_path,
     *,
@@ -135,22 +82,23 @@ def _drive_write(
 ) -> tuple[bool, EpromOperator]:
     """Drive the genuine `write_eprom` over one fake serial connection
     (an unguarded chip by default, so no guard read precedes it) and return
-    `(ok, operator)` so callers can inspect the cause-channel attributes."""
+    `(ok, operator)` so callers can inspect the cause-channel attributes.
+
+    `connect_side_effect` replaces the connection: `find_and_connect`
+    raises it instead of returning a communicator."""
     input_file = tmp_path / f"wv_{id(frames)}.bin"
     input_file.write_bytes(payload)
 
-    serial = _FakeSerial()
+    serial, factory = fresh_serial_and_comm()
     for frame in frames:
         serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
-    side_effect = connect_side_effect or (
-        lambda command_dict, config, **kwargs: _comm_factory_for(serial)()
-    )
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=side_effect,
-    ):
+    if connect_side_effect is not None:
+        connect = patch(_FIND_AND_CONNECT, side_effect=connect_side_effect)
+    else:
+        connect = connect_via(factory)
+    with connect:
         ok = operator.write_eprom(
             eprom_name,
             eprom_data if eprom_data is not None else _at28c256_data(),
@@ -173,7 +121,7 @@ def test_write_eprom_suppress_verdict_line_true_on_success_no_line_and_returns_t
     with caplog.at_level("INFO", logger="EpromOperator"):
         ok, _ = _drive_write(
             tmp_path,
-            frames=_write_success_frames(),
+            frames=write_success_frames(),
             suppress_verdict_line=True,
         )
     assert ok is True
@@ -187,7 +135,7 @@ def test_write_eprom_default_suppress_verdict_line_false_still_logs_success_line
     """Backstop: a suppression that fired unconditionally would pass every
     other leg in this module -- this proves the default path is untouched."""
     with caplog.at_level("INFO", logger="EpromOperator"):
-        ok, _ = _drive_write(tmp_path, frames=_write_success_frames())
+        ok, _ = _drive_write(tmp_path, frames=write_success_frames())
     assert ok is True
     messages = [rec.message for rec in caplog.records]
     assert any(m.startswith("Write to AT28C256 successful") for m in messages)
@@ -238,20 +186,12 @@ def test_verify_eprom_suppress_verdict_line_true_on_match_no_line_returns_zero(
         f.write(payload)
         input_file = f.name
 
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in read_phase_frames(payload):
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
     with (
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
-        ),
+        connect_via(make_comm),
         caplog.at_level("INFO", logger="EpromOperator"),
     ):
         verdict = operator.verify_eprom(
@@ -278,20 +218,12 @@ def test_verify_eprom_suppress_verdict_line_true_on_mismatch_keeps_range_line(
     input_file = tmp_path / "in.bin"
     input_file.write_bytes(payload)
 
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in read_phase_frames(bytes(corrupted)):
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
     with (
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
-        ),
+        connect_via(make_comm),
         caplog.at_level("INFO", logger="EpromOperator"),
     ):
         verdict = operator.verify_eprom(
@@ -322,19 +254,11 @@ def test_verify_eprom_size_str_none_resolves_region_to_input_file_length(
     input_file = tmp_path / "in.bin"
     input_file.write_bytes(payload)
 
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, short_chunk))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in read_phase_frames(short_chunk):
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(make_comm):
         verdict = operator.verify_eprom("at28c256", _at28c256_data(), str(input_file))
 
     assert verdict == 1
@@ -347,7 +271,7 @@ def test_verify_eprom_size_str_none_resolves_region_to_input_file_length(
 
 def test_last_write_guard_verdict_none_when_guard_not_run(tmp_path) -> None:
     """Unguarded protocol (0x0D) -- the guard is skipped entirely."""
-    ok, operator = _drive_write(tmp_path, frames=_write_success_frames())
+    ok, operator = _drive_write(tmp_path, frames=write_success_frames())
     assert ok is True
     assert operator.last_write_guard_verdict is None
 
@@ -361,14 +285,8 @@ def test_last_write_guard_verdict_two_on_guard_read_transport_failure(
     input_file = tmp_path / "guard_transport_fail.bin"
     input_file.write_bytes(b"\xaa" * 64)
 
-    def _raise_not_found(command_dict, config, **kwargs):
-        raise ProgrammerNotFoundError("No compatible programmer found on any port.")
-
     operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_raise_not_found,
-    ):
+    with patch(_FIND_AND_CONNECT, side_effect=_NOT_FOUND):
         ok = operator.write_eprom("m27c512", _m27c512_data(), str(input_file))
 
     assert ok is False
@@ -389,27 +307,15 @@ def test_last_write_attempt_verdict_none_when_write_never_attempted_guard_refusa
     stays `None` -- distinct from `last_write_guard_verdict`, which is 1."""
     region_payload = bytearray(b"\xff" * 64)
     region_payload[10] = 0xAB
-    guard_read_frames = [
-        build_frame(MSG_INIT_DONE, b""),
-        build_frame(MSG_DATA_CHUNK, bytes(region_payload)),
-        build_frame(MSG_MAIN_DONE, b""),
-        build_frame(MSG_END_DONE, b""),
-    ]
     input_file = tmp_path / "refused.bin"
     input_file.write_bytes(b"\xaa" * 64)
 
-    serial = _FakeSerial()
-    for frame in guard_read_frames:
+    serial, factory = fresh_serial_and_comm()
+    for frame in read_phase_frames(bytes(region_payload)):
         serial.feed(frame)
 
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return _comm_factory_for(serial)()
-
     operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
+    with connect_via(factory):
         ok = operator.write_eprom("m27c512", _m27c512_data(), str(input_file))
 
     assert ok is False
@@ -418,7 +324,7 @@ def test_last_write_attempt_verdict_none_when_write_never_attempted_guard_refusa
 
 
 def test_last_write_attempt_verdict_zero_on_successful_write(tmp_path) -> None:
-    ok, operator = _drive_write(tmp_path, frames=_write_success_frames())
+    ok, operator = _drive_write(tmp_path, frames=write_success_frames())
     assert ok is True
     assert operator.last_write_attempt_verdict == 0
 
@@ -441,14 +347,10 @@ def test_last_write_attempt_verdict_two_on_connect_failure(tmp_path) -> None:
     """`_setup_operation`'s connect-failure `(None, 0)` arm: the write's own
     `find_and_connect` raises before any frame is exchanged -- transport/
     setup cause, verdict 2, not 1."""
-
-    def _raise_not_found(command_dict, config, **kwargs):
-        raise ProgrammerNotFoundError("No compatible programmer found on any port.")
-
     ok, operator = _drive_write(
         tmp_path,
         frames=[],
-        connect_side_effect=_raise_not_found,
+        connect_side_effect=_NOT_FOUND,
     )
     assert ok is False
     assert operator.last_write_attempt_verdict == 2
@@ -464,15 +366,12 @@ def test_last_write_attempt_verdict_two_on_mid_write_port_drop(tmp_path) -> None
     input_file = tmp_path / "port_drop.bin"
     input_file.write_bytes(payload)
 
-    serial = _PortDropSerial()
+    serial = PortDropSerial()
     serial.feed(build_frame(MSG_INIT_DONE, b""))
     # No further frames: the next read (MAIN phase's first) raises.
 
     operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=lambda command_dict, config, **kwargs: _comm_factory_for(serial)(),
-    ):
+    with connect_via(lambda: comm_on(serial)):
         ok = operator.write_eprom("at28c256", _at28c256_data(), str(input_file))
 
     assert ok is False
@@ -513,21 +412,13 @@ def test_last_write_attempt_verdict_zero_when_skip_sdp_unlock_ack_check_fails(
         input_file = f.name
 
     # No MSG_WARN_SDP_UNLOCK_SKIPPED fed -- the ack is absent.
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
+    for frame in write_success_frames():
+        fake_serial.feed(frame)
 
     operator = EpromOperator(ConfigManager())
     operation_flags = build_flags(skip_sdp_unlock=True)
     with (
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
-        ),
+        connect_via(make_comm),
         caplog.at_level(logging.ERROR, logger="EpromOperator"),
     ):
         ok = operator.write_eprom(
@@ -552,11 +443,6 @@ def test_last_write_attempt_verdict_zero_when_skip_sdp_unlock_ack_check_fails(
 # / `last_write_attempt_verdict`, one test per arm -- the
 # `tests/test_cli_handlers.py` house style (see its `test_verify_*` legs).
 # =============================================================================
-
-
-@pytest.fixture
-def runner() -> CliRunner:
-    return CliRunner()
 
 
 def _app_with_operator(operator: Mock):

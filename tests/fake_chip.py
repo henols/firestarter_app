@@ -71,30 +71,6 @@ class FakeChip:
         return cls(memory_size=memory_size, uv=True)
 
     @classmethod
-    def uv_with_slot_saturated(
-        cls, memory_size: int, slot_start: int, slot_length: int
-    ) -> FakeChip:
-        """A UV chip whose given slot is pre-saturated under the
-        address-derived pattern: its content is set to the bitwise
-        complement of that slot's pattern, so `bits_cleared_by` there is
-        high (there ARE 1-bits differing from the pattern... no -- see
-        below) while the MASKED image (`current & pattern`) is all-zero,
-        the slot-saturation shape D-B's selector must skip.
-
-        Concretely: `content = ~pattern`, so `mask_write_pattern(content,
-        pattern) == content & pattern == (~pattern) & pattern == 0` for
-        every byte -- the masked write at this slot is degenerate, exactly
-        the case `WriteTarget.__post_init__` must refuse.
-        """
-        from firestarter.chip_test import generate_pattern
-
-        chip = cls(memory_size=memory_size, uv=True)
-        pattern = generate_pattern(slot_start, slot_length)
-        complement = bytes(~b & 0xFF for b in pattern)
-        chip.data[slot_start : slot_start + slot_length] = complement
-        return chip
-
-    @classmethod
     def uv_with_slot_zeroed(
         cls, memory_size: int, slot_start: int, slot_length: int
     ) -> FakeChip:

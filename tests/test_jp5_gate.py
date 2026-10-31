@@ -16,7 +16,7 @@ Four things are proved here:
      to the exact 20-line bus this phase's data change is supposed to produce,
      with no dedicated `vpp-pin` key (it collides with `/OE` and is dropped).
   3. Integration through `EpromOperator.write_eprom` -- the refusal fires
-     before `_operation_context` is ever entered.
+     before `find_and_connect` is ever called.
   4. The off-TTY leg of `confirm_or_refuse` -- `confirm_fn` is never reached
      without a TTY.
   5. The affected-part set is DERIVED from `pinouts.json`, never hand-listed
@@ -28,7 +28,6 @@ Four things are proved here:
 from unittest.mock import Mock, patch
 
 import pytest
-from click.testing import CliRunner
 
 from firestarter import cli_handlers
 from firestarter.cli_handlers import AppContext, cli
@@ -36,7 +35,7 @@ from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase, pin_conversions
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
-from firestarter.exceptions import Pin1HazardRefusedError
+from firestarter.exceptions import Pin1HazardRefusedError, SerialError
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.jp5_gate import (
@@ -196,48 +195,51 @@ def _make_operator():
     return EpromOperator(ConfigManager())
 
 
-def test_write_eprom_on_affected_chip_refuses_before_operation_context():
+# The operator reaches the serial port only through this call; a refused
+# operation never makes it.
+_FIND_AND_CONNECT = "firestarter.serial_comm.SerialCommunicator.find_and_connect"
+
+
+def test_write_eprom_on_affected_chip_refuses_before_the_port_opens():
     operator = _make_operator()
     eprom_data = {"bus-config": AFFECTED_BUS_CONFIG}
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(Pin1HazardRefusedError):
             operator.write_eprom("DIP32_27C801", eprom_data, "in.bin")
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
 
-def test_erase_eprom_on_affected_chip_refuses_before_operation_context():
+def test_erase_eprom_on_affected_chip_refuses_before_the_port_opens():
     operator = _make_operator()
     eprom_data = {"bus-config": AFFECTED_BUS_CONFIG}
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(Pin1HazardRefusedError):
             operator.erase_eprom("DIP32_27C801", eprom_data)
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
 
-def test_erase_eprom_acknowledged_reaches_operation_context():
+def test_erase_eprom_acknowledged_reaches_the_port():
     operator = _make_operator()
     eprom_data = {"bus-config": AFFECTED_BUS_CONFIG}
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
-        ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "erase"))
-        ctx_mock.return_value.__exit__ = Mock(return_value=False)
+    with patch(_FIND_AND_CONNECT, side_effect=SerialError("no port")) as connect_mock:
         result = operator.erase_eprom(
             "DIP32_27C801", eprom_data, pin1_hazard_acknowledged=True
         )
-        ctx_mock.assert_called_once()
+        connect_mock.assert_called_once()
         assert result is False
 
 
-def test_erase_eprom_unaffected_reaches_operation_context_regardless_of_acknowledged():
+def test_erase_eprom_unaffected_reaches_the_port_regardless_of_acknowledged():
     operator = _make_operator()
     for eprom_data in (
         {"bus-config": A18_BUS_CONFIG},
         {"bus-config": NO_PIN1_BUS_CONFIG},
     ):
-        with patch.object(EpromOperator, "_operation_context") as ctx_mock:
-            ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "erase"))
-            ctx_mock.return_value.__exit__ = Mock(return_value=False)
+        with patch(
+            _FIND_AND_CONNECT, side_effect=SerialError("no port")
+        ) as connect_mock:
             operator.erase_eprom("W27C512", eprom_data, pin1_hazard_acknowledged=False)
-            ctx_mock.assert_called_once()
+            connect_mock.assert_called_once()
 
 
 def test_confirm_or_refuse_erase_off_tty_returns_false_and_never_calls_confirm_fn():
@@ -282,8 +284,7 @@ def _cli_app_context(eprom_operator):
     )
 
 
-def test_cli_erase_with_force_on_affected_part_still_refuses_off_tty():
-    runner = CliRunner()
+def test_cli_erase_with_force_on_affected_part_still_refuses_off_tty(runner):
     eprom_operator = Mock(spec=EpromOperator)
     app = _cli_app_context(eprom_operator)
     with patch.object(

@@ -14,7 +14,6 @@ import hashlib
 from pathlib import Path
 from unittest.mock import Mock
 
-import pytest
 from click.testing import CliRunner
 
 from firestarter.cli_handlers import (
@@ -27,35 +26,22 @@ from firestarter.cli_handlers import (
     cli,
 )
 from firestarter.config import ConfigManager
-from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
-from firestarter.firmware import FirmwareManager
-from firestarter.hardware import HardwareManager
+
+from .conftest import make_app_context
 
 
-def _make_app(port: str | None = None, r1: int | None = None) -> AppContext:
-    """Construct AppContext; optionally set port and r1 in config."""
+def _make_app(
+    eprom_operator: Mock | None = None, *, r1: int | None = None
+) -> AppContext:
+    """An AppContext whose config holds port /dev/ttyACM0 and `r1` (None
+    clears r1)."""
     config_manager = ConfigManager()
-    config_manager.set_value("port", port, persist=False)
-    if r1 is not None:
-        config_manager.set_value("r1", r1, persist=False)
-    else:
-        # Clear any saved r1
-        config_manager.set_value("r1", None, persist=False)
-    return AppContext(
-        db=EpromDatabase(skip_local_override=True),
-        config_manager=config_manager,
-        eprom_operator=Mock(spec=EpromOperator),
-        hardware_manager=Mock(spec=HardwareManager),
-        firmware_manager=Mock(spec=FirmwareManager),
-        eprom_presenter=Mock(spec=EpromConsolePresenter),
+    config_manager.set_value("port", "/dev/ttyACM0", persist=False)
+    config_manager.set_value("r1", r1, persist=False)
+    return make_app_context(
+        config_manager=config_manager, eprom_operator=eprom_operator
     )
-
-
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
 
 
 # Negative control (T-71-VACUOUS mitigation)
@@ -106,18 +92,7 @@ class TestNegativeControl:
         operator = Mock(spec=EpromOperator)
         operator.write_cycle_eprom.return_value = 1  # deliberate FAIL
 
-        config_manager = ConfigManager()
-        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
-        config_manager.set_value("r1", None, persist=False)
-
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator)
         result = runner.invoke(
             cli,
             [
@@ -153,18 +128,7 @@ class TestUno328pbNA:
         source.write_bytes(b"\xff" * 64)
 
         operator = Mock(spec=EpromOperator)
-        config_manager = ConfigManager()
-        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
-        config_manager.set_value("r1", None, persist=False)
-
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator)
         result = runner.invoke(
             cli,
             [
@@ -203,18 +167,7 @@ class TestUno328pbNA:
         source.write_bytes(b"\xff" * 64)
 
         operator = Mock(spec=EpromOperator)
-        config_manager = ConfigManager()
-        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
-        config_manager.set_value("r1", None, persist=False)
-
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator)
         runner.invoke(
             cli,
             [
@@ -271,15 +224,7 @@ class TestR1Precondition:
 
         operator = Mock(spec=EpromOperator)
         # r1 far out of band (e.g. 1000 = uncalibrated Uno default)
-        app = _make_app(port="/dev/ttyACM0", r1=1000)
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=app.config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator, r1=1000)
         result = runner.invoke(
             cli,
             [
@@ -312,18 +257,7 @@ class TestR1Precondition:
         operator = Mock(spec=EpromOperator)
         operator.write_cycle_eprom.return_value = 0  # type: ignore[attr-defined]
         # r1 = 270000 (exactly on target)
-        config_manager = ConfigManager()
-        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
-        config_manager.set_value("r1", _R1_TARGET, persist=False)
-
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator, r1=_R1_TARGET)
         runner.invoke(
             cli,
             [
@@ -391,18 +325,7 @@ class TestLeonardoAuthoritativePass:
 
         operator = Mock(spec=EpromOperator)
         operator.write_cycle_eprom.return_value = 0  # type: ignore[attr-defined]
-        config_manager = ConfigManager()
-        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
-        config_manager.set_value("r1", None, persist=False)
-
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator)
         result = runner.invoke(
             cli,
             [
@@ -449,18 +372,7 @@ class TestLeonardoAuthoritativePass:
 
         operator = Mock(spec=EpromOperator)
         operator.write_cycle_eprom.return_value = 0  # type: ignore[attr-defined]
-        config_manager = ConfigManager()
-        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
-        config_manager.set_value("r1", None, persist=False)
-
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator)
         result = runner.invoke(
             cli,
             [
@@ -503,14 +415,7 @@ class TestRetryCount:
         self, runner: CliRunner, tmp_path: Path
     ) -> None:
         """SKIP-deferred cells carry retry_count=0."""
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=ConfigManager(),
-            eprom_operator=Mock(spec=EpromOperator),
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = make_app_context()
         runner.invoke(
             cli,
             ["dev", "validate-family", "eprom", "--output-dir", str(tmp_path)],
@@ -531,18 +436,7 @@ class TestRetryCount:
 
         operator = Mock(spec=EpromOperator)
         operator.write_cycle_eprom.return_value = 0  # type: ignore[attr-defined]
-        config_manager = ConfigManager()
-        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
-        config_manager.set_value("r1", None, persist=False)
-
-        app = AppContext(
-            db=EpromDatabase(skip_local_override=True),
-            config_manager=config_manager,
-            eprom_operator=operator,
-            hardware_manager=Mock(spec=HardwareManager),
-            firmware_manager=Mock(spec=FirmwareManager),
-            eprom_presenter=Mock(spec=EpromConsolePresenter),
-        )
+        app = _make_app(operator)
         runner.invoke(
             cli,
             [

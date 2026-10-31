@@ -29,93 +29,33 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from firestarter.cli_handlers import AppContext, cli
+from firestarter.cli_handlers import cli
 from firestarter.config import ConfigManager
-from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import ClassProgressHandler, EpromOperator
 from firestarter.exceptions import ProtocolNotImplementedError
-from firestarter.firmware import FirmwareManager
-from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_ERR_NOT_SUPPORTED, MSG_ERR_PROTOCOL_NOT_IMPLEMENTED
 from firestarter.serial_comm import SerialCommunicator
 
-from .conftest import _FakeSerial, build_frame
-
-# Shared test helper (mirrors test_cli_handlers.make_app_context)
+from .conftest import (
+    AnsweringSerial,
+    _FakeSerial,
+    build_frame,
+    comm_on,
+    make_app_context,
+    port_opens,
+)
 
 PROTOCOL_VALUE = 0x0B  # example rejected protocol byte (maps to algorithm 0x0B)
-FW_VERSION_MSG = "FW: 3.0.0, HW: Rev2, Cmd: 0x0d"
 
 
-def make_app_context(**manager_overrides) -> AppContext:
-    """Construct an AppContext for in-process CliRunner tests.
+def _0xbb_frame() -> bytes:
+    """The 0xBB ERROR id-frame, as the ack of the user's command.
 
-    Defaults to a real EpromDatabase(skip_local_override=True) plus
-    Mock-spec'd managers; overrides substitute specific managers.
-    """
-    db = manager_overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    config_manager = manager_overrides.pop("config_manager", None)
-    if config_manager is None:
-        config_manager = ConfigManager()
-    return AppContext(
-        db=db,
-        config_manager=config_manager,
-        eprom_operator=manager_overrides.pop(
-            "eprom_operator", MagicMock(spec=EpromOperator)
-        ),
-        hardware_manager=manager_overrides.pop(
-            "hardware_manager", MagicMock(spec=HardwareManager)
-        ),
-        firmware_manager=manager_overrides.pop(
-            "firmware_manager", MagicMock(spec=FirmwareManager)
-        ),
-        eprom_presenter=manager_overrides.pop(
-            "eprom_presenter", MagicMock(spec=EpromConsolePresenter)
-        ),
-    )
-
-
-@pytest.fixture
-def runner() -> CliRunner:
-    """Fresh CliRunner per test — mix_stderr=True so stderr+stdout flow into result.output."""
-    return CliRunner()
-
-
-def _make_fake_comm(fake_ser: _FakeSerial) -> SerialCommunicator:
-    """Build a SerialCommunicator wired to a _FakeSerial, bypassing __init__."""
-    comm = SerialCommunicator.__new__(SerialCommunicator)
-    comm.connection = fake_ser
-    comm.port_name = "/dev/fake"
-    comm.baud_rate = 250000
-    comm.timeout = 0.1
-    comm.programmer_info = None
-    comm._fault_inject_outgoing = None
-    comm.firmware_buffer_size = None
-    comm.firmware_max_chunk = None
-    comm.seen_message_ids = set()
-    return comm
-
-
-def _feed_fw_handshake_then_0xbb(fake_ser: _FakeSerial) -> None:
-    """Pre-load the fake serial with a 0xBB ERROR as the first response.
-
-    The probe sequence in _probe_port (CAP-02):
-      1. user-command ack: 0xBB ERROR id-frame  <- triggers ProtocolNotImplementedError
-
-    Before CAP-02 this helper also fed the two acks of a dedicated
-    CMD_FW_VERSION pre-probe ("OK: Ready" then "OK: FW: 3.0.0, ..."), because
-    _probe_port sent that probe ahead of the user's command. That probe is
-    retired — the firmware identity now rides in the MSG_OK_READY ack — so the
+    The firmware identity rides in the MSG_OK_READY ack (CAP-02), so the
     user's command is the FIRST thing on the wire and its ack is the first
-    response. Feeding the old handshake here would make expect_ack consume
-    "OK: Ready" as the user-command ack and never reach the 0xBB frame.
+    response. Before CAP-02 a dedicated CMD_FW_VERSION pre-probe came first.
     """
-    fake_ser.feed(
-        build_frame(MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, bytes([PROTOCOL_VALUE]))
-    )
+    return build_frame(MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, bytes([PROTOCOL_VALUE]))
 
 
 # Test B: expect_ack unit — raises ProtocolNotImplementedError on 0xBB frame
@@ -129,11 +69,9 @@ def test_b_expect_ack_raises_protocol_not_implemented_on_0xbb() -> None:
     returning (False, msg), so callers never see a flattened 2-tuple for 0xBB.
     """
     fake_ser = _FakeSerial()
-    fake_ser.feed(
-        build_frame(MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, bytes([PROTOCOL_VALUE]))
-    )
+    fake_ser.feed(_0xbb_frame())
 
-    comm = _make_fake_comm(fake_ser)
+    comm = comm_on(fake_ser, port_name="/dev/fake")
 
     with pytest.raises(ProtocolNotImplementedError) as exc_info:
         comm.expect_ack(timeout=1.0)
@@ -148,35 +86,9 @@ def test_c_probe_port_propagates_protocol_not_implemented_error() -> None:
     """SC#2 — _probe_port raises ProtocolNotImplementedError when the user-command
     ack is a 0xBB ERROR frame. Does NOT return None (the pre-Task-1 behaviour).
 
-    The fake serial delivers:
-      - setup-complete OK ack
-      - FW version OK ack  (passes the version gate)
-      - 0xBB ERROR id-frame (the user-command ack — raises ProtocolNotImplementedError)
-
-    consume_remaining_input is mocked to a no-op so it does not drain the 0xBB frame.
-    send_command is mocked to a no-op (no real serial write).
-    disconnect is mocked to a no-op (avoids interacting with the fake serial on error).
+    The fake port answers the user's command with the 0xBB ERROR id-frame.
     """
-    fake_ser = _FakeSerial()
-    _feed_fw_handshake_then_0xbb(fake_ser)
-
-    def mock_init(self, port=None, baud_rate=None, **kwargs):
-        self.connection = fake_ser
-        self.port_name = port or "/dev/fake"
-        self.baud_rate = baud_rate or 250000
-        self.timeout = 0.1
-        self.programmer_info = None
-        self._fault_inject_outgoing = None
-        self.firmware_buffer_size = None
-        self.firmware_max_chunk = None
-        self.seen_message_ids = set()
-
-    with (
-        patch.object(SerialCommunicator, "__init__", mock_init),
-        patch.object(SerialCommunicator, "send_command", return_value=None),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-        patch.object(SerialCommunicator, "disconnect", return_value=None),
-    ):
+    with port_opens(AnsweringSerial(_0xbb_frame())):
         with pytest.raises(ProtocolNotImplementedError):
             SerialCommunicator._probe_port(
                 port_name="/dev/fake",
@@ -192,13 +104,11 @@ def test_d_main_phase_read_data_raises_protocol_not_implemented_on_0xbb() -> Non
     EpromOperationError).
     """
     fake_ser = _FakeSerial()
-    fake_ser.feed(
-        build_frame(MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, bytes([PROTOCOL_VALUE]))
-    )
+    fake_ser.feed(_0xbb_frame())
 
     config = ConfigManager()
     operator = EpromOperator(config)
-    operator.comm = _make_fake_comm(fake_ser)
+    operator.comm = comm_on(fake_ser, port_name="/dev/fake")
 
     progress = ClassProgressHandler()
 
@@ -220,13 +130,11 @@ def test_d_main_phase_send_data_raises_protocol_not_implemented_on_0xbb() -> Non
     reading any data chunk.
     """
     fake_ser = _FakeSerial()
-    fake_ser.feed(
-        build_frame(MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, bytes([PROTOCOL_VALUE]))
-    )
+    fake_ser.feed(_0xbb_frame())
 
     config = ConfigManager()
     operator = EpromOperator(config)
-    operator.comm = _make_fake_comm(fake_ser)
+    operator.comm = comm_on(fake_ser, port_name="/dev/fake")
 
     progress = ClassProgressHandler()
 
@@ -258,25 +166,8 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
     """
     from firestarter.exceptions import ProgrammerNotFoundError
 
-    fake_ser = _FakeSerial()
-    fake_ser.feed(build_frame(MSG_ERR_NOT_SUPPORTED, b""))
-
-    def mock_init(self, port=None, baud_rate=None, **kwargs):
-        self.connection = fake_ser
-        self.port_name = port or "/dev/fake"
-        self.baud_rate = baud_rate or 250000
-        self.timeout = 0.1
-        self.programmer_info = None
-        self._fault_inject_outgoing = None
-        self.firmware_buffer_size = None
-        self.firmware_max_chunk = None
-        self.seen_message_ids = set()
-
     with (
-        patch.object(SerialCommunicator, "__init__", mock_init),
-        patch.object(SerialCommunicator, "send_command", return_value=None),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-        patch.object(SerialCommunicator, "disconnect", return_value=None),
+        port_opens(AnsweringSerial(build_frame(MSG_ERR_NOT_SUPPORTED, b""))),
         patch.object(
             SerialCommunicator, "_list_potential_ports", return_value=["/dev/fake"]
         ),
@@ -315,20 +206,6 @@ def test_a_cli_read_0xbb_at_probe_time_surfaces_unsupported_protocol(
       - output does NOT contain "No compatible programmer found"
       - output does NOT contain "Programmer error"
     """
-    fake_ser = _FakeSerial()
-    _feed_fw_handshake_then_0xbb(fake_ser)
-
-    def mock_init(self, port=None, baud_rate=None, **kwargs):
-        self.connection = fake_ser
-        self.port_name = port or "/dev/fake"
-        self.baud_rate = baud_rate or 250000
-        self.timeout = 0.1
-        self.programmer_info = None
-        self._fault_inject_outgoing = None
-        self.firmware_buffer_size = None
-        self.firmware_max_chunk = None
-        self.seen_message_ids = set()
-
     config = ConfigManager()
     real_operator = EpromOperator(config)
     app = make_app_context(eprom_operator=real_operator)
@@ -338,12 +215,7 @@ def test_a_cli_read_0xbb_at_probe_time_surfaces_unsupported_protocol(
 
     try:
         with (
-            patch.object(SerialCommunicator, "__init__", mock_init),
-            patch.object(SerialCommunicator, "send_command", return_value=None),
-            patch.object(
-                SerialCommunicator, "consume_remaining_input", return_value=None
-            ),
-            patch.object(SerialCommunicator, "disconnect", return_value=None),
+            port_opens(AnsweringSerial(_0xbb_frame())),
             patch.object(
                 SerialCommunicator,
                 "_list_potential_ports",

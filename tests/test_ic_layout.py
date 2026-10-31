@@ -20,10 +20,12 @@ from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
 from firestarter.ic_layout import EpromSpecBuilder
 
+from .plan_corpus import REAL_DB
+
 
 @pytest.fixture(scope="module")
 def db() -> EpromDatabase:
-    return EpromDatabase(skip_local_override=True)
+    return REAL_DB
 
 
 @pytest.fixture(scope="module")

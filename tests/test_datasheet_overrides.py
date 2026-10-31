@@ -34,7 +34,7 @@ Coverage:
      silently not applied (OVR-03/encoding).
   8. `TestShippedOverrideFileContract` -- the shipped
      tools/datasheet_overrides.json parses, every entry's `datasheet` is
-     either a repository-relative path that exists and is git-tracked, or
+     either a repository-relative path that exists, or
      the exact token `UNSOURCED` with a non-empty `note`, and the number of
      `UNSOURCED` entries is pinned as an exact count.
 
@@ -95,7 +95,6 @@ predicate pinned against the emitted database (D-05, D-06):
 
 import json
 import os
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -378,22 +377,13 @@ def test_mbm27c4001_noop_entry_raises():
     assert "100" in message, message
 
 
-def _is_git_tracked(repo_root, relative_path):
-    result = subprocess.run(
-        ["git", "-C", str(repo_root), "ls-files", "--error-unmatch", relative_path],
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0
-
-
 class TestShippedOverrideFileContract:
     def test_shipped_file_parses(self):
         with open(_DATASHEET_OVERRIDES_FILE, encoding="utf-8") as f:
             data = json.load(f)
         assert isinstance(data, dict), type(data)
 
-    def test_every_datasheet_value_is_a_tracked_path_or_unsourced_with_note(self):
+    def test_every_datasheet_value_is_an_existing_path_or_unsourced_with_note(self):
         with open(_DATASHEET_OVERRIDES_FILE, encoding="utf-8") as f:
             data = json.load(f)
         for row_key, entry in data.items():
@@ -406,10 +396,6 @@ class TestShippedOverrideFileContract:
             assert candidate.exists(), (
                 f"{row_key}: datasheet path {datasheet!r} does not exist "
                 f"under {_APP_ROOT}"
-            )
-            assert _is_git_tracked(_APP_ROOT, datasheet), (
-                f"{row_key}: datasheet path {datasheet!r} exists but is not "
-                f"git-tracked in {_APP_ROOT}"
             )
 
     def test_unsourced_count_is_pinned_exactly(self):

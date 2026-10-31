@@ -94,11 +94,6 @@ def make_app_context(*, eprom_operator=None, **overrides) -> AppContext:
     return _make_app_context(eprom_operator=eprom_operator, **overrides)
 
 
-@pytest.fixture
-def runner() -> CliRunner:
-    return CliRunner()
-
-
 def _first_token(output: str) -> str:
     """The class token is always the first whitespace-delimited field of
     the first printed line (`render_lock_status`'s own contract)."""

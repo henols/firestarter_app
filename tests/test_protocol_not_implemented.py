@@ -23,56 +23,13 @@ from unittest.mock import Mock
 import pytest
 from click.testing import CliRunner
 
-from firestarter.cli_handlers import AppContext, cli
+from firestarter.cli_handlers import cli
 from firestarter.config import ConfigManager
-from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import EpromOperationError, ProtocolNotImplementedError
-from firestarter.firmware import FirmwareManager
-from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_ERR_PROTOCOL_NOT_IMPLEMENTED
 
-from .conftest import build_frame
-
-# Shared test helper (mirrors test_cli_handlers.make_app_context)
-
-
-def make_app_context(**manager_overrides) -> AppContext:
-    """Construct an AppContext for in-process CliRunner tests.
-
-    Defaults to a real EpromDatabase(skip_local_override=True) plus
-    Mock-spec'd managers; overrides substitute specific managers.
-    """
-    db = manager_overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    config_manager = manager_overrides.pop("config_manager", None)
-    if config_manager is None:
-        config_manager = ConfigManager()
-    return AppContext(
-        db=db,
-        config_manager=config_manager,
-        eprom_operator=manager_overrides.pop(
-            "eprom_operator", Mock(spec=EpromOperator)
-        ),
-        hardware_manager=manager_overrides.pop(
-            "hardware_manager", Mock(spec=HardwareManager)
-        ),
-        firmware_manager=manager_overrides.pop(
-            "firmware_manager", Mock(spec=FirmwareManager)
-        ),
-        eprom_presenter=manager_overrides.pop(
-            "eprom_presenter", Mock(spec=EpromConsolePresenter)
-        ),
-    )
-
-
-@pytest.fixture
-def runner() -> CliRunner:
-    """Fresh CliRunner per test — mix_stderr=True so stderr+stdout flow into result.output."""
-    return CliRunner()
-
+from .conftest import build_frame, make_app_context
 
 # SC#1: subclass relationship
 

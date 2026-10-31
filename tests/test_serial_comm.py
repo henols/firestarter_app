@@ -26,6 +26,8 @@ from firestarter.frame_parser import (
 )
 from firestarter.serial_comm import SerialCommunicator
 
+from .conftest import id_frame_body
+
 
 @pytest.mark.parametrize(
     "current, required, expected",
@@ -167,8 +169,7 @@ def test_send_command_emits_cobs_frame(make_comm, fake_serial) -> None:
     comm.send_command(cmd)
 
     # Read what was written to the fake serial
-    fake_serial._buf.seek(0)
-    written = fake_serial._buf.read()
+    written = b"".join(fake_serial.written)
 
     # Must end with the COBS delimiter
     assert written[-1:] == b"\x00", "Frame must end with 0x00 delimiter"
@@ -229,8 +230,7 @@ def test_send_command_version_probe_is_framed(make_comm, fake_serial) -> None:
     comm = make_comm()
     comm.send_command({"state": COMMAND_FW_VERSION})
 
-    fake_serial._buf.seek(0)
-    written = fake_serial._buf.read()
+    written = b"".join(fake_serial.written)
 
     assert written[-1:] == b"\x00", "Version probe must end with 0x00 (framed)"
     assert not written.startswith(b"{"), (
@@ -325,7 +325,7 @@ def test_fault_inject_outgoing_drop_delimiter(make_comm, monkeypatch) -> None:
     )
 
 
-def test_fault_inject_incoming_subclass(make_comm) -> None:
+def test_fault_inject_incoming_subclass(monkeypatch) -> None:
     """FaultInjectingSerialCommunicator flips the last body byte exactly once.
 
     The one-shot flip fires on the first _decode_id_frame call; subsequent
@@ -333,21 +333,21 @@ def test_fault_inject_incoming_subclass(make_comm) -> None:
 
     FAILS RED until 53-02 adds the FaultInjectingSerialCommunicator subclass.
     """
+    from firestarter.messages import MSG_OK_READY
     from firestarter.serial_comm import (  # type: ignore[attr-defined]  # RED: class absent until 53-02
         FaultInjectingSerialCommunicator,
     )
 
-    comm = FaultInjectingSerialCommunicator.__new__(FaultInjectingSerialCommunicator)
-    comm._corrupt_incoming_once = True
-    comm._fault_fired = False
-    comm.seen_message_ids = set()
+    from .conftest import _FakeSerial
 
-    # Build a minimal body (id + params + CRC) for _decode_id_frame
-    from firestarter.frame_parser import _crc8_ccitt as _inner_crc8
+    monkeypatch.setattr(
+        "firestarter.serial_comm.serial.Serial", lambda *a, **kw: _FakeSerial()
+    )
+    monkeypatch.setattr("firestarter.serial_comm.CONNECTION_STABILIZE_DELAY", 0)
+    comm = FaultInjectingSerialCommunicator("/dev/null", corrupt_incoming_once=True)
 
-    test_body = bytes([0x01, 0x00, 0x00])  # minimal: id + 2 params
-    crc_byte = _inner_crc8(test_body)
-    body_with_crc = test_body + bytes([crc_byte])
+    # A minimal body (id + 2 params + CRC) for _decode_id_frame
+    body_with_crc = id_frame_body(MSG_OK_READY, b"\x00\x00")
 
     # First call — the one-shot flip must fire and set _fault_fired
     comm._decode_id_frame(len(body_with_crc), body_with_crc)
@@ -428,19 +428,6 @@ def test_setup_command_is_the_path_the_cold_probe_takes(monkeypatch) -> None:
 
     fake_ser = _FakeSerial()
 
-    def _init(self, port=None, baud_rate=None, **kwargs):
-        self.connection = fake_ser
-        self.port_name = port or "/dev/fake"
-        self.baud_rate = baud_rate or 250000
-        self.timeout = 0.1
-        self.programmer_info = None
-        self._fault_inject_outgoing = None
-        self.firmware_buffer_size = None
-        self.firmware_max_chunk = None
-        self.firmware_identity = None
-        self.hw_revision = None
-        self.seen_message_ids = set()
-
     calls: list = []
 
     def _fake_setup_command(
@@ -450,10 +437,10 @@ def test_setup_command_is_the_path_the_cold_probe_takes(monkeypatch) -> None:
         self.programmer_info = "Ready (faked)"
         return True
 
-    monkeypatch.setattr(SerialCommunicator, "__init__", _init)
     monkeypatch.setattr(
-        SerialCommunicator, "consume_remaining_input", lambda self: None
+        "firestarter.serial_comm.serial.Serial", lambda *a, **kw: fake_ser
     )
+    monkeypatch.setattr("firestarter.serial_comm.CONNECTION_STABILIZE_DELAY", 0)
     monkeypatch.setattr(SerialCommunicator, "setup_command", _fake_setup_command)
 
     comm = SerialCommunicator._probe_port(
@@ -565,14 +552,10 @@ def test_decode_id_frame_sets_firmware_max_chunk_from_2_byte_param(make_comm) ->
     comm = make_comm()
     assert comm.firmware_max_chunk is None, "firmware_max_chunk must start None"
 
-    from firestarter.frame_parser import _crc8_ccitt
     from firestarter.messages import MSG_OK_READY
 
-    # Build a valid MSG_OK_READY body: id + 2-byte BE u16 (512 = 0x0200) + CRC8
-    params = b"\x02\x00"  # big-endian 512
-    msg_id_byte = bytes([MSG_OK_READY])
-    crc = _crc8_ccitt(msg_id_byte + params)
-    body = msg_id_byte + params + bytes([crc])
+    # A valid MSG_OK_READY body: id + 2-byte BE u16 (512 = 0x0200) + CRC8
+    body = id_frame_body(MSG_OK_READY, b"\x02\x00")
     frame_len = len(body)
 
     result = comm._decode_id_frame(frame_len, body)
@@ -595,13 +578,10 @@ def test_decode_id_frame_leaves_firmware_max_chunk_none_for_0_byte_param(
     comm = make_comm()
     assert comm.firmware_max_chunk is None, "firmware_max_chunk must start None"
 
-    from firestarter.frame_parser import _crc8_ccitt
     from firestarter.messages import MSG_OK_READY
 
-    # Build a valid MSG_OK_READY body with 0 param bytes: id + CRC8 only
-    msg_id_byte = bytes([MSG_OK_READY])
-    crc = _crc8_ccitt(msg_id_byte)
-    body = msg_id_byte + bytes([crc])
+    # A valid MSG_OK_READY body with 0 param bytes: id + CRC8 only
+    body = id_frame_body(MSG_OK_READY)
     frame_len = len(body)
 
     result = comm._decode_id_frame(frame_len, body)
@@ -635,12 +615,9 @@ def test_decode_id_frame_clamps_implausible_max_chunk(make_comm, raw, expected) 
     comm = make_comm()
     assert comm.firmware_max_chunk is None, "firmware_max_chunk must start None"
 
-    from firestarter.frame_parser import _crc8_ccitt
     from firestarter.messages import MSG_OK_READY
 
-    msg_id_byte = bytes([MSG_OK_READY])
-    crc = _crc8_ccitt(msg_id_byte + raw)
-    body = msg_id_byte + raw + bytes([crc])
+    body = id_frame_body(MSG_OK_READY, raw)
 
     result = comm._decode_id_frame(len(body), body)
     assert result is not None, (

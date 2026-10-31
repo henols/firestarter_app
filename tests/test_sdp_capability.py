@@ -60,9 +60,6 @@ would pass no matter what SDP_CAPABLE_TOKENS contained.
       silently defaulting when handed that dict -- the failure mode that
       made check_eprom_blank's _SRAM_PROTO_IDS short-circuit vacuous in
       production.
-  11. Import purity (D-03): sdp_capability.py's top-level imports are a
-      subset of {"__future__", "typing"} -- pinned via ast for Phase 121's
-      GATE-01.
   12. Runtime local-override refusal: a synthetic algorithm==13 entry
       reaching the live DB only through the ~/.firestarter/database.json
       merge seam (database.py:187-199, invisible to CI) is refused at

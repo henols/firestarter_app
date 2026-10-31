@@ -15,18 +15,18 @@ shape -- so "not a blanket refusal" is a measurement rather than a claim.
 Nine properties, matching page_size_gate.py's require_page_alignment contract:
 
   1. Refusal: EpromOperator.write_eprom raises PageAlignmentError, naming the
-     chip, BEFORE `_operation_context` is ever entered -- no serial port is
+     chip, BEFORE `find_and_connect` is ever called -- no serial port is
      opened. Covers an unaligned start with an aligned length, an aligned
      start with a partial length, and both together.
   2. Pass-through: the same call against a page-exact write reaches
-     `_operation_context` -- proving the guard is not a blanket refusal --
+     `find_and_connect` -- proving the guard is not a blanket refusal --
      at every page size the shipped database carries for this protocol
      (64, 128, 256, 512), with the parts chosen by reading the database.
   3. Fail-closed: an unparseable address string and a payload path that does
      not exist both raise PageAlignmentError rather than silently proceeding.
   4. Empty edge (WRITE-02): a zero-byte payload is never refused -- it is a
      whole multiple of every page size and drives no page cycle -- and the
-     leg asserts the operation context was entered, not merely that no
+     leg asserts the port was asked for, not merely that no
      exception was raised, so the guard cannot pass by being skipped.
   5. No-op: a write against another algorithm, and a non-write operation
      against a protocol 0x05 chip, both pass without raising and without
@@ -46,17 +46,20 @@ from unittest.mock import Mock, patch
 
 import click
 import pytest
-from click.testing import CliRunner
 
 from firestarter.cli_handlers import cli, map_typed_errors
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
-from firestarter.exceptions import PageAlignmentError
+from firestarter.exceptions import PageAlignmentError, SerialError
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 from firestarter.page_size_gate import require_page_alignment
 
 from .conftest import make_app_context
+
+# The operator reaches the serial port only through this call; a write that
+# is refused first never makes it.
+_FIND_AND_CONNECT = "firestarter.serial_comm.SerialCommunicator.find_and_connect"
 
 
 def _make_operator() -> EpromOperator:
@@ -95,7 +98,7 @@ def _flash4_rows_by_page_size() -> dict[int, tuple[str, dict]]:
     return picked
 
 
-def test_write_eprom_unaligned_start_refuses_before_operation_context(tmp_path):
+def test_write_eprom_unaligned_start_refuses_before_the_port_opens(tmp_path):
     eprom_data = _w29c020_data()
     assert eprom_data.get("page-size") == 128
 
@@ -103,17 +106,17 @@ def test_write_eprom_unaligned_start_refuses_before_operation_context(tmp_path):
     payload.write_bytes(b"\x55" * 64)
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(PageAlignmentError) as exc_info:
             operator.write_eprom(
                 "W29C020", eprom_data, str(payload), address_str="0x40"
             )
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
 
 
-def test_write_eprom_unaligned_start_with_aligned_length_refuses_before_operation_context(
+def test_write_eprom_unaligned_start_with_aligned_length_refuses_before_the_port_opens(
     tmp_path,
 ):
     """Start 64 is not a multiple of the 128 page size; length 128 is."""
@@ -124,17 +127,17 @@ def test_write_eprom_unaligned_start_with_aligned_length_refuses_before_operatio
     payload.write_bytes(b"\x55" * 128)
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(PageAlignmentError) as exc_info:
             operator.write_eprom(
                 "W29C020", eprom_data, str(payload), address_str="0x40"
             )
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
 
 
-def test_write_eprom_aligned_start_with_partial_length_refuses_before_operation_context(
+def test_write_eprom_aligned_start_with_partial_length_refuses_before_the_port_opens(
     tmp_path,
 ):
     """Start 0 is a multiple of every page size; length 64 is not a
@@ -146,15 +149,15 @@ def test_write_eprom_aligned_start_with_partial_length_refuses_before_operation_
     payload.write_bytes(b"\x55" * 64)
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(PageAlignmentError) as exc_info:
             operator.write_eprom("W29C020", eprom_data, str(payload))
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
 
 
-def test_write_eprom_unaligned_start_and_partial_length_refuses_before_operation_context(
+def test_write_eprom_unaligned_start_and_partial_length_refuses_before_the_port_opens(
     tmp_path,
 ):
     """Both start 64 and length 64 fail the 128-page-size multiple test."""
@@ -165,46 +168,46 @@ def test_write_eprom_unaligned_start_and_partial_length_refuses_before_operation
     payload.write_bytes(b"\x55" * 64)
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(PageAlignmentError) as exc_info:
             operator.write_eprom(
                 "W29C020", eprom_data, str(payload), address_str="0x40"
             )
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
 
 
-def test_write_eprom_unparseable_address_refuses_before_operation_context(tmp_path):
+def test_write_eprom_unparseable_address_refuses_before_the_port_opens(tmp_path):
     eprom_data = _w29c020_data()
     payload = tmp_path / "aligned.bin"
     payload.write_bytes(b"\x55" * 128)
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(PageAlignmentError) as exc_info:
             operator.write_eprom(
                 "W29C020", eprom_data, str(payload), address_str="not-an-address"
             )
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
 
 
-def test_write_eprom_missing_payload_file_refuses_before_operation_context(tmp_path):
+def test_write_eprom_missing_payload_file_refuses_before_the_port_opens(tmp_path):
     eprom_data = _w29c020_data()
     missing_payload = tmp_path / "does_not_exist.bin"
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(_FIND_AND_CONNECT) as connect_mock:
         with pytest.raises(PageAlignmentError) as exc_info:
             operator.write_eprom("W29C020", eprom_data, str(missing_payload))
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
 
 
-def test_write_eprom_page_exact_write_reaches_operation_context(tmp_path):
+def test_write_eprom_page_exact_write_reaches_the_port(tmp_path):
     eprom_data = _w29c020_data()
     assert eprom_data.get("page-size") == 128
 
@@ -212,19 +215,17 @@ def test_write_eprom_page_exact_write_reaches_operation_context(tmp_path):
     payload.write_bytes(b"\x55" * 128)
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
-        ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "write"))
-        ctx_mock.return_value.__exit__ = Mock(return_value=False)
+    with patch(_FIND_AND_CONNECT, side_effect=SerialError("no port")) as connect_mock:
         result = operator.write_eprom("W29C020", eprom_data, str(payload))
 
-    ctx_mock.assert_called_once()
+    connect_mock.assert_called_once()
     assert result is False
 
 
 @pytest.mark.parametrize("page_size", sorted(_flash4_rows_by_page_size()))
 @pytest.mark.parametrize("page_count", [1, 2])
 @pytest.mark.parametrize("address_at_one_page", [False, True])
-def test_write_eprom_page_exact_write_reaches_operation_context_at_every_shipped_page_size(
+def test_write_eprom_page_exact_write_reaches_the_port_at_every_shipped_page_size(
     tmp_path, page_size, page_count, address_at_one_page
 ):
     """D-01: the alignment guard is not a blanket refusal at any page size
@@ -240,33 +241,29 @@ def test_write_eprom_page_exact_write_reaches_operation_context_at_every_shipped
     address_str = str(page_size) if address_at_one_page else None
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
-        ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "write"))
-        ctx_mock.return_value.__exit__ = Mock(return_value=False)
+    with patch(_FIND_AND_CONNECT, side_effect=SerialError("no port")) as connect_mock:
         result = operator.write_eprom(
             chip_name, eprom_data, str(payload), address_str=address_str
         )
 
-    ctx_mock.assert_called_once()
+    connect_mock.assert_called_once()
     assert result is False
 
 
-def test_write_eprom_zero_byte_payload_reaches_operation_context(tmp_path):
+def test_write_eprom_zero_byte_payload_reaches_the_port(tmp_path):
     """WRITE-02 empty edge: a zero-length write is a whole multiple of
     every page size and drives no page cycle, so it must never be refused.
-    Asserted by the context having been ENTERED, not merely by the absence
+    Asserted by `find_and_connect` having been CALLED, not merely by the absence
     of an exception -- so this leg cannot pass by the guard being skipped."""
     eprom_data = _w29c020_data()
     payload = tmp_path / "empty.bin"
     payload.write_bytes(b"")
 
     operator = _make_operator()
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
-        ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "write"))
-        ctx_mock.return_value.__exit__ = Mock(return_value=False)
+    with patch(_FIND_AND_CONNECT, side_effect=SerialError("no port")) as connect_mock:
         operator.write_eprom("W29C020", eprom_data, str(payload))
 
-    ctx_mock.assert_called_once()
+    connect_mock.assert_called_once()
 
 
 def test_require_page_alignment_another_algorithm_never_touches_filesystem():
@@ -329,7 +326,7 @@ def test_page_alignment_error_renders_verbatim_with_no_generic_prefix():
     assert "Programmer error" not in exc_info.value.message
 
 
-def test_page_alignment_error_renders_through_cli_write_command(tmp_path):
+def test_page_alignment_error_renders_through_cli_write_command(tmp_path, runner):
     message = (
         "W29C020: write refused -- page size is 128 bytes, start address is "
         "0x40, and payload length is 64 bytes."
@@ -340,7 +337,6 @@ def test_page_alignment_error_renders_through_cli_write_command(tmp_path):
     operator.write_eprom.side_effect = PageAlignmentError(message)
     app = make_app_context(eprom_operator=operator)
 
-    runner = CliRunner()
     result = runner.invoke(
         cli, ["write", "W29C020", str(payload), "-a", "0x40"], obj=app
     )

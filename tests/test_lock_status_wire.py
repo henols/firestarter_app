@@ -52,8 +52,7 @@ def test_outgoing_command_carries_command_lock_status_constant(
     comm = make_comm()
     comm.send_command({"cmd": COMMAND_LOCK_STATUS, "algorithm": 6})
 
-    fake_serial._buf.seek(0)
-    written = fake_serial._buf.read()
+    written = b"".join(fake_serial.written)
 
     assert written[-1:] == b"\x00"
     body = written[:-1]

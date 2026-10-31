@@ -18,7 +18,6 @@ cannot redden this file.
 from unittest.mock import MagicMock, Mock
 
 import pytest
-from click.testing import CliRunner
 
 import firestarter as _pkg
 from firestarter.cli_handlers import cli
@@ -222,11 +221,6 @@ def test_refusal_renders_without_a_prefix() -> None:
 @pytest.fixture
 def fw_manager() -> Mock:
     return Mock(spec=FirmwareManager)
-
-
-@pytest.fixture
-def runner() -> CliRunner:
-    return CliRunner()
 
 
 def test_pinned_too_new_refuses_before_any_port_or_request(

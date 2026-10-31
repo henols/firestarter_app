@@ -32,11 +32,12 @@ and re-arms automatically the day a future phase reserves a name; D-10's
 completeness pin over `SHAPE_IDS` stays exact because a reserved name
 never enters that set.
 
-`_REAL_DB` is `EpromDatabase(skip_local_override=True)`: without
-`skip_local_override=True`, a developer's own `~/.firestarter/database.json`
-override could move a frozen hash on one machine and nowhere else. No
-builder in this task reads it, but every later phase's `derive_plan`-based
-builder (D-02 table 2) shares this one instance.
+`REAL_DB` is `tests.plan_corpus.REAL_DB`, an
+`EpromDatabase(skip_local_override=True)`: without `skip_local_override=True`,
+a developer's own `~/.firestarter/database.json` override could move a frozen
+hash on one machine and nowhere else. Every `derive_plan`-based builder
+(D-02 table 2) shares this one instance. The operator doubles come from
+`tests/fixtures/operator_doubles.py`.
 
 Phase 174 plan 174-02 expands the tracer's one shape into the full
 sixteen-name namespace. The first seven additions
@@ -58,7 +59,7 @@ The remaining eight (D-02 table 2 -- `m27c512-full-all-ok`,
 `DiagnosticReport` path, mirroring `firestarter/cli_handlers.py:2374-2431`
 -- the sole production construction site -- exactly: `chip` is the raw
 CLI token, `protocol` is `str(prog["algorithm"])` read off
-`_REAL_DB.convert_to_programmer(_REAL_DB.get_eprom(chip))`. These are the
+`REAL_DB.convert_to_programmer(REAL_DB.get_eprom(chip))`. These are the
 shapes research actually measured a generator regeneration or a plan-shape
 change (SDP-step pruning, canonical naming) would move. Each real-path
 builder that is called directly is cached with `functools.cache` --
@@ -79,9 +80,7 @@ import copy
 import functools
 from collections.abc import Callable
 from dataclasses import replace as _dataclass_replace
-from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
 
 from firestarter.chip_test import (
     Fingerprint,
@@ -91,26 +90,14 @@ from firestarter.chip_test import (
     derive_plan,
     run_plan,
 )
-from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import AutoCapture, DiagnosticReport, TransportHealth
 from firestarter.exceptions import SerialError
 
 from ..fake_chip import WriteInitPreflightChip
-
-_REAL_DB = EpromDatabase(skip_local_override=True)
+from ..plan_corpus import REAL_DB
+from .operator_doubles import mock_operator, sdp_aware_operator
 
 _HOST_VERSION = "3.0.0b10"
-
-_OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-    "sdp_lock",
-    "sdp_unlock",
-]
 
 
 def build_shape_from_step_specs(
@@ -382,93 +369,6 @@ def _build_synthetic_arm4_empty_results() -> DiagnosticReport:
     )
 
 
-def _fixed_return_operator(**returns: Any) -> Mock:
-    """The fixed-return operator double, mirroring
-    `tests/test_chip_test.py:_mock_operator` (defined HERE rather than
-    imported from that test module -- D-03: Phase 181 must be able to
-    import shapes without pulling a large test module in). Every call
-    reports success with no state and no file written -- sufficient for
-    every real-path row below EXCEPT the AT28C256 SDP row, which needs
-    `_sdp_aware_operator` instead."""
-    op = Mock(spec=_OPERATOR_METHODS)
-    op.check_eprom_id.return_value = (True, 0x1234)
-    op.read_eprom.return_value = True
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
-    op.check_eprom_blank.return_value = 0
-    op.write_eprom.return_value = True
-    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
-    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
-    op.verify_eprom.return_value = 0
-    op.erase_eprom.return_value = True
-    op.sdp_lock.return_value = True
-    op.sdp_unlock.return_value = True
-    for name, value in returns.items():
-        getattr(op, name).return_value = value
-        getattr(op, name).side_effect = None
-    return op
-
-
-def _sdp_aware_operator() -> Mock:
-    """A stateful, SDP-lock-AWARE operator double for
-    `at28c256-full-all-ok-sdp`, modelled on
-    `tests/test_chip_test.py:_sdp_leg_readback_operator` and defined HERE
-    rather than imported from that test module (D-03, same reason as
-    `_fixed_return_operator` above).
-
-    `_fixed_return_operator`'s `read_eprom` returns success while writing
-    NO file, so the SDP leg's read-back-equality oracle would see an empty
-    read-back and report every one of the six leg steps BAD via the
-    length gate -- silently reducing an all-OK assertion to a false
-    negative that still reads green. This double instead maintains a
-    small in-memory chip image and honours real SDP semantics: while
-    `locked`, a write carrying `FLAG_SKIP_SDP_UNLOCK` (write-inhibited's
-    own flag) is genuinely REJECTED -- the image is left unchanged, exactly
-    what a genuinely-protecting chip does -- while every other write (no
-    skip flag, or the chip unlocked) applies normally."""
-    from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
-
-    state = {"image": b"", "locked": False}
-
-    op = Mock(spec=_OPERATOR_METHODS)
-    op.check_eprom_id.return_value = (True, 0x1234)
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
-    op.check_eprom_blank.return_value = 0
-    op.erase_eprom.return_value = True
-
-    def _write_eprom(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
-        payload = Path(source_path).read_bytes()
-        if state["locked"] and (flags & FLAG_SKIP_SDP_UNLOCK):
-            pass
-        else:
-            state["image"] = payload
-        return True
-
-    def _read_eprom(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["image"])
-        return True
-
-    def _verify_eprom(name, eprom_data, source_path, *_args, **_kwargs):
-        # 202-01 D-10: int, 0 == match -- see the return_value comment above.
-        expected = Path(source_path).read_bytes()
-        return 0 if expected == state["image"] else 1
-
-    def _sdp_lock(name, eprom_data):
-        state["locked"] = True
-        return True
-
-    def _sdp_unlock(name, eprom_data):
-        state["locked"] = False
-        return True
-
-    op.write_eprom.side_effect = _write_eprom
-    op.read_eprom.side_effect = _read_eprom
-    op.verify_eprom.side_effect = _verify_eprom
-    op.sdp_lock.side_effect = _sdp_lock
-    op.sdp_unlock.side_effect = _sdp_unlock
-    return op
-
-
 def _build_real_path_report(
     *, chip: str, write_scope: str, operator: Any, runs: int
 ) -> DiagnosticReport:
@@ -476,7 +376,7 @@ def _build_real_path_report(
     `firestarter/cli_handlers.py:2374-2431` -- the SOLE production
     `DiagnosticReport` construction site -- exactly: `chip` is the raw CLI
     token, `protocol` is `str(prog["algorithm"])` read off
-    `_REAL_DB.convert_to_programmer(_REAL_DB.get_eprom(chip))`, never a
+    `REAL_DB.convert_to_programmer(REAL_DB.get_eprom(chip))`, never a
     re-derivation.
 
     `operator.check_eprom_id` is stamped with the chip's REAL `chip-id`
@@ -487,14 +387,12 @@ def _build_real_path_report(
     the falsy `0`) would silently turn every OTHER chip's `id` step BAD
     and cascade into every destructive step reading SKIPPED under the
     gate -- none of the registered shapes wants a deliberate id mismatch."""
-    plan = derive_plan(chip, _REAL_DB, write_scope=write_scope)
-    full = _REAL_DB.get_eprom(chip)
+    plan = derive_plan(chip, REAL_DB, write_scope=write_scope)
+    full = REAL_DB.get_eprom(chip)
     expected_chip_id = (full or {}).get("chip-id")
     operator.check_eprom_id.return_value = (True, expected_chip_id or 0x1234)
-    results = run_plan(
-        plan, operator, _REAL_DB, runs=runs, allow_single_run=(runs == 1)
-    )
-    prog = _REAL_DB.convert_to_programmer(full)
+    results = run_plan(plan, operator, REAL_DB, runs=runs, allow_single_run=(runs == 1))
+    prog = REAL_DB.convert_to_programmer(full)
     auto_capture = AutoCapture(
         host_version=_HOST_VERSION,
         chip=chip,
@@ -538,7 +436,7 @@ def _build_m27c512_full_all_ok() -> DiagnosticReport:
     monotonicity witness -- the honestly-measured shape, not a write that
     silently occurred."""
     return _build_real_path_report(
-        chip="m27c512", write_scope="full", operator=_fixed_return_operator(), runs=2
+        chip="m27c512", write_scope="full", operator=mock_operator(), runs=2
     )
 
 
@@ -556,7 +454,7 @@ def _build_m27c512_full_blank_check_bad() -> DiagnosticReport:
         chip="m27c512",
         write_scope="full",
         # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
-        operator=_fixed_return_operator(check_eprom_blank=1),
+        operator=mock_operator(check_eprom_blank=1),
         runs=2,
     )
 
@@ -587,7 +485,7 @@ def _build_m27c512_full_runs_1() -> DiagnosticReport:
     fires on the read step's `run_count` of one and appends the degraded
     marker -- never a tag string appended by hand."""
     return _build_real_path_report(
-        chip="m27c512", write_scope="full", operator=_fixed_return_operator(), runs=1
+        chip="m27c512", write_scope="full", operator=mock_operator(), runs=1
     )
 
 
@@ -600,7 +498,7 @@ def _build_at28c256_full_all_ok_sdp() -> DiagnosticReport:
     `.planning/todos/pending/
     build-db-diff-ladder-state-community-reported-regression.md`."""
     return _build_real_path_report(
-        chip="at28c256", write_scope="full", operator=_sdp_aware_operator(), runs=2
+        chip="at28c256", write_scope="full", operator=sdp_aware_operator(), runs=2
     )
 
 
@@ -611,7 +509,7 @@ def _build_sst27sf512_full_all_ok() -> DiagnosticReport:
     Without at least one non-SDP all-OK shape the harness cannot see the
     D-4/D-6 ladder flip at all."""
     return _build_real_path_report(
-        chip="sst27sf512", write_scope="full", operator=_fixed_return_operator(), runs=2
+        chip="sst27sf512", write_scope="full", operator=mock_operator(), runs=2
     )
 
 
@@ -620,14 +518,14 @@ def _build_w27e257_full_all_ok() -> DiagnosticReport:
     """The second non-SDP all-OK shape D-08 requires, reaching the same
     THIRD arm as `sst27sf512-full-all-ok`."""
     return _build_real_path_report(
-        chip="w27e257", write_scope="full", operator=_fixed_return_operator(), runs=2
+        chip="w27e257", write_scope="full", operator=mock_operator(), runs=2
     )
 
 
 def _build_uv_slot_write_pass() -> DiagnosticReport:
     """The shape D-04 reserved this name for (Phase 179, decided
     D-179-2 Option A). The FIRST shape in this corpus that exercises a
-    real UV masked slot write: `_fixed_return_operator`'s `read_eprom`
+    real UV masked slot write: `mock_operator`'s `read_eprom`
     returns `True` while writing no file, so `_read_region` gets `b""`,
     every UV slot is unevaluable and `_resolve_write_target` refuses --
     which is why `m27c512-full-all-ok`'s write and verify are `SKIPPED`
@@ -639,7 +537,7 @@ def _build_uv_slot_write_pass() -> DiagnosticReport:
     refusal.
 
     The double is constructed at the `m27c512` memory size read off
-    `_REAL_DB` (never a hard-coded literal) and seeded with data at
+    `REAL_DB` (never a hard-coded literal) and seeded with data at
     `[0x0000:0x0100]` -- OUTSIDE `uv_slot_starts`' top-down first slot,
     which sits at the HIGH end of the device -- so the part holds prior
     content while its write target slot stays virgin. That is UV-01's
@@ -654,7 +552,7 @@ def _build_uv_slot_write_pass() -> DiagnosticReport:
     pre-flight refusal it now clears, and the real adjudicated
     blank-check verdict.
     """
-    full = _REAL_DB.get_eprom("m27c512") or {}
+    full = REAL_DB.get_eprom("m27c512") or {}
     mem_size = int(full.get("memory-size", 0) or 0)
     chip = WriteInitPreflightChip(mem_size, uv=True)
     chip.data[0x0000:0x0100] = bytes(range(256))
@@ -702,7 +600,7 @@ def _build_attr01_status_axis_transport_fault() -> DiagnosticReport:
     whenever both are set, so that helper needs no edit. Uses chip
     `m27c512`, already exercised by a registered all-OK real-path shape
     above, so `derive_plan` coverage is understood rather than novel."""
-    operator = _fixed_return_operator()
+    operator = mock_operator()
     operator.check_eprom_id.side_effect = SerialError("synthetic transport fault")
     return _build_real_path_report(
         chip="m27c512", write_scope="full", operator=operator, runs=2
