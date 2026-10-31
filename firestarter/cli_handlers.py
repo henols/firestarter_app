@@ -98,7 +98,6 @@ from firestarter.exceptions import (
     Pin1HazardRefusedError,
     ProtocolNotImplementedError,
     SerialError,
-    SerialTimeoutError,
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.fw_release_gate import require_installable_release
@@ -240,50 +239,36 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return f(*args, **kwargs)
-        except ChipNotFoundError as e:
+        except (
+            ChipNotFoundError,
+            ChipNotImplementedError,
+            FirmwareOperationError,
+            PageSizeUnavailableError,
+            PageAlignmentError,
+            NegativeStartAddressError,
+            Pin1HazardRefusedError,
+        ) as e:
+            # These messages are already the operator-facing text: the chip
+            # status reason, the DFU instructions, or a host-voiced refusal.
+            # They are rendered verbatim, ahead of the arms below that would
+            # prefix them ("Programmer error: " would read as a hardware
+            # fault).
             raise click.ClickException(str(e)) from e
         except FirmwareFrameVersionError as e:
             raise click.ClickException(f"Command frame version mismatch: {e}") from e
         except FirmwareOutdatedError as e:
             raise click.ClickException(f"Firmware outdated: {e}") from e
-        except (SerialError, SerialTimeoutError) as e:
+        except SerialError as e:
             raise click.ClickException(f"Communication error: {e}") from e
         except ProtocolNotImplementedError as e:
             raise click.ClickException(
                 f"Unsupported protocol: {e} — this protocol is recognized but not yet implemented in the firmware."
             ) from e
-        except ChipNotImplementedError as e:
-            # Render the reason string verbatim.
-            # The unsupported_reason strings begin with the
-            # required wording, so str(e) = "<name>: <reason>" is already
-            # the authoritative status-specific message. Drop the generic
-            # "Chip not usable:" prefix so the DB string is the single source
-            # of truth for both info display and chip-op refusal.
-            raise click.ClickException(str(e)) from e
-        except FirmwareOperationError as e:
-            # Raised by the USB DFU install path. The message is already
-            # operator-actionable (how to enter the bootloader, or how to install
-            # pyusb), so it is rendered verbatim rather than prefixed.
-            raise click.ClickException(str(e)) from e
-        except PageSizeUnavailableError as e:
-            raise click.ClickException(str(e)) from e
-        except PageAlignmentError as e:
-            raise click.ClickException(str(e)) from e
-        except NegativeStartAddressError as e:
-            # Rendered verbatim, above the generic EpromOperationError arm
-            # below -- that arm prefixes "Programmer error: ", which would
-            # make this host-voiced refusal (write_blank_guard.py) read as a
-            # hardware fault instead of an input-validation refusal.
-            raise click.ClickException(str(e)) from e
         except CommandEncodeError as e:
             # The host refused the command before any byte reached the port.
-            # Above the EpromOperationError arm: "Programmer error" would read
-            # as a hardware fault for an input the frame cannot carry.
             raise click.ClickException(f"Refused before sending: {e}") from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
-        except Pin1HazardRefusedError as e:
-            raise click.ClickException(str(e)) from e
         except HardwareOperationError as e:
             raise click.ClickException(f"Hardware error: {e}") from e
 
