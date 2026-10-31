@@ -7,14 +7,13 @@ and have no safe coverage path. Their low coverage is a deliberate safety
 posture, not a coverage hole. v1.9 RCA may surface a way to cover them
 safely; that work is explicitly out of v1.8 scope.
 
-Test pattern: patch ``SerialCommunicator.find_and_connect`` to return a
-``make_comm()``-built communicator wired to ``fake_serial``; feed the wire
-frames the firmware would emit.
+Test pattern: ``connect_via`` makes ``SerialCommunicator.find_and_connect``
+return a communicator wired to ``fake_serial``; feed the wire frames the
+firmware would emit.
 """
 
 import struct
-from typing import Iterator  # noqa: UP035
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -24,7 +23,7 @@ from firestarter.frame_parser import Response
 from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_DATA_VPE_MV, MSG_DATA_VPP_MV, MSG_END_DONE
 
-from .conftest import build_frame
+from .conftest import build_frame, connect_via
 
 
 def _ok_frame_bytes() -> bytes:
@@ -38,12 +37,18 @@ def _error_frame_bytes() -> bytes:
 
 
 @pytest.fixture
-def hw_config(tmp_path, monkeypatch) -> Iterator[ConfigManager]:
-    """Fresh ConfigManager rooted in tmp_path (no ~/.firestarter pollution)."""
-    monkeypatch.setattr("firestarter.config.HOME_PATH", str(tmp_path))
-    ConfigManager._instances.clear()
-    ConfigManager._initialized_configs.clear()
-    yield ConfigManager(config_filename="t_hw.json")
+def hw_config() -> ConfigManager:
+    """The ConfigManager of the isolated, empty test config directory."""
+    return ConfigManager()
+
+
+def _refuse(exc: Exception):
+    """A connect factory that raises `exc`, as find_and_connect does."""
+
+    def _factory():
+        raise exc
+
+    return _factory
 
 
 def test_get_hardware_revision_happy_path(hw_config, make_comm, fake_serial) -> None:
@@ -51,13 +56,8 @@ def test_get_hardware_revision_happy_path(hw_config, make_comm, fake_serial) -> 
     that yields an OK ack frame."""
     fake_serial.feed(_ok_frame_bytes())  # The expect_ack() inside picks this up
     fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))  # any trailing byte is fine
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         ok = hw.get_hardware_revision()
     assert ok is True
 
@@ -68,10 +68,7 @@ def test_get_hardware_revision_failure_path(hw_config, make_comm, fake_serial) -
     from firestarter.exceptions import ProgrammerNotFoundError
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=ProgrammerNotFoundError("no port"),
-    ):
+    with connect_via(_refuse(ProgrammerNotFoundError("no port"))):
         ok = hw.get_hardware_revision()
     assert ok is False
 
@@ -91,10 +88,7 @@ def test_read_programmer_identity_happy_path_harvests_the_identity_verbatim(
     comm.firmware_identity = "3.0.0b19:leonardo"
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(lambda: comm):
         identity = hw.read_programmer_identity()
 
     assert identity.fw_board_identity == "3.0.0b19:leonardo"
@@ -113,18 +107,15 @@ def test_read_programmer_identity_opens_one_connection_and_disconnects_once(
     fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
     comm = make_comm()
     comm.firmware_identity = "3.0.0b19:leonardo"
-    # comm is a REAL SerialCommunicator built via __new__, so its disconnect
+    # comm is a REAL SerialCommunicator, so its disconnect
     # is not itself a mock -- wrap it so the call can be asserted on.
     comm.disconnect = Mock(wraps=comm.disconnect)
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ) as mock_find_and_connect:
+    with connect_via(lambda: comm) as captured:
         hw.read_programmer_identity()
 
-    assert mock_find_and_connect.call_count == 1
+    assert len(captured) == 1
     comm.disconnect.assert_called_once()
 
 
@@ -138,13 +129,8 @@ def test_read_programmer_identity_default_comm_yields_the_absent_case(
     the fixture default gives (147-PATTERNS.md)."""
     fake_serial.feed(_ok_frame_bytes())
     fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         identity = hw.read_programmer_identity()
 
     assert identity.hw_revision == "ready"
@@ -166,10 +152,7 @@ def test_read_programmer_identity_revision_fails_but_identity_survives(
     comm.firmware_identity = "3.0.0b19:leonardo"
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(lambda: comm):
         identity = hw.read_programmer_identity()
 
     assert identity.hw_revision is None
@@ -192,10 +175,7 @@ def test_read_programmer_identity_transport_error_returns_both_absent(
     exc_cls = getattr(exceptions_mod, exc_name)
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=exc_cls("transport failure"),
-    ):
+    with connect_via(_refuse(exc_cls("transport failure"))):
         identity = hw.read_programmer_identity()
 
     assert identity is not None
@@ -221,10 +201,7 @@ def test_read_programmer_identity_transport_error_after_harvest_keeps_the_identi
     comm.disconnect = Mock(wraps=comm.disconnect)
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(lambda: comm):
         identity = hw.read_programmer_identity()
 
     assert identity.hw_revision is None
@@ -247,10 +224,7 @@ def test_read_programmer_identity_scrub_keeps_a_mangled_identity_visibly_faulty(
     comm.firmware_identity = "3.0.0b19:leonar�o"  # one byte mangled
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(lambda: comm):
         identity = hw.read_programmer_identity()
 
     assert identity.fw_board_identity is not None
@@ -277,10 +251,7 @@ def test_read_programmer_identity_scrub_collapses_an_empty_identity_to_absent(
     comm.firmware_identity = ""
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(lambda: comm):
         identity = hw.read_programmer_identity()
     assert identity.fw_board_identity is None
 
@@ -291,10 +262,7 @@ def test_read_programmer_identity_scrub_collapses_an_empty_identity_to_absent(
     comm2.firmware_identity = "\x01\x02\x03"  # non-printable, but not empty
 
     hw2 = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm2,
-    ):
+    with connect_via(lambda: comm2):
         identity2 = hw2.read_programmer_identity()
     assert identity2.fw_board_identity is not None
     assert identity2.fw_board_identity != ""
@@ -306,13 +274,8 @@ def test_read_vpp_voltage_finish_on_ok(hw_config, make_comm, fake_serial) -> Non
     # Two OK frames: first is the "ready" handshake; second is the loop-end signal.
     fake_serial.feed(_ok_frame_bytes())
     fake_serial.feed(b"OK: finished\n")
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         ok = hw.read_vpp_voltage()
     assert ok is True
 
@@ -321,13 +284,8 @@ def test_read_vpe_voltage_finish_on_ok(hw_config, make_comm, fake_serial) -> Non
     """read_vpe_voltage mirrors read_vpp_voltage — same code path, different state."""
     fake_serial.feed(_ok_frame_bytes())
     fake_serial.feed(b"OK: finished\n")
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         ok = hw.read_vpe_voltage()
     assert ok is True
 
@@ -338,13 +296,8 @@ def test_read_vpp_voltage_error_response_returns_false(
     """An ERROR response after the ready handshake returns False (not raises)."""
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     fake_serial.feed(_error_frame_bytes())  # immediate ERROR in the read loop
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         ok = hw.read_vpp_voltage()
     assert ok is False
 
@@ -355,13 +308,8 @@ def test_read_vpp_voltage_ready_not_ok_returns_false(
     """When the firmware's ready handshake returns ERROR, the read loop never
     starts and the call returns False."""
     fake_serial.feed(_error_frame_bytes())  # ready handshake fails
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         ok = hw.read_vpp_voltage()
     assert ok is False
 
@@ -413,13 +361,8 @@ def test_sample_vpp_mv_returns_median(hw_config, make_comm, fake_serial) -> None
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     for _ in range(3):
         fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 20900))
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         assert hw.sample_vpp_mv() == 20900
 
 
@@ -429,17 +372,11 @@ def test_sample_vpe_mv_uses_state_12(hw_config, make_comm, fake_serial) -> None:
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     for _ in range(3):
         fake_serial.feed(_mv_frame(MSG_DATA_VPE_MV, 21000))
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ) as mock_connect:
+    with connect_via(make_comm) as captured:
         assert hw.sample_vpe_mv() == 21000
 
-    command_for_connect = mock_connect.call_args[0][0]
-    assert command_for_connect["state"] == COMMAND_READ_VPE
+    assert captured[0]["state"] == COMMAND_READ_VPE
 
 
 def test_sample_none_returns_none_on_error(hw_config, make_comm, fake_serial) -> None:
@@ -448,22 +385,15 @@ def test_sample_none_returns_none_on_error(hw_config, make_comm, fake_serial) ->
     from firestarter.exceptions import ProgrammerNotFoundError
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=ProgrammerNotFoundError("no port"),
-    ):
+    with connect_via(_refuse(ProgrammerNotFoundError("no port"))):
         result = hw.sample_vpp_mv()
     assert result is None
 
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     fake_serial.feed(_error_frame_bytes())  # error instead of a DATA frame
-    comm = make_comm()
 
     hw2 = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         result2 = hw2.sample_vpp_mv()
     assert result2 is None
 
@@ -474,13 +404,8 @@ def test_sample_median_of_even_n_off_grid(hw_config, make_comm, fake_serial) -> 
     fake_serial.feed(_ok_frame_bytes())  # ready handshake
     fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 20900))
     fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 21000))
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         result = hw.sample_vpp_mv(n=2)
 
     assert isinstance(result, int)
@@ -513,10 +438,7 @@ def test_sample_vpp_mv_sends_done_before_disconnect(
     comm.disconnect = manager.disconnect
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(lambda: comm):
         result = hw.sample_vpp_mv()
 
     # A clean n-sample read still returns the median.
@@ -548,10 +470,7 @@ def test_the_host_warns_about_an_implausible_vcc_once(
     comm.firmware_identity = identity
 
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(lambda: comm):
         assert hw.sample_vpp_mv() == 13000
 
     text = CATALOG[MSG_WARN_VCC_IMPLAUSIBLE].format % vcc_mv
@@ -577,13 +496,8 @@ def test_read_adc_raw_parses_three_frames(hw_config, make_comm, fake_serial) -> 
     ]
     for row in rows:
         fake_serial.feed(build_frame(0xE7, struct.pack(">BHHHHII", *row)))
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         frames = hw.read_adc_raw()
 
     assert frames is not None
@@ -613,13 +527,8 @@ def test_read_adc_raw_returns_none_when_nothing_parses(
     # skipped by the parser, none is a transport error.
     for _ in range(3):
         fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 20900))
-    comm = make_comm()
-
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         assert hw.read_adc_raw() is None
     # All three frames were consumed, so the None is the parse result, not
     # a timeout on an empty wire.
@@ -634,12 +543,8 @@ def _cfg_ack(params: bytes) -> bytes:
 
 def _read_calibration(hw_config, make_comm, fake_serial, params: bytes):
     fake_serial.feed(_cfg_ack(params))
-    comm = make_comm()
     hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         return hw.read_calibration()
 
 
@@ -666,9 +571,5 @@ def test_read_calibration_returns_none_for_another_ack(
     from firestarter.messages import MSG_OK_READY
 
     fake_serial.feed(build_frame(MSG_OK_READY, struct.pack(">H", 512)))
-    comm = make_comm()
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        return_value=comm,
-    ):
+    with connect_via(make_comm):
         assert HardwareManager(hw_config).read_calibration() is None

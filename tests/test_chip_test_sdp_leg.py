@@ -22,11 +22,12 @@ use of it.
 
 Test taxonomy:
 
-  Operator-double harness (copied from tests/test_chip_test.py, D-15)
-    _REAL_DB, _OPERATOR_METHODS, _mock_operator, _plan_with_steps, _result
-      -- the SDP extension: `_OPERATOR_METHODS` adds "sdp_lock" and
-      "sdp_unlock" to the six-name allow-list, so a later plan's dispatch
-      test does not AttributeError against the Mock(spec=[...]) double.
+  Operator-double harness
+    REAL_DB (tests/plan_corpus.py), OPERATOR_METHODS and mock_operator
+      (tests/fixtures/operator_doubles.py), _plan_with_steps, _result
+      -- `OPERATOR_METHODS` includes "sdp_lock" and "sdp_unlock", so a
+      dispatch test does not AttributeError against the Mock(spec=[...])
+      double.
 
   Shipped-ops before-image (criterion 4's first baseline, D-13a)
     test_shipped_ops_sequence_unchanged -> the exact derived op-string
@@ -190,7 +191,6 @@ from firestarter.chip_test import (
     sdp_oracle_applicable,
 )
 from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
-from firestarter.database import EpromDatabase
 from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
@@ -205,41 +205,12 @@ from firestarter.exceptions import (
 from firestarter.sdp_capability import sdp_capability
 from firestarter.sdp_honesty import unreadable_state_caveat
 
-# Operator-double harness -- copied verbatim from tests/test_chip_test.py
-# (:287, :793-825), NOT imported (these names are module-private in a
-# 1958-line module). "M8720" is the house chip (protocol 0x08, EEPROM,
-# chip-id sentinel 0, resolves for every step against _REAL_DB) -- reused
-# here rather than picking a new one.
+from .fixtures.operator_doubles import OPERATOR_METHODS, mock_operator
+from .plan_corpus import REAL_DB
 
-_REAL_DB = EpromDatabase(skip_local_override=True)
-
-_OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-    "sdp_lock",
-    "sdp_unlock",
-]
-
-
-def _mock_operator(**returns):
-    op = Mock(spec=_OPERATOR_METHODS)
-    op.check_eprom_id.return_value = (True, 0x1234)
-    op.read_eprom.return_value = True
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
-    op.check_eprom_blank.return_value = 0
-    op.write_eprom.return_value = True
-    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
-    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
-    op.verify_eprom.return_value = 0
-    op.erase_eprom.return_value = True
-    for name, value in returns.items():
-        getattr(op, name).return_value = value
-        getattr(op, name).side_effect = None
-    return op
+# "M8720" is the house chip (protocol 0x08, EEPROM, chip-id sentinel 0,
+# resolves for every step against REAL_DB) -- reused here rather than picking
+# a new one.
 
 
 def _plan_with_steps(*steps):
@@ -303,13 +274,13 @@ def test_shipped_ops_sequence_unchanged():
     (b): a silently *added* step would still pass a prefix comparison of
     the first three).
     """
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
-    operator = _mock_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
+    operator = mock_operator()
+    results = run_plan(plan, operator, REAL_DB)
 
     op_sequence = [r.op for r in results]
     assert op_sequence == _SHIPPED_OPS_SEQUENCE["op_sequence"], (
-        f"derive_plan('M8720', _REAL_DB, write_scope='full')'s derived op "
+        f"derive_plan('M8720', REAL_DB, write_scope='full')'s derived op "
         f"sequence changed: measured {op_sequence!r}, frozen baseline "
         f"{_SHIPPED_OPS_SEQUENCE['op_sequence']!r} (133-01 before-image, "
         "criterion 4)"
@@ -377,11 +348,11 @@ def _derive_precedence_row(exc):
     `None` and `verdict`/`error_code` are read off the blank-check
     `StepResult`.
     """
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_blank.side_effect = exc
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
     try:
-        results = run_plan(plan, operator, _REAL_DB)
+        results = run_plan(plan, operator, REAL_DB)
     except Exception as escaped:  # intentional: this IS the precedence probe
         return (type(escaped).__name__, None, None)
     result = _result(results, OP_BLANK_CHECK)
@@ -525,7 +496,7 @@ def test_serial_timeout_degrades_one_step():
     degrades THAT ONE step to a recorded SKIPPED/ERROR result; run_plan
     still returns a full report for every other step (LEG-11, criterion
     2)."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = SerialTimeoutError(
         "133-02 injected half-seated-cable probe"
     )
@@ -534,7 +505,7 @@ def test_serial_timeout_degrades_one_step():
         Step(op=OP_BLANK_CHECK, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     read_result = _result(results, OP_READ)
     blank_check_result = _result(results, OP_BLANK_CHECK)
@@ -549,7 +520,7 @@ def test_hardware_error_degrades_one_step():
     Exception, not an EpromOperationError subclass, so the pre-existing
     `except EpromOperationError` clause never reached it before this
     plan's edit (D-08's whole basis)."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = HardwareOperationError(
         "133-02 injected transport-fault probe"
     )
@@ -558,7 +529,7 @@ def test_hardware_error_degrades_one_step():
         Step(op=OP_BLANK_CHECK, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     read_result = _result(results, OP_READ)
     blank_check_result = _result(results, OP_BLANK_CHECK)
@@ -607,13 +578,13 @@ def test_run_fatal_escapes(exc_cls):
         "wrong-shield run into a false BAD-step report (133-CONTEXT.md D-08)."
     )
 
-    operator = _mock_operator()
+    operator = mock_operator()
     injected = exc_cls("133-02 injected run-fatal probe")
     operator.read_eprom.side_effect = injected
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
 
     with pytest.raises(exc_cls) as excinfo:
-        run_plan(plan, operator, _REAL_DB)
+        run_plan(plan, operator, REAL_DB)
     assert excinfo.value is injected, (
         "the exception that escaped run_plan is not the SAME instance that "
         "was injected -- a re-wrap would pass a bare pytest.raises(exc_cls) "
@@ -630,7 +601,7 @@ def test_assertion_error_propagates():
     edit (criterion 2) -- a broad catch anywhere in `_run_step`'s chain
     would swallow this and turn a programmer-error signal into a silent BAD
     result instead."""
-    operator = _mock_operator()
+    operator = mock_operator()
     injected = AssertionError(
         "unreachable: op 'blank-check' passed the _MULTI_RUN_OPS guard"
     )
@@ -638,7 +609,7 @@ def test_assertion_error_propagates():
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
     with pytest.raises(AssertionError) as excinfo:
-        run_plan(plan, operator, _REAL_DB)
+        run_plan(plan, operator, REAL_DB)
     assert excinfo.value is injected, (
         "AssertionError escaped but was not the SAME instance injected -- "
         "criterion 2 requires the deliberate signal to propagate unchanged, "
@@ -660,22 +631,22 @@ def test_the_transport_precedence_rows_carry_the_error_status():
     error status, so its row stays `STATUS_COMPLETE`."""
     for name in ("SerialError", "SerialTimeoutError", "HardwareOperationError"):
         exc_cls = _PRECEDENCE_EXCEPTION_CLASSES[name]
-        operator = _mock_operator()
+        operator = mock_operator()
         operator.check_eprom_blank.side_effect = _make_injected_exception(exc_cls)
         plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-        results = run_plan(plan, operator, _REAL_DB)
+        results = run_plan(plan, operator, REAL_DB)
 
         result = _result(results, OP_BLANK_CHECK)
         assert result.status == STATUS_ERROR, (name, result.status)
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_blank.side_effect = _make_injected_exception(
         EpromOperationError
     )
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     result = _result(results, OP_BLANK_CHECK)
     assert result.status == STATUS_COMPLETE
@@ -730,7 +701,7 @@ def test_dispatch_sdp_guard_refuses_foreign_op():
     touches the operator double NOT AT ALL -- what makes it a refusal
     rather than a mis-dispatch (T-133-13)."""
     for op in _SHIPPED_OP_STRINGS:
-        operator = _mock_operator()
+        operator = mock_operator()
         result = _dispatch_sdp(op, "M8720", {}, operator)
         assert result.verdict == VERDICT_BAD, (
             f"_dispatch_sdp({op!r}, ...) verdict was {result.verdict!r}, "
@@ -764,7 +735,7 @@ def test_dispatch_sdp_terminal_assertion_is_reachable_only_by_bypassing_the_guar
     import firestarter.chip_test as chip_test_mod
 
     monkeypatch.setattr(chip_test_mod, "_SDP_OPS", frozenset({"bogus-sdp-op"}))
-    operator = _mock_operator()
+    operator = mock_operator()
 
     with pytest.raises(AssertionError) as excinfo:
         chip_test_mod._dispatch_sdp("bogus-sdp-op", "M8720", {}, operator)
@@ -791,13 +762,13 @@ def test_dispatch_sdp_maps_bool_to_verdict(op, method_name, bool_return):
     operator's bool return maps to OK/BAD exactly as _dispatch_step's
     blank-check arm does, run_count == 1, and the corresponding operator
     method was called once with (name, ANY)."""
-    operator = _mock_operator(**{method_name: bool_return})
+    operator = mock_operator(**{method_name: bool_return})
     plan = _plan_with_steps(
         Step(op=OP_ID, supported=True, reason=""),
         Step(op=op, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     result = _result(results, op)
     assert result.verdict == (VERDICT_OK if bool_return else VERDICT_BAD), (
@@ -848,12 +819,12 @@ def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
     # for why this is what makes the sentinel sensitive to arm ORDER.
     monkeypatch.setattr(chip_test_mod, "_SDP_OPS", frozenset(shipped_op_set | _SDP_OPS))
 
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         *(Step(op=op, supported=True, reason="") for op in _SHIPPED_OP_STRINGS)
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     sentinel.assert_not_called()
     assert len(results) == len(_SHIPPED_OP_STRINGS), (
@@ -955,9 +926,9 @@ def _readback_operator(payload: bytes, *, write_ok: bool = True, **returns):
     real calling convention, `chip_test.py:_dispatch_read`'s
     `output_file=out_path` usage) and returns `True`. Extra `**returns`
     override any other named method's `.return_value`, mirroring
-    `_mock_operator`'s own extension idiom.
+    `mock_operator`'s own extension idiom.
     """
-    op = Mock(spec=_OPERATOR_METHODS)
+    op = Mock(spec=OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     op.check_eprom_blank.return_value = 0
@@ -1310,7 +1281,7 @@ def _dead_write_path_operator():
     """
     region = _DEFAULT_REGION
     a = generate_pattern(*region)
-    operator = Mock(spec=_OPERATOR_METHODS)
+    operator = Mock(spec=OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, 0x1234)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     operator.check_eprom_blank.return_value = 0
@@ -1347,7 +1318,7 @@ def test_finally_drains_on_exception():
     successful lock still leaves the registered unlock run -- the drain
     reached it even though the loop unwound (research P-20's abort-between-
     lock-and-unlock hazard, closed)."""
-    operator = _mock_operator(sdp_lock=True)
+    operator = mock_operator(sdp_lock=True)
     injected = ProgrammerNotFoundError("133-04 injected escape probe")
     operator.read_eprom.side_effect = injected
     plan = _plan_with_steps(
@@ -1357,7 +1328,7 @@ def test_finally_drains_on_exception():
     )
 
     with pytest.raises(ProgrammerNotFoundError) as excinfo:
-        run_plan(plan, operator, _REAL_DB)
+        run_plan(plan, operator, REAL_DB)
 
     assert excinfo.value is injected, (
         "the exception escaping run_plan must be the SAME instance that "
@@ -1372,7 +1343,7 @@ def test_keyboard_interrupt_drains_and_propagates():
     IDENTITY after the registered unlock has drained. KeyboardInterrupt is
     not an Exception subclass, so this also independently proves no broad
     `except Exception` sits between the raise and the caller."""
-    operator = _mock_operator(sdp_lock=True)
+    operator = mock_operator(sdp_lock=True)
     injected = KeyboardInterrupt()
     operator.read_eprom.side_effect = injected
     plan = _plan_with_steps(
@@ -1382,7 +1353,7 @@ def test_keyboard_interrupt_drains_and_propagates():
     )
 
     with pytest.raises(KeyboardInterrupt) as excinfo:
-        run_plan(plan, operator, _REAL_DB)
+        run_plan(plan, operator, REAL_DB)
 
     assert excinfo.value is injected, (
         "the KeyboardInterrupt escaping run_plan must be the SAME instance "
@@ -1396,7 +1367,7 @@ def test_system_exit_drains_and_propagates():
     """LEG-10 criteria 1+2: the same shape as KeyboardInterrupt, with
     SystemExit -- identity-asserted, plus the exit code attribute unchanged
     (a re-wrap could preserve the class but drop the code)."""
-    operator = _mock_operator(sdp_lock=True)
+    operator = mock_operator(sdp_lock=True)
     injected = SystemExit(7)
     operator.read_eprom.side_effect = injected
     plan = _plan_with_steps(
@@ -1406,7 +1377,7 @@ def test_system_exit_drains_and_propagates():
     )
 
     with pytest.raises(SystemExit) as excinfo:
-        run_plan(plan, operator, _REAL_DB)
+        run_plan(plan, operator, REAL_DB)
 
     assert excinfo.value is injected, (
         "the SystemExit escaping run_plan must be the SAME instance injected"
@@ -1425,10 +1396,10 @@ def test_empty_registry_noop():
     the drain's existence. Reuses _SHIPPED_OPS_SEQUENCE (133-01's frozen
     before-image) rather than a fresh literal: if the drain silently
     appended anything, this would diverge from that pre-133-04 baseline."""
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
-    operator = _mock_operator()
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
+    operator = mock_operator()
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     operator.sdp_lock.assert_not_called()
     operator.sdp_unlock.assert_not_called()
@@ -1465,7 +1436,7 @@ def test_drain_continues_after_failure():
     still the ORIGINAL one -- the whole point of D-10: a cleanup failure
     must never mask the in-flight exception.
     """
-    operator = _mock_operator(sdp_lock=True)
+    operator = mock_operator(sdp_lock=True)
     operator.sdp_unlock.side_effect = [
         HardwareOperationError("133-04 injected cleanup failure"),
         True,
@@ -1476,7 +1447,7 @@ def test_drain_continues_after_failure():
         Step(op=OP_SDP_LOCK, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     assert operator.sdp_unlock.call_count == 2, (
         f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s), "
@@ -1490,7 +1461,7 @@ def test_drain_continues_after_failure():
 
     # Unwinding variant: the drain's caught failure must not mask an
     # ORIGINAL escaping exception.
-    operator2 = _mock_operator(sdp_lock=True)
+    operator2 = mock_operator(sdp_lock=True)
     operator2.sdp_unlock.side_effect = [
         HardwareOperationError("133-04 injected cleanup failure (variant 2)"),
         True,
@@ -1505,7 +1476,7 @@ def test_drain_continues_after_failure():
     )
 
     with pytest.raises(ProgrammerNotFoundError) as excinfo:
-        run_plan(plan2, operator2, _REAL_DB)
+        run_plan(plan2, operator2, REAL_DB)
 
     assert excinfo.value is injected, (
         "a failing cleanup must not mask the ORIGINAL escaping exception "
@@ -1529,13 +1500,13 @@ def test_gate_closed_from_start():
     it, "the unlock was never attempted" would be equally true of a
     mechanism that can NEVER attempt it at all (the vacuity trap this
     project's record warns about)."""
-    closed_operator = _mock_operator(check_eprom_id=(False, None), sdp_lock=True)
+    closed_operator = mock_operator(check_eprom_id=(False, None), sdp_lock=True)
     plan = _plan_with_steps(
         Step(op=OP_ID, supported=True, reason=""),
         Step(op=OP_SDP_LOCK, supported=True, reason=""),
     )
 
-    results = run_plan(plan, closed_operator, _REAL_DB)
+    results = run_plan(plan, closed_operator, REAL_DB)
 
     lock_result = _result(results, OP_SDP_LOCK)
     assert lock_result.verdict == VERDICT_SKIPPED, (
@@ -1551,8 +1522,8 @@ def test_gate_closed_from_start():
 
     # Non-vacuity mirror: same plan, gate left OPEN -- sdp_lock IS called
     # and sdp_unlock IS called.
-    open_operator = _mock_operator(sdp_lock=True)
-    open_results = run_plan(plan, open_operator, _REAL_DB)
+    open_operator = mock_operator(sdp_lock=True)
+    open_results = run_plan(plan, open_operator, REAL_DB)
     open_lock_result = _result(open_results, OP_SDP_LOCK)
     assert open_lock_result.verdict == VERDICT_OK, (
         f"mirror (open-gate) OP_SDP_LOCK verdict was "
@@ -1572,7 +1543,7 @@ def test_lock_ran_then_gate_closes():
     skip an already-registered cleanup (this is exactly what LEG-10 exists
     to guarantee, and what would fail if OP_SDP_UNLOCK were ever added to
     _DESTRUCTIVE_OPS -- see the standing invariant asserted below)."""
-    operator = _mock_operator(sdp_lock=True)
+    operator = mock_operator(sdp_lock=True)
     # First id step: passing, so the gate stays open through the lock.
     # Second id step (after the lock): CLOSES the gate.
     operator.check_eprom_id.side_effect = [(True, 0x1234), (False, None)]
@@ -1582,7 +1553,7 @@ def test_lock_ran_then_gate_closes():
         Step(op=OP_ID, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     operator.sdp_lock.assert_called_once_with("M8720", ANY)
     assert operator.sdp_unlock.call_count == 1, (
@@ -1609,7 +1580,7 @@ def _allow_refuse_populations() -> tuple[list[str], list[str]]:
 
     allow: list[str] = []
     refuse: list[str] = []
-    for full in _REAL_DB.get_eproms():
+    for full in REAL_DB.get_eproms():
         name = full["name"]
         allowed, _reason = sdp_capability_for_entry(full, name)
         (allow if allowed else refuse).append(name)
@@ -1624,7 +1595,7 @@ def test_allow_refuse_populations_sum_to_full_and_allow_nonempty():
     restated as literals in an assertion. Measured at plan time: 43 ALLOW /
     41 REFUSE / 84 total among the protocol-0x0D subset (comment only, not
     asserted as a literal here)."""
-    all_eproms = _REAL_DB.get_eproms()
+    all_eproms = REAL_DB.get_eproms()
     allow, refuse = _allow_refuse_populations()
 
     assert len(allow) + len(refuse) == len(all_eproms), (
@@ -1645,7 +1616,7 @@ def test_derive_plan_allow_population_emits_six_supported_ops():
 
     offenders = []
     for name in allow:
-        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        plan = derive_plan(name, REAL_DB, write_scope="full")
         leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
         leg_ops = [s.op for s in leg_steps]
         if leg_ops != list(_SDP_LEG_STEP_ORDER) or not all(
@@ -1670,7 +1641,7 @@ def test_derive_plan_allow_flips_supported_when_sdp_capability_patched(monkeypat
 
     allow, _refuse = _allow_refuse_populations()
     name = allow[0]
-    allowed_real, _reason_real = sdp_capability(name, _REAL_DB)
+    allowed_real, _reason_real = sdp_capability(name, REAL_DB)
     assert allowed_real is True, f"fixture setup error: {name} is not really ALLOW"
 
     monkeypatch.setattr(
@@ -1679,7 +1650,7 @@ def test_derive_plan_allow_flips_supported_when_sdp_capability_patched(monkeypat
         lambda chip_name, db: (False, "patched: forced REFUSE for this test"),
     )
 
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
     assert len(leg_steps) == len(_SDP_LEG_STEP_ORDER)
     assert all(not s.supported for s in leg_steps), (
@@ -1702,10 +1673,10 @@ def test_derive_plan_refuse_population_emits_six_na_steps_with_reason():
 
     offenders = []
     for name in refuse:
-        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        plan = derive_plan(name, REAL_DB, write_scope="full")
         leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
         leg_ops = [s.op for s in leg_steps]
-        _allowed, expected_reason = sdp_capability(name, _REAL_DB)
+        _allowed, expected_reason = sdp_capability(name, REAL_DB)
         if (
             leg_ops != list(_SDP_LEG_STEP_ORDER)
             or any(s.supported for s in leg_steps)
@@ -1725,13 +1696,13 @@ def test_derive_plan_refuse_run_plan_reports_na_with_no_operator_call():
     steps into VERDICT_NA with NO operator call at all -- run_plan's
     existing NA path, zero new machinery. M8720 is a measured REFUSE chip
     (protocol 0x08 != 0x0D)."""
-    allowed, _reason = sdp_capability("M8720", _REAL_DB)
+    allowed, _reason = sdp_capability("M8720", REAL_DB)
     assert allowed is False, "fixture setup error: M8720 is not really REFUSE"
 
-    operator = _mock_operator()
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
+    operator = mock_operator()
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     leg_results = [r for r in results if r.op in _SDP_LEG_STEP_ORDER]
     assert len(leg_results) == len(_SDP_LEG_STEP_ORDER)
@@ -1767,7 +1738,7 @@ def test_derive_plan_baseline_transition_ordering():
     test_dead_write_path_baseline_b_is_bad, above)."""
     allow, _refuse = _allow_refuse_populations()
     name = allow[0]
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     ops = [s.op for s in plan.steps]
 
     assert OP_WRITE_BASELINE_B in ops and OP_WRITE_BASELINE_A in ops, (
@@ -1883,13 +1854,13 @@ def test_oracle_applicable_true_for_allow_chip_full_and_partial_scope():
     reachable scopes -- the leg is a real supported step at write_scope=
     "full" and at write_scope="partial" alike."""
     name = "AT28C256"
-    allowed, _reason = sdp_capability(name, _REAL_DB)
+    allowed, _reason = sdp_capability(name, REAL_DB)
     assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
 
-    full_plan = derive_plan(name, _REAL_DB, write_scope="full")
+    full_plan = derive_plan(name, REAL_DB, write_scope="full")
     assert sdp_oracle_applicable(full_plan) is True
 
-    partial_plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    partial_plan = derive_plan(name, REAL_DB, write_scope="partial")
     assert sdp_oracle_applicable(partial_plan) is True
 
 
@@ -1899,13 +1870,13 @@ def test_oracle_applicable_false_for_refuse_chip_full_and_partial_scope():
     `plan.steps` (LEG-02's NA path), but with `supported=False`, so it
     must not count as applicable."""
     name = "M8720"
-    allowed, _reason = sdp_capability(name, _REAL_DB)
+    allowed, _reason = sdp_capability(name, REAL_DB)
     assert allowed is False, f"fixture setup error: {name} is not really REFUSE"
 
-    full_plan = derive_plan(name, _REAL_DB, write_scope="full")
+    full_plan = derive_plan(name, REAL_DB, write_scope="full")
     assert sdp_oracle_applicable(full_plan) is False
 
-    partial_plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    partial_plan = derive_plan(name, REAL_DB, write_scope="partial")
     assert sdp_oracle_applicable(partial_plan) is False
 
 
@@ -1966,13 +1937,13 @@ def test_baseline_gate_closes_dead_write_path_allow_chip_full_leg():
       every generation recorded above.
     """
     name = "AT28C256"
-    allowed, _reason = sdp_capability(name, _REAL_DB)
+    allowed, _reason = sdp_capability(name, REAL_DB)
     assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
 
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     operator = _dead_write_path_operator()
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     baseline_b = _result(results, OP_WRITE_BASELINE_B)
     assert baseline_b.verdict == VERDICT_BAD, (
@@ -2058,7 +2029,7 @@ def test_baseline_gate_sticky_failing_b_then_passing_a_stays_closed():
         Step(op=OP_SDP_LOCK, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     baseline_b = _result(results, OP_WRITE_BASELINE_B)
     baseline_a = _result(results, OP_WRITE_BASELINE_A)
@@ -2100,7 +2071,7 @@ def test_leg09_destructive_gate_never_skips_the_explicit_unlock_step():
         "widening so the two mechanisms are never conflated"
     )
 
-    operator = _mock_operator(sdp_lock=True, sdp_unlock=True)
+    operator = mock_operator(sdp_lock=True, sdp_unlock=True)
     # First id step passes (gate stays open through the lock); second id
     # step (after the lock) CLOSES the *destructive* gate.
     operator.check_eprom_id.side_effect = [(True, 0x1234), (False, None)]
@@ -2111,7 +2082,7 @@ def test_leg09_destructive_gate_never_skips_the_explicit_unlock_step():
         Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     unlock_result = _result(results, OP_SDP_UNLOCK)
     assert unlock_result.verdict == VERDICT_OK, (
@@ -2129,13 +2100,13 @@ def test_deregistration_completed_leg_unlocks_exactly_once():
     the registered cleanup is de-registered by the successful explicit
     unlock, so the `finally` drain does not ALSO call it (133 D-11
     rejected the both-paths shape precisely because of this double-count)."""
-    operator = _mock_operator(sdp_lock=True, sdp_unlock=True)
+    operator = mock_operator(sdp_lock=True, sdp_unlock=True)
     plan = _plan_with_steps(
         Step(op=OP_SDP_LOCK, supported=True, reason=""),
         Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
     )
 
-    run_plan(plan, operator, _REAL_DB)
+    run_plan(plan, operator, REAL_DB)
 
     assert operator.sdp_unlock.call_count == 1, (
         f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s) "
@@ -2149,7 +2120,7 @@ def test_deregistration_interrupted_leg_still_unlocks_exactly_once_via_drain():
     calls `operator.sdp_unlock` EXACTLY once, via the `finally` drain --
     mirroring Phase 133's `test_finally_drains_on_exception`, now proven
     against this plan's de-registration logic too."""
-    operator = _mock_operator(sdp_lock=True)
+    operator = mock_operator(sdp_lock=True)
     injected = ProgrammerNotFoundError(
         "134-04 injected escape between lock and the explicit unlock step"
     )
@@ -2161,7 +2132,7 @@ def test_deregistration_interrupted_leg_still_unlocks_exactly_once_via_drain():
     )
 
     with pytest.raises(ProgrammerNotFoundError) as excinfo:
-        run_plan(plan, operator, _REAL_DB)
+        run_plan(plan, operator, REAL_DB)
 
     assert excinfo.value is injected
     assert operator.sdp_unlock.call_count == 1, (
@@ -2176,14 +2147,14 @@ def test_deregistration_failed_explicit_unlock_retries_via_drain_twice():
     verdict) must leave the registered handle in place, so the `finally`
     drain retries it -- `operator.sdp_unlock` is called TWICE (once
     explicitly, once from the drain retry), never silently once."""
-    operator = _mock_operator(sdp_lock=True)
+    operator = mock_operator(sdp_lock=True)
     operator.sdp_unlock.return_value = False  # the explicit step reports BAD
     plan = _plan_with_steps(
         Step(op=OP_SDP_LOCK, supported=True, reason=""),
         Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     assert operator.sdp_unlock.call_count == 2, (
         f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s), "
@@ -2223,7 +2194,7 @@ def test_sdp_leg_length_gate_passes_against_a_full_size_readback_double():
             Path(output_file).write_bytes(payload)
         return True
 
-    operator = Mock(spec=_OPERATOR_METHODS)
+    operator = Mock(spec=OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, 0x1234)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     operator.check_eprom_blank.return_value = 0

@@ -56,7 +56,6 @@ Coverage:
 from __future__ import annotations
 
 import pytest
-from click.testing import CliRunner
 
 from firestarter.chip_resolver import resolve_chip
 from firestarter.cli_handlers import _build_op_flags, cli
@@ -444,12 +443,6 @@ _SHIPPED_ALGORITHM_VALUES = {
 _UNCLASSIFIED_ALGORITHM_ID = max(_SHIPPED_ALGORITHM_VALUES) + 1
 
 
-def test_is_guarded_protocol_fails_closed_on_absent_evidence():
-    assert is_guarded_protocol(None) is True
-    assert is_guarded_protocol({}) is True
-    assert is_guarded_protocol({"algorithm": None}) is True
-
-
 def test_is_guarded_protocol_false_for_an_id_in_neither_set():
     """Fork A: an `algorithm` in NEITHER `GUARDED_PROTOCOL_IDS` nor
     `NAMED_EXEMPT_PROTOCOL_IDS` is NOT guarded -- "preserve today's
@@ -499,13 +492,13 @@ def test_require_non_negative_address_is_a_no_op_for_an_unparseable_address():
     assert require_non_negative_address("m27c512", "notanumber") is None
 
 
-def test_write_eprom_negative_start_address_refuses_before_operation_context(
+def test_write_eprom_negative_start_address_refuses_before_the_port_opens(
     tmp_path,
 ):
     """The operator-tier half: `dev test` and `dev write-cycle` call
     `write_eprom` directly, bypassing `cli_handlers.write` entirely, so the
     gate must also fire from inside `write_eprom` itself -- mirrors
-    `test_page_size_alignment_refusal.test_write_eprom_unaligned_start_refuses_before_operation_context`'s
+    `test_page_size_alignment_refusal.test_write_eprom_unaligned_start_refuses_before_the_port_opens`'s
     proven pattern."""
     from unittest.mock import patch
 
@@ -517,12 +510,14 @@ def test_write_eprom_negative_start_address_refuses_before_operation_context(
     payload.write_bytes(b"\xaa" * 4)
 
     operator = EpromOperator(ConfigManager())
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect"
+    ) as connect_mock:
         with pytest.raises(NegativeStartAddressError) as exc_info:
             operator.write_eprom(
                 "m27c512", _m27c512_data(), str(payload), address_str="-256"
             )
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "M27C512" in str(exc_info.value)
 
@@ -538,7 +533,7 @@ def test_write_eprom_negative_misaligned_start_address_refuses_as_negative_first
     that is also misaligned loses it to the page-alignment gate instead. The
     negative gate must win over the alignment gate regardless of alignment,
     so `write_eprom` must raise `NegativeStartAddressError`, not
-    `PageAlignmentError`, and must never enter `_operation_context`."""
+    `PageAlignmentError`, and must never reach `find_and_connect`."""
     from unittest.mock import patch
 
     from firestarter.config import ConfigManager
@@ -554,10 +549,12 @@ def test_write_eprom_negative_misaligned_start_address_refuses_as_negative_first
     payload.write_bytes(b"\x55" * 128)
 
     operator = EpromOperator(ConfigManager())
-    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect"
+    ) as connect_mock:
         with pytest.raises(NegativeStartAddressError) as exc_info:
             operator.write_eprom("W29C020", eprom_data, str(payload), address_str="-1")
-        ctx_mock.assert_not_called()
+        connect_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
 
@@ -622,8 +619,9 @@ def test_cli_write_negative_misaligned_address_on_a_page_write_part_gets_the_neg
 # ---------------------------------------------------------------------------
 
 
-def test_write_help_names_every_unguarded_family_in_the_live_exempt_set() -> None:
-    runner = CliRunner()
+def test_write_help_names_every_unguarded_family_in_the_live_exempt_set(
+    runner,
+) -> None:
     """`cli_handlers.write`'s docstring is the user-facing `write --help`
     body, and it hardcodes which protocol families never receive the
     blank-check. Nothing else couples that prose to

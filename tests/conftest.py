@@ -8,8 +8,8 @@ Shared pytest fixtures and helpers for the firestarter_app test suite.
 
 Wire: MAGIC_PREAMBLE_REF, _ref_crc8_ccitt, id_frame_body, build_frame,
 decoded_response, write_success_frames, read_phase_frames.
-Port and comm: fake_serial, make_comm, comm_on, fresh_serial_and_comm,
-connect_via.
+Port and comm: fake_serial, AnsweringSerial, PortDropSerial, port_opens,
+make_comm, comm_on, fresh_serial_and_comm, connect_via.
 CLI: runner, make_app_context, adapter_required_db.
 Autouse: _offline_gh, _short_drain_window, _isolated_config.
 
@@ -241,8 +241,47 @@ def fake_serial() -> _FakeSerial:
     return _FakeSerial()
 
 
-def comm_on(serial: _FakeSerial, *, port_name: str = "/dev/null"):
-    """A real `SerialCommunicator` whose port is `serial`.
+class AnsweringSerial(_FakeSerial):
+    """A fake port that queues one reply for each host write, in order.
+
+    The board answers only after the command arrives, so the drain before
+    the send finds nothing, as on a board that resets when the port opens.
+    """
+
+    def __init__(self, *replies: bytes) -> None:
+        super().__init__()
+        self._replies = list(replies)
+
+    def write(self, data: bytes) -> int:
+        written = super().write(data)
+        if self._replies:
+            self.feed(self._replies.pop(0))
+        return written
+
+
+class PortDropSerial(_FakeSerial):
+    """A fake port that raises `serial.SerialException` once, on the first
+    read after its fed bytes run out: a port drop mid-operation, not a plain
+    timeout. After that it returns empty reads, so the disconnect drain does
+    not see a second exception."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._raised_once = False
+
+    def read(self, n: int = 1) -> bytes:
+        data = super().read(n)
+        if not data and not self._raised_once:
+            self._raised_once = True
+            import serial
+
+            raise serial.SerialException("simulated port drop mid-operation")
+        return data
+
+
+@contextmanager
+def port_opens(serial: _FakeSerial):
+    """Every SerialCommunicator constructed in the block opens `serial`.
 
     The real `__init__` runs; only `serial.Serial` (the one I/O call in it)
     and the port-settle delay are replaced.
@@ -255,7 +294,15 @@ def comm_on(serial: _FakeSerial, *, port_name: str = "/dev/null"):
         patch.object(serial_comm.serial, "Serial", return_value=serial),
         patch.object(serial_comm, "CONNECTION_STABILIZE_DELAY", 0),
     ):
-        return serial_comm.SerialCommunicator(port_name)
+        yield serial
+
+
+def comm_on(serial: _FakeSerial, *, port_name: str = "/dev/null"):
+    """A real `SerialCommunicator` whose port is `serial`."""
+    from firestarter.serial_comm import SerialCommunicator
+
+    with port_opens(serial):
+        return SerialCommunicator(port_name)
 
 
 def fresh_serial_and_comm(*, port_name: str = "/dev/null"):

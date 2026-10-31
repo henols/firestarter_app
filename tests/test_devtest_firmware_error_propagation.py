@@ -55,7 +55,6 @@ from unittest.mock import Mock
 from firestarter import chip_test as ct
 from firestarter.chip_resolver import resolve_chip
 from firestarter.config import ConfigManager
-from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import (
     AutoCapture,
     DiagnosticReport,
@@ -71,8 +70,9 @@ from firestarter.messages import (
 )
 
 from .conftest import build_frame
+from .fixtures.operator_doubles import OPERATOR_METHODS
+from .plan_corpus import REAL_DB
 
-_REAL_DB = EpromDatabase(skip_local_override=True)
 _CHIP = "W27C512"
 
 # MSG_ERR_NOT_BLANK (0xB0) params are (addr_hi, addr_mid, addr_lo, value) --
@@ -80,17 +80,6 @@ _CHIP = "W27C512"
 # payload is "address 0x000000 read back as 0xAB", i.e. exactly the byte-0
 # shape a partially-erased W27C512 produces.
 _NOT_BLANK_PARAMS = bytes([0x00, 0x00, 0x00, 0xAB])
-
-_OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-    "sdp_lock",
-    "sdp_unlock",
-]
 
 
 def _failing_operator(*, failing: str, code: int = MSG_ERR_NOT_BLANK, text: str):
@@ -116,7 +105,7 @@ def _failing_operator(*, failing: str, code: int = MSG_ERR_NOT_BLANK, text: str)
 
 
 def _eprom_data():
-    return resolve_chip(_CHIP, db=_REAL_DB)
+    return resolve_chip(_CHIP, db=REAL_DB)
 
 
 # 1-2: the recording seam in eprom_operations.py
@@ -264,7 +253,7 @@ def test_an_operator_without_the_attributes_degrades_to_the_old_behaviour() -> N
     a stand-in that never grew these attributes -- which is every `Mock(spec=
     ...)` double in this suite -- keeps producing the exact pre-fix
     `StepResult`, rather than raising inside a failure path."""
-    operator = Mock(spec=_OPERATOR_METHODS)
+    operator = Mock(spec=OPERATOR_METHODS)
     operator.erase_eprom.return_value = False
     step = ct.Step(op=ct.OP_ERASE, supported=True, reason="", destructive=True)
 

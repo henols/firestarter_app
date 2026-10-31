@@ -21,17 +21,6 @@ from firestarter.serial_comm import FirmwareOutdatedError, SerialCommunicator
 class TestValidateFirmwareVersion:
     """Unit tests for the pure-policy version-guard @staticmethod."""
 
-    @pytest.fixture(autouse=True)
-    def _clear_escape_hatch(self, monkeypatch):
-        """Ensure the dev escape-hatch env var is unset for every test by default.
-
-        Defensive — even though _validate_firmware_version does NOT read the
-        env (D-02), the autouse fixture keeps the test class hermetic against
-        the developer's shell environment. Test_no_env_read explicitly sets
-        the env to prove the staticmethod ignores it.
-        """
-        monkeypatch.delenv("FIRESTARTER_DEV_ALLOW_PRE_V12", raising=False)
-
     # ---- Accept paths (no raise) ----
 
     def test_v3_zero_zero_passes(self):
@@ -111,10 +100,10 @@ class TestValidateFirmwareVersion:
     def test_no_env_read(self, monkeypatch):
         """D-02: the staticmethod NEVER reads FIRESTARTER_DEV_ALLOW_PRE_V12.
 
-        Override the autouse delenv with setenv('FIRESTARTER_DEV_ALLOW_PRE_V12',
-        '1') and call with allow_pre_v12 defaulted to False — the staticmethod
-        must still raise Branch A, proving the env-var has no effect on the
-        pure policy. Env-var I/O lives in _probe_port only.
+        Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 (conftest clears it for every
+        other test) and call with allow_pre_v12 defaulted to False — the
+        staticmethod must still raise Branch A, proving the env-var has no
+        effect on the pure policy. Env-var I/O lives in _probe_port only.
         """
         monkeypatch.setenv("FIRESTARTER_DEV_ALLOW_PRE_V12", "1")
         with pytest.raises(FirmwareOutdatedError, match="pre-v1.2"):

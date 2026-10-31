@@ -11,7 +11,7 @@ instrument half): `EpromOperator._summarize_connect_samples`,
 
 Every test here runs with no board attached. Tests 1-4 call
 `_summarize_connect_samples` directly with hand-built sample lists. Test 5
-constructs an operator whose config resolves no port. Test 6 drives the CLI
+constructs an operator on the isolated, empty config, which resolves no port. Test 6 drives the CLI
 through a mocked operator, exactly like `test_dev_fault_inject_pass` /
 `test_dev_fault_inject_fail` in `tests/test_cli_handlers.py`. Test 7 pins
 `channel.BETA_ONLY_DEV_COMMANDS` unchanged -- no new `dev` subcommand.
@@ -19,7 +19,6 @@ through a mocked operator, exactly like `test_dev_fault_inject_pass` /
 
 from unittest.mock import Mock
 
-import pytest
 from click.testing import CliRunner
 
 from firestarter import channel
@@ -68,7 +67,6 @@ class TestMeasureConnectCostRefusesWithoutAPort:
     def test_no_port_returns_false_and_opens_nothing(
         self, tmp_path, monkeypatch
     ) -> None:
-        monkeypatch.setattr(ConfigManager, "get_value", lambda self, *a, **kw: None)
         connect_attempted = Mock()
         monkeypatch.setattr(SerialCommunicator, "find_and_connect", connect_attempted)
         op = EpromOperator(ConfigManager())
@@ -82,10 +80,6 @@ class TestMeasureConnectCostRefusesWithoutAPort:
 
 
 class TestDevFaultInjectConnectCostDispatch:
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        return CliRunner()
-
     def test_connect_cost_mode_dispatches_and_exits_zero_on_true(
         self, runner: CliRunner
     ) -> None:

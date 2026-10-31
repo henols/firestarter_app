@@ -12,36 +12,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
 
 import pytest
 from click.testing import CliRunner
 
 from firestarter.cli_handlers import AppContext, cli
 from firestarter.config import ConfigManager
-from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
-from firestarter.eprom_operations import EpromOperator
-from firestarter.firmware import FirmwareManager
-from firestarter.hardware import HardwareManager
+
+from .conftest import make_app_context
 
 
 def _make_app_no_hw() -> AppContext:
     config_manager = ConfigManager()
     config_manager.set_value("port", None, persist=False)
-    return AppContext(
-        db=EpromDatabase(skip_local_override=True),
-        config_manager=config_manager,
-        eprom_operator=Mock(spec=EpromOperator),
-        hardware_manager=Mock(spec=HardwareManager),
-        firmware_manager=Mock(spec=FirmwareManager),
-        eprom_presenter=Mock(spec=EpromConsolePresenter),
-    )
-
-
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
+    return make_app_context(config_manager=config_manager)
 
 
 @pytest.fixture()

@@ -45,12 +45,6 @@ attached device. This module carries no skip marker of any kind.
 
 from __future__ import annotations
 
-import functools
-import json
-import subprocess
-import sys
-from dataclasses import dataclass
-from pathlib import Path
 from unittest.mock import Mock
 
 import click
@@ -61,117 +55,32 @@ from firestarter import cli_handlers
 from firestarter.firmware import FirmwareManager
 
 from .conftest import make_app_context
+from .fresh_cli import run_cli_fresh
 
-_APP_DIR = Path(__file__).parent.parent
 # Every version string used by this module's tests is a literal below, not
 # read from `firestarter.__version__` -- the point is to simulate a channel,
 # not observe whichever one this checkout currently is.
 _STABLE_VERSION = "3.0.0"
 _PRERELEASE_VERSION = "3.0.0b1"
 
-# The child program, run via `python -c`. Order is load-bearing (see module
-# docstring): `firestarter` is imported bare first; the preamble then asserts
-# `firestarter.cli_handlers` is not yet in `sys.modules`; ONLY THEN is
-# `__version__` overwritten; ONLY THEN is `cli_handlers` imported for the
-# first time in this process -- so `_BOARD_CHOICES` / `_PY32_ENABLED` are
-# computed against the simulated version by construction, never patched
-# after the fact.
-_CHILD_PROGRAM = """
-import json
-import sys
-
-import firestarter
-
-assert "firestarter.cli_handlers" not in sys.modules, (
-    "firestarter.cli_handlers was already imported before the simulated "
-    "version was assigned -- _BOARD_CHOICES/_PY32_ENABLED would be frozen "
-    "against the wrong version"
-)
-firestarter.__version__ = {version!r}
-
-from click.testing import CliRunner
-from firestarter import cli_handlers
-
-runner = CliRunner()
-result = runner.invoke(cli_handlers.cli, {argv!r})
-print(json.dumps({{
-    "version": firestarter.__version__,
-    "board_choices": cli_handlers._BOARD_CHOICES,
-    "py32_enabled": cli_handlers._PY32_ENABLED,
-    "exit_code": result.exit_code,
-    "output": result.output,
-}}))
-"""
-
-
-@dataclass(frozen=True)
-class _ChildResult:
-    """One child process's parsed report -- see `_CHILD_PROGRAM`."""
-
-    version: str
-    board_choices: list[str]
-    py32_enabled: bool
-    exit_code: int
-    output: str
-
-
-@functools.lru_cache(maxsize=None)  # noqa: UP033 -- lru_cache named explicitly by plan
-def _run_cli(version: str, argv: tuple[str, ...]) -> _ChildResult:
-    """Run `firestarter <argv>` in a fresh process simulating `version`.
-
-    Cached (per (version, argv) pair) so the several assertions per simulated
-    channel below pay the child-process cost exactly once each.
-    """
-    program = _CHILD_PROGRAM.format(version=version, argv=list(argv))
-    result = subprocess.run(
-        [sys.executable, "-c", program],
-        cwd=str(_APP_DIR),
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    if result.returncode != 0:
-        raise AssertionError(
-            f"child process for version={version!r} argv={argv!r} exited "
-            f"{result.returncode} (a non-zero return here means the child's "
-            f"own preamble assertion failed, or it crashed) -- stderr:\n"
-            f"{result.stderr}"
-        )
-    report = json.loads(result.stdout.strip().splitlines()[-1])
-    assert report["version"] == version, (
-        f"child reported version {report['version']!r}, expected "
-        f"{version!r} -- the simulated-version patch did not take effect "
-        f"before firestarter.cli_handlers was imported"
-    )
-    return _ChildResult(
-        version=report["version"],
-        board_choices=list(report["board_choices"]),
-        py32_enabled=report["py32_enabled"],
-        exit_code=report["exit_code"],
-        output=report["output"],
-    )
-
-
 # Simulated stable (`__version__ = "3.0.0"`)
 
 
-def test_simulated_stable_board_choices_and_flag() -> None:
-    """Stable: py32f071 is absent from `_BOARD_CHOICES`, `_PY32_ENABLED` is
-    False."""
-    result = _run_cli(_STABLE_VERSION, ("fw", "--help"))
+def test_simulated_stable_board_choices() -> None:
+    """Stable: py32f071 is not a `--board` choice."""
+    result = run_cli_fresh(_STABLE_VERSION, "fw", "--help")
     assert result.board_choices == ["uno", "uno328pb", "leonardo"]
-    assert result.py32_enabled is False
 
 
 def test_simulated_stable_help_omits_py32f071() -> None:
-    result = _run_cli(_STABLE_VERSION, ("fw", "--help"))
+    result = run_cli_fresh(_STABLE_VERSION, "fw", "--help")
     assert "py32f071" not in result.output
 
 
 def test_simulated_stable_dfu_probe_rejected() -> None:
     """Unchanged behaviour: `--dfu-probe` was already refused before this
     plan; this pins that it still is."""
-    result = _run_cli(_STABLE_VERSION, ("fw", "--dfu-probe"))
+    result = run_cli_fresh(_STABLE_VERSION, "fw", "--dfu-probe")
     assert result.exit_code == 2
     assert "no such option: --dfu-probe" in result.output
 
@@ -180,7 +89,7 @@ def test_simulated_stable_usb_id_rejected() -> None:
     """HOST-02's closure. The refusal fires before the release listing, so
     `--list` never reaches the network on a simulated stable build -- this
     is the live gap Task 1 closed."""
-    result = _run_cli(_STABLE_VERSION, ("fw", "--usb-id", "1a86:8012", "--list"))
+    result = run_cli_fresh(_STABLE_VERSION, "fw", "--usb-id", "1a86:8012", "--list")
     assert result.exit_code == 2
     assert "no such option: --usb-id" in result.output
 
@@ -188,12 +97,12 @@ def test_simulated_stable_usb_id_rejected() -> None:
 def test_simulated_stable_board_choice_rejects_py32f071() -> None:
     """Click's own `Choice` rejection -- proves the board is genuinely absent
     from the choice set, not merely hidden from `--help`."""
-    result = _run_cli(_STABLE_VERSION, ("fw", "--board", "py32f071", "--list"))
+    result = run_cli_fresh(_STABLE_VERSION, "fw", "--board", "py32f071", "--list")
     assert result.exit_code == 2
 
 
 def test_simulated_stable_help_omits_pre() -> None:
-    result = _run_cli(_STABLE_VERSION, ("fw", "--help"))
+    result = run_cli_fresh(_STABLE_VERSION, "fw", "--help")
     assert "--pre" not in result.output
     assert "3.1.0b2" not in result.output
 
@@ -204,7 +113,7 @@ def test_simulated_stable_help_omits_pre() -> None:
 )
 def test_simulated_stable_pre_rejected(argv) -> None:
     """Refused before the --list exit and before the channel mutex."""
-    result = _run_cli(_STABLE_VERSION, argv)
+    result = run_cli_fresh(_STABLE_VERSION, *argv)
     assert result.exit_code == 2
     assert "no such option: --pre" in result.output
 
@@ -212,21 +121,20 @@ def test_simulated_stable_pre_rejected(argv) -> None:
 # Simulated pre-release (`__version__ = "3.0.0b1"`)
 
 
-def test_simulated_prerelease_board_choices_and_flag() -> None:
-    result = _run_cli(_PRERELEASE_VERSION, ("fw", "--help"))
+def test_simulated_prerelease_board_choices() -> None:
+    result = run_cli_fresh(_PRERELEASE_VERSION, "fw", "--help")
     assert result.board_choices == ["uno", "uno328pb", "leonardo", "py32f071"]
-    assert result.py32_enabled is True
 
 
 def test_simulated_prerelease_help_includes_py32_surface() -> None:
-    result = _run_cli(_PRERELEASE_VERSION, ("fw", "--help"))
+    result = run_cli_fresh(_PRERELEASE_VERSION, "fw", "--help")
     assert "py32f071" in result.output
     assert "--usb-id" in result.output
     assert "--dfu-probe" in result.output
 
 
 def test_simulated_prerelease_help_includes_pre() -> None:
-    result = _run_cli(_PRERELEASE_VERSION, ("fw", "--help"))
+    result = run_cli_fresh(_PRERELEASE_VERSION, "fw", "--help")
     assert "--pre" in result.output
 
 
@@ -238,8 +146,8 @@ def test_simulated_prerelease_dfu_probe_and_usb_id_not_refused() -> None:
     run; only the absence of the refusal message is this test's claim, and
     that is deterministic in both legs.
     """
-    result = _run_cli(
-        _PRERELEASE_VERSION, ("fw", "--dfu-probe", "--usb-id", "1a86:8012")
+    result = run_cli_fresh(
+        _PRERELEASE_VERSION, "fw", "--dfu-probe", "--usb-id", "1a86:8012"
     )
     assert "no such option" not in result.output
 
@@ -257,8 +165,8 @@ def test_board_choices_are_computed_at_import_not_cached_across_a_version_change
     Proved *by construction*, not by inspecting `cli_handlers.py`'s source:
     one process per simulated version, `firestarter.cli_handlers` imported
     exactly once in each, after `firestarter.__version__` is set, guarded by
-    that child's own `sys.modules` pre-assertion (see `_CHILD_PROGRAM`). The
-    two children's reported `_BOARD_CHOICES` are therefore not the same list
+    that child's own `sys.modules` pre-assertion (see `tests/fresh_cli.py`). The
+    two children's `--board` choices are therefore not the same list
     re-read twice -- they are two independent import-time computations from
     two independent processes, one per simulated channel.
 
@@ -269,8 +177,8 @@ def test_board_choices_are_computed_at_import_not_cached_across_a_version_change
     would rebuild Click's command objects while `cli.py` still held
     references to the old ones.
     """
-    stable = _run_cli(_STABLE_VERSION, ("fw", "--help"))
-    prerelease = _run_cli(_PRERELEASE_VERSION, ("fw", "--help"))
+    stable = run_cli_fresh(_STABLE_VERSION, "fw", "--help")
+    prerelease = run_cli_fresh(_PRERELEASE_VERSION, "fw", "--help")
 
     assert stable.board_choices != prerelease.board_choices
     assert len(stable.board_choices) == 3

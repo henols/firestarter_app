@@ -38,7 +38,6 @@ from __future__ import annotations
 import json
 
 from firestarter.chip_test import VERDICT_OK, Plan, StepResult
-from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import NOT_REPORTED as _REPORT_NOT_REPORTED
 from firestarter.diagnostic_report import (
     SCHEMA_VERSION,
@@ -58,7 +57,7 @@ from tools.parse_devtest_issue import (
     render_diff,
 )
 
-_REAL_DB = EpromDatabase(skip_local_override=True)
+from .plan_corpus import REAL_DB
 
 
 def _build_realistic_title_body(
@@ -94,7 +93,7 @@ def _build_realistic_title_body(
         plan=Plan(name=chip),
         results=results,
     )
-    report.db_diff = build_db_diff(chip, _REAL_DB, results)
+    report.db_diff = build_db_diff(chip, REAL_DB, results)
 
     sanitized = sanitize_dict(report.to_dict())
     title = build_title(report, chip)
@@ -173,7 +172,7 @@ def test_db_diff_bad_verdict_maps_to_community_fail_ladder_state():
     results = [
         StepResult(op="write", verdict=VERDICT_BAD, reason="mismatch", fingerprint=None)
     ]
-    diff_obj = build_db_diff("M8720", _REAL_DB, results)
+    diff_obj = build_db_diff("M8720", REAL_DB, results)
 
     assert diff_obj.ladder_state == "community-fail"
     assert "fail" in diff_obj.proposed_disposition

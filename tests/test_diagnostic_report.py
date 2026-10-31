@@ -56,6 +56,8 @@ References:
 
 from __future__ import annotations
 
+import copy
+import functools
 import json
 from unittest.mock import Mock
 
@@ -89,56 +91,39 @@ from firestarter.chip_test import (
     is_uv_eprom,
     run_plan,
 )
-from firestarter.database import EpromDatabase
 
-# Real chip pulled from the shipped chip_database.json (same seam as
-# test_chip_test.py:282) -- M8720, protocol 0x08 (EEPROM), chip-id sentinel 0.
-_REAL_DB = EpromDatabase(skip_local_override=True)
-
-_OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-]
+from .fixtures.operator_doubles import mock_operator
+from .plan_corpus import REAL_DB
 
 
-def _mock_operator(**returns):
-    op = Mock(spec=_OPERATOR_METHODS)
-    op.check_eprom_id.return_value = (True, 0x1234)
-    op.read_eprom.return_value = True
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
-    op.check_eprom_blank.return_value = 0
-    op.write_eprom.return_value = True
-    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
-    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
-    op.verify_eprom.return_value = 0
-    op.erase_eprom.return_value = True
-    for name, value in returns.items():
-        getattr(op, name).return_value = value
-        getattr(op, name).side_effect = None
-    return op
+@functools.cache
+def _plan_and_results(chip_name: str):
+    """Derive `chip_name`'s plan from the shipped database and run it against
+    `mock_operator`, once per process. Callers get deep copies."""
+    from firestarter.chip_test import count_applicable
+
+    full = REAL_DB.get_eprom(chip_name)
+    scope = "partial" if full and is_uv_eprom(full) else "full"
+    plan = derive_plan(chip_name, REAL_DB, write_scope=scope)
+    results = run_plan(plan, mock_operator(), REAL_DB, runs=2)
+    return plan, results, count_applicable(plan, results)
 
 
 def _build_report(chip_name: str = "M8720"):
-    """Shared helper: derive a real plan + run it against a mock operator,
-    then compose a DiagnosticReport from genuine StepResult objects."""
-    from firestarter.chip_test import count_applicable
+    """Shared helper: a DiagnosticReport composed from a real plan and the
+    genuine StepResult objects of running it. The default chip M8720 is
+    protocol 0x08 (EEPROM), chip-id sentinel 0.
+
+    Each call returns a new report built from deep copies of the cached
+    plan and results, so a caller that mutates its report cannot change
+    another caller's."""
     from firestarter.diagnostic_report import (
         AutoCapture,
         DiagnosticReport,
         TransportHealth,
     )
 
-    full = _REAL_DB.get_eprom(chip_name)
-    scope = "partial" if full and is_uv_eprom(full) else "full"
-    plan = derive_plan(chip_name, _REAL_DB, write_scope=scope)
-    operator = _mock_operator()
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
-    banner = count_applicable(plan, results)
-
+    plan, results, banner = copy.deepcopy(_plan_and_results(chip_name))
     auto_capture = AutoCapture(
         host_version=firestarter.__version__,
         fw_board_identity="3.0.0b10:leonardo",
@@ -148,14 +133,19 @@ def _build_report(chip_name: str = "M8720"):
         chip_id_expected=0x1234,
         chip_id_actual=0x1234,
     )
-    report = DiagnosticReport(
+    return DiagnosticReport(
         auto_capture=auto_capture,
         transport=TransportHealth(),
         plan=plan,
         results=results,
         banner=banner,
     )
-    return report
+
+
+def _rendered_rows(report) -> dict:
+    """The rendered table as `{field: value}`."""
+    field_col, value_col = report.render().columns
+    return dict(zip(field_col.cells, value_col.cells))
 
 
 def _minimal_report(
@@ -401,8 +391,8 @@ def test_partial_run_still_tags_community_reported():
         StepResult(op="verify", verdict=VERDICT_OK, reason="", fingerprint=None),
     ]
 
-    diff_partial = build_db_diff("M8720", _REAL_DB, partial_results)
-    diff_full = build_db_diff("M8720", _REAL_DB, full_results)
+    diff_partial = build_db_diff("M8720", REAL_DB, partial_results)
+    diff_full = build_db_diff("M8720", REAL_DB, full_results)
 
     assert diff_partial.ladder_state == "community-reported"
     assert diff_partial.ladder_state == diff_full.ladder_state
@@ -955,14 +945,14 @@ def test_db_diff_real_db_read():
     from firestarter.diagnostic_report import build_db_diff
 
     name = "X88C64P,X88C64S"
-    raw_config, _manufacturer = _REAL_DB.get_eprom_config(name)
+    raw_config, _manufacturer = REAL_DB.get_eprom_config(name)
     expected = raw_config.get("support_status", "supported")
     assert (
         expected == "protocol-not-implemented"
     )  # sanity: the one non-supported row of the shipped database
 
     results = [StepResult(op="id", verdict=VERDICT_OK)]
-    diff = build_db_diff(name, _REAL_DB, results)
+    diff = build_db_diff(name, REAL_DB, results)
 
     assert diff.current_support_status == expected
 
@@ -1348,9 +1338,7 @@ def test_absent_identity_renders_the_explicit_marker_in_both_rows():
     from firestarter.diagnostic_report import NOT_REPORTED
 
     report = _minimal_report()
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
+    rows = _rendered_rows(report)
 
     assert rows["fw_board_identity"] == NOT_REPORTED
     assert rows["hw_revision"] == NOT_REPORTED
@@ -1359,7 +1347,7 @@ def test_absent_identity_renders_the_explicit_marker_in_both_rows():
 
     # Non-vacuous count check over the WHOLE rendered text: the marker
     # appears exactly twice -- once per identity row, and nowhere else.
-    rendered = _rendered_text(table)
+    rendered = _rendered_text(report.render())
     assert rendered.count(NOT_REPORTED) == 2
 
 
@@ -1390,13 +1378,11 @@ def test_populated_identity_rows_render_the_value_verbatim():
     report.auto_capture.fw_board_identity = "3.0.0b19:leonardo"
     report.auto_capture.hw_revision = "Rev 2.0-class"
 
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
+    rows = _rendered_rows(report)
 
     assert rows["fw_board_identity"] == "3.0.0b19:leonardo"
     assert rows["hw_revision"] == "Rev 2.0-class"
-    assert NOT_REPORTED not in _rendered_text(table)
+    assert NOT_REPORTED not in _rendered_text(report.render())
 
 
 # run_count disclosure (quick task 260822-aq6)
@@ -1587,139 +1573,60 @@ def test_schema_version_is_two_two():
 
 # Hex-render protocol / chip IDs, noise-row removal (quick task 260821-spg)
 #
-# `_hex_cell` does not exist yet when these tests are first run -- they are
-# added ahead of the implementation (RED) so the helper's contract is pinned
-# by a failing test before it exists, then implemented to GREEN. All render
-# assertions use the `dict(zip(field_col.cells, value_col.cells))` idiom
-# already used above (e.g. test_absent_identity_renders_the_explicit_marker_
-# in_both_rows) rather than a whole-table substring scan, so a row that
-# happens to contain a forbidden field NAME as a substring of its VALUE
-# cannot false-positive the noise-row checks.
+# All render assertions read the table row by row (`_rendered_rows`) rather
+# than scan the whole table for a substring, so a row that happens to contain
+# a forbidden field NAME as a substring of its VALUE cannot false-positive the
+# noise-row checks.
 
 
-def test_hex_cell_protocol_from_production_decimal_string():
-    """`protocol="13"` (production shape: `str(prog.get("algorithm"))`,
-    cli_handlers.py) renders `0x0D` -- the console reader sees the SAME base
-    firmware dispatch reads, not a decimal integer disconnected from the
-    protocol table."""
-    report = _minimal_report(protocol="13")
+@pytest.mark.parametrize(
+    ("protocol", "cell"),
+    [
+        # Production shape (`str(prog.get("algorithm"))`, cli_handlers.py):
+        # the console reader sees the SAME base firmware dispatch reads, not
+        # a decimal integer disconnected from the protocol table.
+        ("13", "0x0D"),
+        # Test-fixture shape, already hex: never converted twice.
+        ("0x0D", "0x0D"),
+        # Neither raises.
+        (None, "None"),
+        ("banana", "banana"),
+    ],
+)
+def test_hex_cell_protocol(protocol, cell):
+    rows = _rendered_rows(_minimal_report(protocol=protocol))
 
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
-
-    assert rows["protocol"] == "0x0D"
-
-
-def test_hex_cell_protocol_hex_shape_is_idempotent():
-    """`protocol="0x0D"` (test-fixture shape, already hex) renders
-    unchanged -- the formatter must not double-convert an already-hex
-    string."""
-    report = _minimal_report(protocol="0x0D")
-
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
-
-    assert rows["protocol"] == "0x0D"
+    assert rows["protocol"] == cell
 
 
-def test_hex_cell_protocol_none_renders_none_without_raising():
-    report = _minimal_report(protocol=None)
-
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
-
-    assert rows["protocol"] == "None"
-
-
-def test_hex_cell_protocol_non_numeric_renders_verbatim_without_raising():
-    report = _minimal_report(protocol="banana")
-
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
-
-    assert rows["protocol"] == "banana"
-
-
-def test_chip_id_one_sided_row_when_no_mismatch_was_recorded():
-    """`chip_id_actual is None` (a clean/NA/SKIPPED id step) collapses to a
-    ONE-sided `chip_id` row -- no `/ None` tail.
-
-    RETARGETED 2026-08-21 (was `test_hex_cell_chip_id_partial_is_none_safe`,
-    which pinned `"0x00A4 / None"`). Printing a `None` beside a real
-    expected id read as a FAILED read, which is what the operator queried.
-    The `None`-safety the original test guarded still holds -- `_hex_cell`
-    is unchanged and its own None/unparseable cases are covered by
-    test_hex_cell_returns_str_value_unchanged_for_none_and_unparseable.
-
-    RPT-A1 (181-08) made `chip_id_actual` populate on a PASSING id check
-    too, equal to `chip_id_expected` -- see
-    test_chip_id_one_sided_row_when_actual_equals_expected for that case,
-    which this test's `None` case does not cover."""
+@pytest.mark.parametrize(
+    ("expected", "actual", "label", "cell"),
+    [
+        # No mismatch recorded (a clean/NA/SKIPPED id step): ONE-sided, no
+        # `/ None` tail -- a `None` beside a real expected id read as a
+        # FAILED read (2026-08-21).
+        (0x00A4, None, "chip_id", "0x00A4"),
+        # A PASSING id check sets `chip_id_actual` equal to
+        # `chip_id_expected` (RPT-A1, 181-08: the host's own expected id
+        # echoed out of the command dict, not an independent read-back).
+        # D-10 keeps the row ONE-sided on this agreement.
+        (0x1F65, 0x1F65, "chip_id", "0x1F65"),
+        # A real mismatch is the whole reason the row is two-sided; both
+        # sides are 4-digit uppercase hex.
+        (0x00A4, 0x1234, "chip_id (expected/actual)", "0x00A4 / 0x1234"),
+        (0x1234, 0x5678, "chip_id (expected/actual)", "0x1234 / 0x5678"),
+    ],
+)
+def test_chip_id_row_is_two_sided_only_on_a_mismatch(expected, actual, label, cell):
     report = _minimal_report()
-    report.auto_capture.chip_id_expected = 0x00A4
-    report.auto_capture.chip_id_actual = None
+    report.auto_capture.chip_id_expected = expected
+    report.auto_capture.chip_id_actual = actual
 
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
+    rows = _rendered_rows(report)
 
-    assert rows["chip_id"] == "0x00A4"
-    assert "chip_id (expected/actual)" not in rows
-
-
-def test_chip_id_two_sided_row_only_when_a_mismatch_was_recorded():
-    """The expected/actual pair appears ONLY when there is a real
-    disagreement to show -- the mismatch is the whole reason the row is
-    two-sided, so it must survive (2026-08-21)."""
-    report = _minimal_report()
-    report.auto_capture.chip_id_expected = 0x00A4
-    report.auto_capture.chip_id_actual = 0x1234
-
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
-
-    assert rows["chip_id (expected/actual)"] == "0x00A4 / 0x1234"
-    assert "chip_id" not in rows
-
-
-def test_hex_cell_chip_id_both_populated_is_4_digit_upper_hex():
-    """Both sides of a real mismatch are 4-digit uppercase hex. Uses
-    differing values (RETARGETED 181-08 from an equal pair, which now
-    renders one-sided per test_chip_id_one_sided_row_when_actual_equals_expected
-    -- D-10)."""
-    report = _minimal_report()
-    report.auto_capture.chip_id_expected = 0x1234
-    report.auto_capture.chip_id_actual = 0x5678
-
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
-
-    assert rows["chip_id (expected/actual)"] == "0x1234 / 0x5678"
-
-
-def test_chip_id_one_sided_row_when_actual_equals_expected():
-    """RPT-A1 (181-08): `chip_id_actual` now populates on a PASSING id
-    check too, equal to `chip_id_expected` by construction (the value is
-    the host's own expected id, echoed out of the command dict -- not an
-    independent read-back). D-10 requires the console row to stay
-    ONE-sided on this agreement -- a matching pair is not added to the
-    table."""
-    report = _minimal_report()
-    report.auto_capture.chip_id_expected = 0x1F65
-    report.auto_capture.chip_id_actual = 0x1F65
-
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
-
-    assert rows["chip_id"] == "0x1F65"
-    assert "chip_id (expected/actual)" not in rows
+    assert rows[label] == cell
+    other = {"chip_id", "chip_id (expected/actual)"} - {label}
+    assert not other & rows.keys()
 
 
 _NOISE_ROW_FIELDS = (
@@ -1774,9 +1681,7 @@ def test_step_row_value_is_bare_verdict_no_error_code_or_fingerprint_suffix():
     )
     report.results[0].error_code = 42
 
-    table = report.render()
-    field_col, value_col = table.columns
-    rows = dict(zip(field_col.cells, value_col.cells))
+    rows = _rendered_rows(report)
 
     assert rows["step: write"] == VERDICT_BAD
 
@@ -1796,7 +1701,7 @@ def test_render_keeps_the_surviving_rows():
         "protocol",
         # One-sided on a minimal report: `chip_id_actual` is only set on a
         # mismatch (2026-08-21). The two-sided label is pinned by
-        # test_chip_id_two_sided_row_only_when_a_mismatch_was_recorded.
+        # test_chip_id_row_is_two_sided_only_on_a_mismatch.
         "chip_id",
         "banner",
         "sdp_hold_state",
@@ -2212,14 +2117,14 @@ def _build_full_scope_report(chip_name: str):
         TransportHealth,
     )
 
-    plan = derive_plan(chip_name, _REAL_DB, write_scope="full")
+    plan = derive_plan(chip_name, REAL_DB, write_scope="full")
     # (True, None) -- no explicit chip-ID disagreement: `_dispatch_id`'s
     # mismatch clause is `is_ok and expected_id and detected_id is not None
     # and detected_id != expected_id`, so a `None` detected id can never
     # close the destructive gate regardless of this chip's own real
     # expected chip-id (which these flash4 test chips do carry).
-    operator = _mock_operator(check_eprom_id=(True, None))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    operator = mock_operator(check_eprom_id=(True, None))
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     auto_capture = AutoCapture(
         host_version=firestarter.__version__, chip=chip_name, protocol="0x05"
@@ -2272,7 +2177,7 @@ def test_whole_device_boot_block_fallback_discloses_refusal_not_uv_wording(
     coverage line must state the REAL refusal reason and must NEVER say
     "bits clearable" (that phrasing is only meaningful for a masked UV
     slot)."""
-    full = _REAL_DB.get_eprom(chip_name)
+    full = REAL_DB.get_eprom(chip_name)
     assert full["protocol-id"] == 5
     assert full["memory-size"] == 32768
 

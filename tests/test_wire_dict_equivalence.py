@@ -31,6 +31,8 @@ from pathlib import Path
 
 from firestarter.database import EpromDatabase
 
+from .plan_corpus import REAL_DB
+
 _HERE = Path(__file__).resolve().parent
 _GOLDEN = _HERE / "golden" / "wire_dict.json"
 
@@ -45,10 +47,6 @@ _EXPECTED_WIRE_KEYS = {
     "pulse-delay",
     "vpp_mv",
 }
-
-# skip_local_override=True: a ~/.firestarter override would leak a spurious
-# row into this capture.
-_REAL_DB = EpromDatabase(skip_local_override=True)
 
 
 def _capture_wire_dicts(db: EpromDatabase) -> dict[str, dict]:
@@ -104,9 +102,9 @@ def test_golden_file_exists() -> None:
 
 def test_live_capture_matches_golden() -> None:
     recorded = json.loads(_GOLDEN.read_text(encoding="utf-8"))["records"]
-    live = _capture_wire_dicts(_REAL_DB)
+    live = _capture_wire_dicts(REAL_DB)
 
-    assert len(live) == sum(len(chips) for chips in _REAL_DB.proms.values())
+    assert len(live) == sum(len(chips) for chips in REAL_DB.proms.values())
     assert live == recorded, (
         f"the host->wire contract moved: {_describe_record_diff(recorded, live)}"
     )
@@ -118,11 +116,11 @@ def test_every_row_is_encoded_from_its_own_record() -> None:
     lookup returns, so a capture that looked rows up by name would fail
     `test_live_capture_matches_golden`."""
     shadowed_and_different = []
-    for mfg, chips in _REAL_DB.proms.items():
+    for mfg, chips in REAL_DB.proms.items():
         for chip in chips:
-            own = _REAL_DB.convert_to_programmer(_REAL_DB.map_chip_record(chip, mfg))
-            by_name = _REAL_DB.get_eprom(chip.get("part_number", ""))
-            if by_name is not None and _REAL_DB.convert_to_programmer(by_name) != own:
+            own = REAL_DB.convert_to_programmer(REAL_DB.map_chip_record(chip, mfg))
+            by_name = REAL_DB.get_eprom(chip.get("part_number", ""))
+            if by_name is not None and REAL_DB.convert_to_programmer(by_name) != own:
                 shadowed_and_different.append(f"{mfg}|{chip.get('part_number')}")
     assert shadowed_and_different, (
         "no row differs from its by-name lookup any more; this test no longer "
@@ -131,7 +129,7 @@ def test_every_row_is_encoded_from_its_own_record() -> None:
 
 
 def test_wire_key_union_is_exactly_nine_keys() -> None:
-    live = _capture_wire_dicts(_REAL_DB)
+    live = _capture_wire_dicts(REAL_DB)
     keys: set[str] = set()
     for wire in live.values():
         keys |= set(wire)
@@ -143,7 +141,7 @@ def test_wire_key_union_is_exactly_nine_keys() -> None:
 
 
 def test_vcc_and_vpp_volts_never_cross_the_wire() -> None:
-    live = _capture_wire_dicts(_REAL_DB)
+    live = _capture_wire_dicts(REAL_DB)
     offenders_vcc = [key for key, wire in live.items() if "vcc" in wire]
     offenders_vpp_volts = [key for key, wire in live.items() if "vpp_volts" in wire]
     assert not offenders_vcc, (
@@ -170,7 +168,7 @@ def test_describe_record_diff_is_non_vacuous() -> None:
 
 if __name__ == "__main__":
     _GOLDEN.write_text(
-        json.dumps({"records": _capture_wire_dicts(_REAL_DB)}, indent=2, sort_keys=True)
+        json.dumps({"records": _capture_wire_dicts(REAL_DB)}, indent=2, sort_keys=True)
         + "\n",
         encoding="utf-8",
     )

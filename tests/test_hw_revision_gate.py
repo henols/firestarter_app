@@ -25,8 +25,7 @@ Three things are proved here:
      a pinout edit could silently move chips in or out of the gate's scope.
 """
 
-import struct
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -41,9 +40,11 @@ from firestarter.constants import (
 )
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import HardwareRevisionUnsupportedError
-from firestarter.frame_parser import Response
 from firestarter.messages import MSG_OK_READY
 from firestarter.serial_comm import SerialCommunicator
+
+from .conftest import AnsweringSerial, id_frame_body, port_opens
+from .fixtures.ready_ack import ready_ack, ready_ack_frame, ready_ack_params
 
 GATED_VPP_LINE = 11
 
@@ -155,22 +156,9 @@ def test_refusal_message_gives_the_exact_remedy():
 # 2. Extended MSG_OK_READY decode
 
 
-def _ready_body(params: bytes) -> bytes:
-    """Build the `body` _decode_id_frame receives: [id][params][crc]."""
-    from tests.conftest import _ref_crc8_ccitt
-
-    payload = bytes([MSG_OK_READY]) + params
-    return payload + bytes([_ref_crc8_ccitt(payload)])
-
-
-def _cap02_params(buffer_size: int, revision: int, identity: str) -> bytes:
-    raw = identity.encode("ascii")
-    return struct.pack(">H", buffer_size) + bytes([revision, len(raw)]) + raw
-
-
 def test_decode_extended_ack_populates_all_three_fields(make_comm):
     comm = make_comm()
-    body = _ready_body(_cap02_params(1024, REVISION_2_2, "3.0.0:leonardo"))
+    body = ready_ack(1024, REVISION_2_2, "3.0.0:leonardo")
     comm._decode_id_frame(len(body), body)
 
     assert comm.firmware_max_chunk == 1024
@@ -181,7 +169,7 @@ def test_decode_extended_ack_populates_all_three_fields(make_comm):
 def test_decode_legacy_two_byte_ack_still_yields_buffer_size(make_comm):
     """Pre-CAP-02 firmware: buffer size decodes, the CAP-02 fields stay None."""
     comm = make_comm()
-    body = _ready_body(struct.pack(">H", 512))
+    body = ready_ack(512)
     comm._decode_id_frame(len(body), body)
 
     assert comm.firmware_max_chunk == 512
@@ -195,7 +183,9 @@ def test_decode_truncated_version_prefix_leaves_identity_none(make_comm):
     stays None, which is a refuse."""
     comm = make_comm()
     # Claims 40 version bytes but supplies 3.
-    body = _ready_body(struct.pack(">H", 512) + bytes([REVISION_2_2, 40]) + b"3.0")
+    body = id_frame_body(
+        MSG_OK_READY, ready_ack_params(512) + bytes([REVISION_2_2, 40]) + b"3.0"
+    )
     comm._decode_id_frame(len(body), body)
 
     assert comm.firmware_identity is None
@@ -208,7 +198,7 @@ def test_decode_implausible_buffer_size_is_clamped_away(make_comm):
     test -- an absurd advertised size must leave firmware_max_chunk unset so
     the 512 floor applies (T-55-06)."""
     comm = make_comm()
-    body = _ready_body(_cap02_params(60000, REVISION_2_2, "3.0.0:uno"))
+    body = ready_ack(60000, REVISION_2_2, "3.0.0:uno")
     comm._decode_id_frame(len(body), body)
 
     assert comm.firmware_max_chunk is None
@@ -219,7 +209,7 @@ def test_decode_ack_ends_after_the_identity(make_comm):
     """The current ack ends after the version bytes: the firmware no longer
     sends a write budget (the host calculates it, write_budget.py)."""
     comm = make_comm()
-    body = _ready_body(_cap02_params(1024, REVISION_2_2, "3.0.0:leonardo"))
+    body = ready_ack(1024, REVISION_2_2, "3.0.0:leonardo")
     comm._decode_id_frame(len(body), body)
 
     assert comm.firmware_max_chunk == 1024
@@ -232,7 +222,7 @@ def test_decode_legacy_two_byte_ack_leaves_identity_none(make_comm):
     why `_probe_port` refuses such a board today
     (`test_fwguard.py::test_absent_identity_refuses`)."""
     comm = make_comm()
-    body = _ready_body(struct.pack(">H", 512))
+    body = ready_ack(512)
     comm._decode_id_frame(len(body), body)
 
     assert comm.firmware_max_chunk == 512
@@ -265,24 +255,8 @@ def test_exactly_two_pinouts_emit_the_gated_vpp_line():
 
 
 def _probe(command, revision):
-    with (
-        patch.object(
-            SerialCommunicator,
-            "expect_ack_response",
-            return_value=Response(type="OK", message="Ready"),
-        ),
-        patch.object(SerialCommunicator, "send_command", return_value=42),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-        patch.object(SerialCommunicator, "disconnect", return_value=None),
-        patch.object(SerialCommunicator, "firmware_identity", "3.0.0:uno"),
-        patch.object(SerialCommunicator, "hw_revision", revision),
-        # setup_command asserts the link is open (207.1 D-11)
-        patch.object(SerialCommunicator, "is_connected", return_value=True),
-        patch.object(
-            SerialCommunicator,
-            "__init__",
-            lambda self, port, **k: setattr(self, "port_name", port),
-        ),
+    with port_opens(
+        AnsweringSerial(ready_ack_frame(revision=revision, identity="3.0.0:uno"))
     ):
         return SerialCommunicator._probe_port(
             port_name="/dev/null",

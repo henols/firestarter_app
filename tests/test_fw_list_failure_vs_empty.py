@@ -72,15 +72,6 @@ class _SuccessfulEmptyPageResponse:
     headers: dict = {}
 
 
-@pytest.fixture
-def runner() -> CliRunner:
-    """Fresh `CliRunner` per test. Unlike `test_cli_handlers.py`'s fixture of
-    the same name, this docstring makes no `mix_stderr` claim: Click 8.2
-    removed that kwarg, the installed Click is 8.5.0, and `result.stdout` /
-    `result.stderr` are always separate streams here."""
-    return CliRunner()
-
-
 def test_list_releases_returns_none_on_fetch_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

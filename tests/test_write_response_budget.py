@@ -45,12 +45,11 @@ same real part.
   the underlying read loop itself survives a long gap, with the number of
   simulated empty reads bounded so the test cannot spin.
 
-**Driver shape, modelled on ``tests/test_eprom_operations.py``'s
-``_drive_write_eprom_for_ack_check``:** every driver here feeds
-``MSG_INIT_DONE`` -> [``MSG_OK_REQ_DATA`` for ``write_eprom`` /
-``MSG_DATA_CHUNK`` for ``verify_eprom``, 202-01 D-01/D-02] -> ``MSG_MAIN_DONE``
--> ``MSG_END_DONE`` and patches ``SerialCommunicator.find_and_connect`` to
-return a ``make_comm()`` instance without touching a real serial port. A
+**Driver shape:** every driver here feeds ``MSG_INIT_DONE`` ->
+[``MSG_OK_REQ_DATA`` for ``write_eprom`` / ``MSG_DATA_CHUNK`` for
+``verify_eprom``, 202-01 D-01/D-02] -> ``MSG_MAIN_DONE`` -> ``MSG_END_DONE``
+and connects through ``connect_via`` to a real communicator on a fake serial
+port. A
 4-byte input file always fits in a single chunk at any buffer size this
 module exercises (the Uno floor is 512 B, decoded via
 ``_calculate_buffer_size`` when ``firmware_max_chunk`` is ``None``), so the
@@ -84,16 +83,16 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 from firestarter.config import ConfigManager
-from firestarter.messages import (
-    MSG_DATA_CHUNK,
-    MSG_END_DONE,
-    MSG_INIT_DONE,
-    MSG_MAIN_DONE,
-    MSG_OK_REQ_DATA,
-)
+from firestarter.messages import MSG_END_DONE, MSG_INIT_DONE, MSG_MAIN_DONE
 from firestarter.serial_comm import DEFAULT_RESPONSE_TIMEOUT, SerialCommunicator
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import (
+    build_frame,
+    connect_via,
+    fresh_serial_and_comm,
+    read_phase_frames,
+    write_success_frames,
+)
 
 # Real 27C part used throughout this module -- see the module docstring.
 _REAL_27C_CHIP = "w27c512"
@@ -153,37 +152,38 @@ def _main_phase_calls(calls: list) -> list:
     return calls[1:-1]
 
 
-def _fresh_serial_and_comm():
-    """Build an independent ``(fake_serial, make_comm)`` pair.
+def _drive_and_record_timeouts(make_comm, fake_serial, frames, call, max_chunk=None):
+    """Feed ``frames``, run ``call(operator, programmer_dict)`` against
+    ``_REAL_27C_CHIP`` through the fake port, and record every
+    ``get_response`` timeout.
 
-    Mirrors ``tests/conftest.py``'s ``fake_serial``/``make_comm`` fixtures
-    exactly, including the CAP-02/CAP-03 attributes this module's drivers
-    read. Needed only when a test drives two full writes/operations: a
-    successful drive's ``SerialCommunicator`` closes its fake serial port at
-    the end (``_FakeSerial.close()`` sets ``is_open = False``), so a second
-    drive cannot reuse the same fixture-injected ``fake_serial`` instance.
-    Precedent: ``tests/test_write_skip_sdp_unlock.py``'s own
-    ``_fresh_serial_and_comm``, same reasoning, same shape.
+    ``max_chunk`` sets ``firmware_max_chunk`` on the connected communicator
+    (what the ack's buffer-size field would have set).
+
+    Returns ``(ok, calls)``.
     """
-    serial = _FakeSerial()
+    from firestarter.chip_resolver import resolve_chip
+    from firestarter.database import EpromDatabase
+    from firestarter.eprom_operations import EpromOperator
 
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = serial
-        instance.port_name = "/dev/null"
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        instance._fault_inject_outgoing = None
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.firmware_identity = None
-        instance.hw_revision = None
-        instance.write_block_budget_s = None
-        instance.seen_message_ids = set()
-        return instance
+    for frame in frames:
+        fake_serial.feed(frame)
 
-    return serial, _factory
+    def _on_connect(comm):
+        if max_chunk is not None:
+            comm.firmware_max_chunk = max_chunk
+
+    programmer_dict = resolve_chip(
+        _REAL_27C_CHIP, db=EpromDatabase(skip_local_override=True)
+    )
+    calls: list = []
+    operator = EpromOperator(ConfigManager())
+    with (
+        connect_via(make_comm, on_connect=_on_connect),
+        _recording_get_response_patch(calls),
+    ):
+        ok = call(operator, programmer_dict)
+    return ok, calls
 
 
 def _drive_data_operation_and_record_timeouts(
@@ -195,75 +195,43 @@ def _drive_data_operation_and_record_timeouts(
     pulse_delay: int | None = None,
     max_chunk: int | None = None,
 ):
-    """Drive ``write_eprom`` or ``verify_eprom`` (both share
-    ``_main_phase_send_data``) against ``_REAL_27C_CHIP`` through a fake
-    serial port, recording every ``get_response`` timeout.
+    """Drive ``write_eprom`` or ``verify_eprom`` against ``_REAL_27C_CHIP``
+    with a 4-byte input file, recording every ``get_response`` timeout.
 
     Shared by the write-path positive proofs (``method_name="write_eprom"``)
-    and D-12's negative proof for verify (``method_name="verify_eprom"``) --
-    driving the SAME shared handler through the SAME driver is exactly what
-    proves the two methods diverge only in whether ``response_timeout`` is
-    threaded in.
+    and D-12's negative proof for verify (``method_name="verify_eprom"``).
 
     ``pulse_delay`` overrides the command's ``pulse-delay`` and
-    ``max_chunk`` sets ``firmware_max_chunk`` on the ``make_comm()``
-    instance (what the ack's buffer-size field would have set). Together
-    they fix the inputs of the host's own budget calculation
-    (``write_budget.block_budget_s``).
+    ``max_chunk`` sets ``firmware_max_chunk``. Together they fix the inputs
+    of the host's own budget calculation (``write_budget.block_budget_s``).
 
-    Feeds exactly ``MSG_INIT_DONE``, [``MSG_OK_REQ_DATA`` for
-    ``write_eprom`` / ``MSG_DATA_CHUNK`` for ``verify_eprom``],
-    ``MSG_MAIN_DONE``, ``MSG_END_DONE`` against a 4-byte input file -- one
-    MAIN-phase data round trip either way, so the recorded call list is
-    always exactly ``[INIT, MAIN, MAIN, END]`` regardless of which method is
-    driven (202-01 D-01/D-02: ``verify_eprom`` now drives
-    ``_main_phase_read_data``, a pull, not a push -- it never sends or
-    receives ``MSG_OK_REQ_DATA``. Feeding the file's own bytes back as the
-    one ``MSG_DATA_CHUNK`` payload keeps the driven verify a clean match, so
-    ``ok`` is genuinely 0 rather than incidentally passing this module's
-    unrelated timeout assertions while failing its own compare).
+    One MAIN-phase data round trip either way, so the recorded call list is
+    always exactly ``[INIT, MAIN, MAIN, END]`` (202-01 D-01/D-02:
+    ``verify_eprom`` drives ``_main_phase_read_data``, a pull -- it never
+    sends or receives ``MSG_OK_REQ_DATA``. Feeding the file's own bytes back
+    as the one ``MSG_DATA_CHUNK`` payload keeps the driven verify a clean
+    match, so ``ok`` is genuinely 0).
 
     Returns ``(ok, calls)``.
     """
-    from firestarter.chip_resolver import resolve_chip
-    from firestarter.database import EpromDatabase
-    from firestarter.eprom_operations import EpromOperator
-
     input_file = tmp_path / f"{_REAL_27C_CHIP}.bin"
     file_bytes = b"\x01\x02\x03\x04"
     input_file.write_bytes(file_bytes)
 
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
     if method_name == "verify_eprom":
-        fake_serial.feed(build_frame(MSG_DATA_CHUNK, file_bytes))
+        frames = read_phase_frames(file_bytes)
     else:
-        fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+        frames = write_success_frames()
 
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        instance = make_comm()
-        if max_chunk is not None:
-            instance.firmware_max_chunk = max_chunk
-        return instance
-
-    db = EpromDatabase(skip_local_override=True)
-    programmer_dict = resolve_chip(_REAL_27C_CHIP, db=db)
-    if pulse_delay is not None:
-        programmer_dict["pulse-delay"] = pulse_delay
-
-    calls: list = []
-    operator = EpromOperator(ConfigManager())
-    with (
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
-        ),
-        _recording_get_response_patch(calls),
-    ):
+    def _call(operator, programmer_dict):
+        if pulse_delay is not None:
+            programmer_dict["pulse-delay"] = pulse_delay
         method = getattr(operator, method_name)
-        ok = method(_REAL_27C_CHIP, programmer_dict, str(input_file))
-    return ok, calls
+        return method(_REAL_27C_CHIP, programmer_dict, str(input_file))
+
+    return _drive_and_record_timeouts(
+        make_comm, fake_serial, frames, _call, max_chunk=max_chunk
+    )
 
 
 def _drive_write_and_record_timeouts(
@@ -287,102 +255,46 @@ def _drive_write_and_record_timeouts(
     )
 
 
-def _drive_simple_operation_and_record_timeouts(
-    make_comm, fake_serial, *, operation: str
-):
+def _drive_erase_and_record_timeouts(make_comm, fake_serial):
     """Drive ``erase_eprom`` (falls through to ``_main_phase_simple`` -- no
-    ``main_phase_handler``, no data file, no ``MSG_OK_REQ_DATA``) against
-    ``_REAL_27C_CHIP``, recording every ``get_response`` timeout. D-12's
-    negative proof for the OTHER shared machinery ``write_eprom`` never
-    touches at all.
+    ``main_phase_handler``, no data file, no ``MSG_OK_REQ_DATA``), recording
+    every ``get_response`` timeout. D-12's negative proof for the OTHER
+    shared machinery ``write_eprom`` never touches at all.
 
-    202-05 D-02: ``check_eprom_blank`` no longer belongs here -- it shares
-    ``_main_phase_read_data`` with ``verify_eprom``/``read_eprom`` now (see
-    ``_drive_blank_check_and_record_timeouts`` below).
-
-    Feeds exactly ``MSG_INIT_DONE``, ``MSG_MAIN_DONE``, ``MSG_END_DONE`` --
-    the recorded call list is always exactly ``[INIT, MAIN, END]``.
-
-    Returns ``(ok, calls)``.
+    The recorded call list is always exactly ``[INIT, MAIN, END]``.
     """
-    from firestarter.chip_resolver import resolve_chip
-    from firestarter.database import EpromDatabase
-    from firestarter.eprom_operations import EpromOperator
-
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    db = EpromDatabase(skip_local_override=True)
-    programmer_dict = resolve_chip(_REAL_27C_CHIP, db=db)
-
-    calls: list = []
-    operator = EpromOperator(ConfigManager())
-    with (
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
-        ),
-        _recording_get_response_patch(calls),
-    ):
-        method = getattr(operator, operation)
-        ok = method(_REAL_27C_CHIP, programmer_dict)
-    return ok, calls
+    frames = [
+        build_frame(MSG_INIT_DONE, b""),
+        build_frame(MSG_MAIN_DONE, b""),
+        build_frame(MSG_END_DONE, b""),
+    ]
+    return _drive_and_record_timeouts(
+        make_comm,
+        fake_serial,
+        frames,
+        lambda operator, pd: operator.erase_eprom(_REAL_27C_CHIP, pd),
+    )
 
 
 def _drive_blank_check_and_record_timeouts(make_comm, fake_serial):
-    """Drive ``check_eprom_blank`` against ``_REAL_27C_CHIP``, recording
-    every ``get_response`` timeout.
+    """Drive ``check_eprom_blank``, recording every ``get_response`` timeout.
 
-    202-05 D-02: ``check_eprom_blank`` now shares ``_main_phase_read_data``
-    with ``verify_eprom``/``read_eprom`` (it composes COMMAND_READ, not a
-    payload-free simple command) -- it no longer belongs to the
-    ``_main_phase_simple`` group ``erase_eprom`` alone now occupies. This
-    driver mirrors ``_drive_data_operation_and_record_timeouts``'s verify
-    shape: an explicit ``size_str`` bounds the read to one small chunk, and
-    the fed ``MSG_DATA_CHUNK`` is all-0xFF so the driven blank-check is
-    genuinely blank (``ok == 0``) rather than incidentally passing this
-    module's timeout assertions while failing its own compare.
-
-    Feeds exactly ``MSG_INIT_DONE``, ``MSG_DATA_CHUNK`` (4 bytes of 0xFF),
-    ``MSG_MAIN_DONE``, ``MSG_END_DONE`` -- the recorded call list is
-    ``[INIT, MAIN, MAIN, END]``, the same shape ``_main_phase_calls``
+    202-05 D-02: ``check_eprom_blank`` shares ``_main_phase_read_data`` with
+    ``verify_eprom``/``read_eprom``. An explicit ``size_str`` bounds the read
+    to one small chunk, and the fed ``MSG_DATA_CHUNK`` is all-0xFF so the
+    driven blank-check is genuinely blank (``ok == 0``). The recorded call
+    list is ``[INIT, MAIN, MAIN, END]``, the shape ``_main_phase_calls``
     expects.
-
-    Returns ``(ok, calls)``.
     """
-    from firestarter.chip_resolver import resolve_chip
-    from firestarter.database import EpromDatabase
-    from firestarter.eprom_operations import EpromOperator
-
     blank_bytes = b"\xff\xff\xff\xff"
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, blank_bytes))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
-    db = EpromDatabase(skip_local_override=True)
-    programmer_dict = resolve_chip(_REAL_27C_CHIP, db=db)
-
-    calls: list = []
-    operator = EpromOperator(ConfigManager())
-    with (
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
+    return _drive_and_record_timeouts(
+        make_comm,
+        fake_serial,
+        read_phase_frames(blank_bytes),
+        lambda operator, pd: operator.check_eprom_blank(
+            _REAL_27C_CHIP, pd, size_str=str(len(blank_bytes))
         ),
-        _recording_get_response_patch(calls),
-    ):
-        ok = operator.check_eprom_blank(
-            _REAL_27C_CHIP, programmer_dict, size_str=str(len(blank_bytes))
-        )
-    return ok, calls
+    )
 
 
 # 0x07 at 1000 us on a 1024-byte block: 25 pulses x 1000 us x 1024 B =
@@ -487,16 +399,14 @@ def test_non_write_paths_keep_default_timeout(tmp_path, make_comm, fake_serial) 
         f"board, not a resolved override; got {verify_main_timeouts}"
     )
 
-    blank_serial, blank_comm = _fresh_serial_and_comm()
+    blank_serial, blank_comm = fresh_serial_and_comm()
     blank_ok, blank_calls = _drive_blank_check_and_record_timeouts(
         blank_comm, blank_serial
     )
     assert blank_ok == 0, "202-05 D-10: the driven blank-check must report blank (0)"
 
-    erase_serial, erase_comm = _fresh_serial_and_comm()
-    erase_ok, erase_calls = _drive_simple_operation_and_record_timeouts(
-        erase_comm, erase_serial, operation="erase_eprom"
-    )
+    erase_serial, erase_comm = fresh_serial_and_comm()
+    erase_ok, erase_calls = _drive_erase_and_record_timeouts(erase_comm, erase_serial)
     assert erase_ok is True, "D-12: the driven erase must complete successfully"
 
     for label, calls in (

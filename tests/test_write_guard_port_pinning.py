@@ -13,9 +13,9 @@ prove board A's target region blank and the write could then land on board
 B -- writing over a chip that was never actually checked.
 
 This module proves the fix end to end, through the genuine `write_eprom`
-path (no mocking of `write_eprom` itself), using the same
-`_FakeSerial`/`find_and_connect`-patching pattern `test_write_blank_guard.py`
-already established.
+path (no mocking of `write_eprom` itself). The fake `find_and_connect` here
+is hand-written, not `connect_via`: it decides which board answers from the
+port keywords the operator passes, which `connect_via` does not see.
 """
 
 from __future__ import annotations
@@ -27,36 +27,17 @@ from firestarter.constants import COMMAND_READ, COMMAND_WRITE
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import ProgrammerNotFoundError
 
-from .conftest import _FakeSerial
-from .test_write_blank_guard import (
-    _m27c512_data,
-    _read_phase_frames,
-    _write_phase_frames,
-)
+from .conftest import fresh_serial_and_comm, read_phase_frames, write_success_frames
+from .test_write_blank_guard import _m27c512_data
 
 
-def _comm_factory(serial: _FakeSerial, port_name: str):
-    """Same shape as `test_write_blank_guard._comm_factory_for`, but with a
-    caller-chosen `port_name` -- that file's helper hardcodes `/dev/null`
-    for every connection, which cannot distinguish "board A" from "board B"."""
-    from firestarter.serial_comm import SerialCommunicator
-
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = serial
-        instance.port_name = port_name
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        instance._fault_inject_outgoing = None
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.firmware_identity = None
-        instance.hw_revision = None
-        instance.seen_message_ids = set()
-        return instance
-
-    return _factory
+def _board(port_name: str, frames: list[bytes]):
+    """A communicator factory for one board on `port_name` that replies with
+    `frames`."""
+    serial, factory = fresh_serial_and_comm(port_name=port_name)
+    for frame in frames:
+        serial.feed(frame)
+    return factory
 
 
 def test_write_connect_pins_to_guard_resolved_port_and_fails_closed_when_it_drops(
@@ -89,15 +70,8 @@ def test_write_connect_pins_to_guard_resolved_port_and_fails_closed_when_it_drop
     payload = b"\xaa" * 64
     region_payload = b"\xff" * 64  # blank across the whole target region
 
-    board_a_read_serial = _FakeSerial()
-    for frame in _read_phase_frames(region_payload):
-        board_a_read_serial.feed(frame)
-    board_a_comm_factory = _comm_factory(board_a_read_serial, "/dev/ttyACM0")
-
-    board_b_write_serial = _FakeSerial()
-    for frame in _write_phase_frames():
-        board_b_write_serial.feed(frame)
-    board_b_comm_factory = _comm_factory(board_b_write_serial, "/dev/ttyACM1")
+    board_a_comm_factory = _board("/dev/ttyACM0", read_phase_frames(region_payload))
+    board_b_comm_factory = _board("/dev/ttyACM1", write_success_frames())
 
     calls: list[tuple[int, dict]] = []
 
@@ -171,15 +145,8 @@ def test_write_connect_uses_guard_port_when_it_is_still_reachable(tmp_path) -> N
     payload = b"\xaa" * 64
     region_payload = b"\xff" * 64  # blank across the whole target region
 
-    board_a_read_serial = _FakeSerial()
-    for frame in _read_phase_frames(region_payload):
-        board_a_read_serial.feed(frame)
-    board_a_read_factory = _comm_factory(board_a_read_serial, "/dev/ttyACM0")
-
-    board_a_write_serial = _FakeSerial()
-    for frame in _write_phase_frames():
-        board_a_write_serial.feed(frame)
-    board_a_write_factory = _comm_factory(board_a_write_serial, "/dev/ttyACM0")
+    board_a_read_factory = _board("/dev/ttyACM0", read_phase_frames(region_payload))
+    board_a_write_factory = _board("/dev/ttyACM0", write_success_frames())
 
     calls: list[tuple[int, dict]] = []
 

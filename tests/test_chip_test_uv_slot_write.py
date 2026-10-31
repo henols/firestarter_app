@@ -23,10 +23,9 @@ working tooling.
 Test taxonomy:
 
   Operator-double harness
-    _REAL_DB, _OPERATOR_METHODS, _result -- copied in shape from
-    tests/test_chip_test_sdp_leg.py:219-262, not imported (these names are
-    module-private in a large sibling test module). `_OPERATOR_METHODS`
-    backs leg 12's `Mock(spec=_OPERATOR_METHODS)` -- no chip state is
+    REAL_DB (tests/plan_corpus.py), OPERATOR_METHODS
+    (tests/fixtures/operator_doubles.py), _result. `OPERATOR_METHODS`
+    backs leg 12's `Mock(spec=OPERATOR_METHODS)` -- no chip state is
     needed there, and `spec=` is what makes a typo'd method raise
     `AttributeError` rather than silently answering truthy, the
     absent-chip false-green family this project refuses.
@@ -78,23 +77,11 @@ from unittest.mock import Mock
 
 from firestarter import chip_test as ct
 from firestarter import submit as sub
-from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import AutoCapture, DiagnosticReport, TransportHealth
 
 from .fake_chip import WriteInitPreflightChip
-
-_REAL_DB = EpromDatabase(skip_local_override=True)
-
-_OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-    "sdp_lock",
-    "sdp_unlock",
-]
+from .fixtures.operator_doubles import OPERATOR_METHODS
+from .plan_corpus import REAL_DB
 
 
 def _result(results, op):
@@ -110,7 +97,7 @@ def _seeded_m27c512_double() -> tuple[WriteInitPreflightChip, dict]:
     write slot at the HIGH end of the device stays virgin). This is UV-01's
     precondition, and the same shape as Phase 83's bench-proven 16-byte
     write at `0x0000`."""
-    full = _REAL_DB.get_eprom("m27c512") or {}
+    full = REAL_DB.get_eprom("m27c512") or {}
     mem_size = int(full.get("memory-size", 0) or 0)
     chip = WriteInitPreflightChip(mem_size, uv=True)
     chip.data[0x0000:0x0100] = bytes(range(256))
@@ -140,11 +127,11 @@ def test_the_double_refuses_a_non_blank_write_without_the_flag() -> None:
     This leg therefore seeds its own double with the non-blank byte INSIDE
     the write's target region, which is what a region-scoped refusal
     actually requires."""
-    full = _REAL_DB.get_eprom("m27c512") or {}
+    full = REAL_DB.get_eprom("m27c512") or {}
     mem_size = int(full.get("memory-size", 0) or 0)
     chip = WriteInitPreflightChip(mem_size, uv=True)
     chip.data[0xFF00:0xFF10] = bytes(range(16))
-    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    ed = ct.resolve_chip("m27c512", db=REAL_DB)
     fh = tempfile.NamedTemporaryFile(prefix="p179_", suffix=".bin", delete=False)
     fh.write(ct.generate_pattern(0xFF00, 256))
     fh.close()
@@ -164,7 +151,7 @@ def test_the_double_accepts_a_non_blank_write_with_the_flag() -> None:
     modelled pre-3.1.0 firmware pre-flight is genuinely bypassed, not
     merely reported as bypassed."""
     chip, _full = _seeded_m27c512_double()
-    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    ed = ct.resolve_chip("m27c512", db=REAL_DB)
     fh = tempfile.NamedTemporaryFile(prefix="p179_", suffix=".bin", delete=False)
     fh.write(ct.generate_pattern(0xFF00, 256))
     fh.close()
@@ -192,8 +179,8 @@ def test_uv_slot_write_on_a_non_blank_part_reaches_pass_with_run_count_two() -> 
     to_dict()` carries `run_status`, not `overall_verdict`; the only route
     to the world is `submit.build_title`."""
     chip, full = _seeded_m27c512_double()
-    plan = ct.derive_plan("m27c512", _REAL_DB, write_scope="full")
-    results = ct.run_plan(plan, chip, _REAL_DB, runs=2)
+    plan = ct.derive_plan("m27c512", REAL_DB, write_scope="full")
+    results = ct.run_plan(plan, chip, REAL_DB, runs=2)
     write = _result(results, ct.OP_WRITE)
     verify = _result(results, ct.OP_VERIFY)
     assert write.verdict == ct.VERDICT_OK
@@ -201,7 +188,7 @@ def test_uv_slot_write_on_a_non_blank_part_reaches_pass_with_run_count_two() -> 
     assert verify.verdict == ct.VERDICT_OK
     assert verify.run_count == 2
     assert sub.overall_verdict(results) == "PASS"
-    prog = _REAL_DB.convert_to_programmer(full)
+    prog = REAL_DB.convert_to_programmer(full)
     report = DiagnosticReport(
         auto_capture=AutoCapture(
             host_version="0.0.0",
@@ -228,8 +215,8 @@ def test_the_flag_reaches_the_wire_on_every_cycle() -> None:
     history, `[True, True]` from a `current_source == "probe read"`
     equality that never matches (see the anti-vacuity leg below)."""
     chip, _full = _seeded_m27c512_double()
-    plan = ct.derive_plan("m27c512", _REAL_DB, write_scope="full")
-    ct.run_plan(plan, chip, _REAL_DB, runs=2)
+    plan = ct.derive_plan("m27c512", REAL_DB, write_scope="full")
+    ct.run_plan(plan, chip, REAL_DB, runs=2)
     assert chip.blank_check_requested_seen == [False, False]
     assert chip.write_flags_seen == [0, 0]
 
@@ -243,8 +230,8 @@ def test_the_blank_check_adjudication_is_what_lifts_the_run_to_pass() -> None:
     `PASS` above was produced by the adjudication, not by the run happening
     to contain no `BAD` for some other reason."""
     chip, _full = _seeded_m27c512_double()
-    plan = ct.derive_plan("m27c512", _REAL_DB, write_scope="full")
-    results = ct.run_plan(plan, chip, _REAL_DB, runs=2)
+    plan = ct.derive_plan("m27c512", REAL_DB, write_scope="full")
+    results = ct.run_plan(plan, chip, REAL_DB, runs=2)
     assert sub.overall_verdict(results) == "PASS"
     forced = copy.deepcopy(results)
     _result(forced, ct.OP_BLANK_CHECK).verdict = ct.VERDICT_BAD
@@ -259,8 +246,8 @@ def test_uv_slot_write_preserves_the_not_blank_finding() -> None:
     `error_code == 176` (`MSG_ERR_NOT_BLANK`), and
     `submit._reason_text(verdict, reason)` returns the reason VERBATIM."""
     chip, _full = _seeded_m27c512_double()
-    plan = ct.derive_plan("m27c512", _REAL_DB, write_scope="full")
-    results = ct.run_plan(plan, chip, _REAL_DB, runs=2)
+    plan = ct.derive_plan("m27c512", REAL_DB, write_scope="full")
+    results = ct.run_plan(plan, chip, REAL_DB, runs=2)
     blank_check = _result(results, ct.OP_BLANK_CHECK)
     assert blank_check.verdict == ct.VERDICT_SKIPPED
     assert blank_check.reason
@@ -303,7 +290,7 @@ def test_uv_slot_policy_without_the_witness_does_not_set_the_flag() -> None:
     write_context = ct.WriteContext()
     write_context.cycle_targets = [target]
     write_context.cycle_index = 0
-    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    ed = ct.resolve_chip("m27c512", db=REAL_DB)
     chip = WriteInitPreflightChip(65536, uv=True)
     ct._dispatch_multi_run(
         ct.OP_WRITE,
@@ -351,7 +338,7 @@ def test_fixed_policy_with_the_witness_sets_the_flag() -> None:
     write_context = ct.WriteContext()
     write_context.cycle_targets = [target]
     write_context.cycle_index = 0
-    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    ed = ct.resolve_chip("m27c512", db=REAL_DB)
     chip = WriteInitPreflightChip(65536, uv=True)
     ct._dispatch_multi_run(
         ct.OP_WRITE,
@@ -444,11 +431,11 @@ def test_a_non_uv_plan_never_sets_the_skip_blank_check_flag() -> None:
     equally well. A full-scope two-cycle run on `at28c256` (non-UV) against
     a `WriteInitPreflightChip` constructed with `uv=False` records only `0`
     in `write_flags_seen`."""
-    full = _REAL_DB.get_eprom("at28c256") or {}
+    full = REAL_DB.get_eprom("at28c256") or {}
     mem_size = int(full.get("memory-size", 0) or 0)
     chip = WriteInitPreflightChip(mem_size, uv=False)
-    plan = ct.derive_plan("at28c256", _REAL_DB, write_scope="full")
-    ct.run_plan(plan, chip, _REAL_DB, runs=2)
+    plan = ct.derive_plan("at28c256", REAL_DB, write_scope="full")
+    ct.run_plan(plan, chip, REAL_DB, runs=2)
     assert set(chip.write_flags_seen) == {0}
 
 
@@ -456,13 +443,13 @@ def test_a_non_uv_blank_check_failure_is_still_bad() -> None:
     """The adjudication must fire ONLY on a UV plan's pre-write blank-check
     (`Step.uv_prewrite` at its `False` default here) -- a non-UV part that
     is not blank after an erase is still a real tool-health failure. Uses
-    `Mock(spec=_OPERATOR_METHODS)` rather than a chip-modelling double: no
+    `Mock(spec=OPERATOR_METHODS)` rather than a chip-modelling double: no
     chip state is needed, and `spec=` keeps a typo'd operator method an
     `AttributeError` rather than a silently-truthy `Mock`."""
-    operator = Mock(spec=_OPERATOR_METHODS)
+    operator = Mock(spec=OPERATOR_METHODS)
     # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
     operator.check_eprom_blank.return_value = 1
     step = ct.Step(op=ct.OP_BLANK_CHECK, supported=True, reason="")
-    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    ed = ct.resolve_chip("m27c512", db=REAL_DB)
     result = ct._dispatch_step("m27c512", step, ed, operator, runs=1)
     assert result.verdict == ct.VERDICT_BAD

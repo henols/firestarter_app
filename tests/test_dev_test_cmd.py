@@ -61,7 +61,6 @@ from firestarter.cli_handlers import (
 )
 from firestarter.config import get_config_dir
 from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
-from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import NOT_REPORTED
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import (
@@ -81,8 +80,7 @@ from .fixtures.synthetic_nonzero_chip_id import (
     SYNTHETIC_CHIP_NAME,
     SyntheticNonzeroChipIdDatabase,
 )
-
-_REAL_DB = EpromDatabase(skip_local_override=True)
+from .plan_corpus import REAL_DB
 
 _CHIP_NO_ID = "M8720"
 # AS29F002T has a real chip-id in the DB, so a mismatched detected id
@@ -94,19 +92,6 @@ _CHIP_WITH_ID = "AS29F002T"
 # is_uv_eprom) -- the one family `dev_test`'s scope rule resolves to "partial".
 _CHIP_UV = "AM27512"
 _CHIP_ALLOW = "AT28C256"
-
-
-@pytest.fixture(autouse=True)
-def _isolate_config_dir(tmp_path_factory, monkeypatch):
-    """Point FIRESTARTER_CONFIG_DIR at a throwaway dir for every `dev test`.
-
-    `dev test` ALWAYS persists its report to <config dir>/reports
-    (config.get_config_dir()) -- there is no output-directory override flag
-    any more (D-05, this plan). A fresh dir per test (from tmp_path_factory, NOT
-    the shared `tmp_path` fixture -- tests here assert on the cwd `tmp_path`
-    being empty) keeps the suite hermetic; tests that check the report
-    location read the same env var back via get_config_dir()."""
-    monkeypatch.setenv("FIRESTARTER_CONFIG_DIR", str(tmp_path_factory.mktemp("fs_cfg")))
 
 
 def make_clean_operator() -> Mock:
@@ -524,11 +509,6 @@ def test_make_hardware_manager_returns_a_spec_bound_double() -> None:
     assert isinstance(identity, ProgrammerIdentity)
     assert identity.hw_revision == "Rev 2.0-class"
     assert identity.fw_board_identity == "3.0.0b19:leonardo"
-
-
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
 
 
 def _reports_dir() -> Path:
@@ -1081,7 +1061,7 @@ class TestReportDestination:
         )
         result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
-        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, REAL_DB)
         assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
 
         md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
@@ -1134,7 +1114,7 @@ class TestReportDestination:
         )
         result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
-        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, REAL_DB)
         assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
         assert REASON_WRONG_PROTOCOL in expected_reason, (
             "fixture setup error: _CHIP_NO_ID's live reason must be the "
@@ -1821,7 +1801,7 @@ class TestWritePassCountDerivedFromLivePlanD09:
         literal here -- if this ever measures a different number than
         `_ALWAYS_WRITES_PASS_COUNT`, the constant is wrong, not this test.
         """
-        plan = derive_plan(_CHIP_ALLOW, _REAL_DB, write_scope="full")
+        plan = derive_plan(_CHIP_ALLOW, REAL_DB, write_scope="full")
         runs = _DEFAULT_RUNS
 
         write_passes = 0
@@ -1940,7 +1920,7 @@ def test_all_sdp_allow_chips_have_zero_chip_id_measured_live() -> None:
     of them and `_id_step_closes_gate` never fires on an NA."""
     allow_count = 0
     nonzero_chip_id_allow_chips = []
-    for full in _REAL_DB.get_eproms():
+    for full in REAL_DB.get_eproms():
         name = full["name"]
         allowed, _reason = sdp_capability_for_entry(full, name)
         if not allowed:
@@ -2149,7 +2129,7 @@ class TestLaunderingRoutesR3R4:
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
         result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
-        allowed, _expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        allowed, _expected_reason = sdp_capability(_CHIP_NO_ID, REAL_DB)
         assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
         data = _load_report(_CHIP_NO_ID)
         steps = {s["op"]: s for s in data["steps"]}

@@ -95,21 +95,10 @@ def test_a_firmware_config_refusal_exits_non_zero_with_its_text(
     setup. The command must fail with that text, not wait for a timeout."""
     fake_serial.feed(build_frame(MSG_ERR_PARSE_CFG, b""))
 
-    def _init(self, port=None, baud_rate=None, **kwargs):
-        self.connection = fake_serial
-        self.port_name = port
-        self.baud_rate = 250000
-        self.timeout = 0.1
-        self.programmer_info = None
-        self._fault_inject_outgoing = None
-        self.firmware_buffer_size = None
-        self.firmware_max_chunk = None
-        self.firmware_identity = None
-        self.hw_revision = None
-        self.seen_message_ids = set()
-        self.setup_refusal = None
-
-    monkeypatch.setattr(SerialCommunicator, "__init__", _init)
+    monkeypatch.setattr(
+        "firestarter.serial_comm.serial.Serial", lambda *a, **kw: fake_serial
+    )
+    monkeypatch.setattr("firestarter.serial_comm.CONNECTION_STABILIZE_DELAY", 0)
     # The bytes stand for the reply to the command, so the pre-send drain
     # must not eat them.
     monkeypatch.setattr(

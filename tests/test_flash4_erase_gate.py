@@ -29,48 +29,33 @@ from click.testing import CliRunner
 
 from firestarter import cli_handlers
 from firestarter.chip_resolver import resolve_chip
-from firestarter.cli_handlers import AppContext, cli
-from firestarter.config import ConfigManager
+from firestarter.cli_handlers import cli
 from firestarter.constants import COMMAND_ERASE, COMMAND_WRITE, FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     FirmwareOutdatedError,
 )
-from firestarter.firmware import FirmwareManager
 from firestarter.flash4_erase_gate import (
     FLASH4_PROTOCOL_ID,
     firmware_refusal_text,
     is_flash4,
     needs_newer_firmware,
 )
-from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_OK_READY
 
-from .conftest import build_frame
+from .conftest import build_frame, make_app_context
 
 NO_PIN1_BUS_CONFIG = {"bus": [0, 1, 2]}
-
-
-def _cli_app_context(eprom_operator):
-    return AppContext(
-        db=Mock(),
-        config_manager=ConfigManager(),
-        eprom_operator=eprom_operator,
-        hardware_manager=Mock(spec=HardwareManager),
-        firmware_manager=Mock(spec=FirmwareManager),
-        eprom_presenter=Mock(spec=EpromConsolePresenter),
-    )
 
 
 def test_cli_erase_on_flash4_part_sends_can_erase():
     runner = CliRunner()
     eprom_operator = Mock(spec=EpromOperator)
     eprom_operator.erase_eprom.return_value = True
-    app = _cli_app_context(eprom_operator)
+    app = make_app_context(db=Mock(), eprom_operator=eprom_operator)
     with patch.object(
         cli_handlers,
         "resolve_chip",
@@ -237,7 +222,7 @@ def test_cli_erase_on_non_flash4_part_still_reaches_operator():
     runner = CliRunner()
     eprom_operator = Mock(spec=EpromOperator)
     eprom_operator.erase_eprom.return_value = True
-    app = _cli_app_context(eprom_operator)
+    app = make_app_context(db=Mock(), eprom_operator=eprom_operator)
     with patch.object(
         cli_handlers,
         "resolve_chip",

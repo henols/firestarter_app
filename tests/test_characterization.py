@@ -50,21 +50,17 @@ import shutil
 import subprocess
 import sys  # noqa: F401
 import tempfile
-from pathlib import Path  # noqa: F401
 from unittest.mock import MagicMock
 
 import pytest
 
 from firestarter.messages import (
-    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_READY,  # noqa: F401
-    MSG_OK_REQ_DATA,
 )
 
-from .conftest import build_frame
+from .conftest import build_frame, read_phase_frames, write_success_frames
 
 # Entry-point resolution
 
@@ -624,26 +620,16 @@ def test_read_happy_path(make_comm, fake_serial, tmp_path):
     """
     comm = make_comm()
 
-    # Feed INIT done
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    # Feed a data chunk frame: MSG_DATA_CHUNK carries raw bytes as 'bytes' param.
-    # build_frame(MSG_DATA_CHUNK, payload_bytes) encodes them as the frame body.
     chunk_data = b"\xde\xad\xbe\xef"
-    fake_serial.feed(build_frame(MSG_DATA_CHUNK, chunk_data))
-    # Feed MAIN done (signals end of data transfer)
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    # Feed END done
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in read_phase_frames(chunk_data):
+        fake_serial.feed(frame)
 
-    output_file = tmp_path / "out.bin"  # noqa: F841
     received = bytearray()
 
     def _collect_data(address, data_chunk):
         received.extend(data_chunk)
 
     operator = _make_operator_with_comm(comm)
-
-    from firestarter.eprom_operations import EpromOperator  # noqa: F401
 
     success, msg = operator._run_state_machine(
         "READ",
@@ -672,18 +658,10 @@ def test_write_happy_path(make_comm, fake_serial, tmp_path):
     file_data = b"\x01\x02\x03\x04"
     input_file.write_bytes(file_data)
 
-    # Feed INIT done
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    # Feed one OK (firmware requests data block)
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
-    # Feed MAIN done (firmware signals write complete after receiving data)
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    # Feed END done
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in write_success_frames():
+        fake_serial.feed(frame)
 
     operator = _make_operator_with_comm(comm)
-
-    from firestarter.eprom_operations import EpromOperator  # noqa: F401
 
     success, msg = operator._run_state_machine(
         "WRITE",
@@ -705,10 +683,8 @@ def test_verify_happy_path(make_comm, fake_serial, tmp_path):
     file_data = b"\xaa\xbb\xcc\xdd"
     input_file.write_bytes(file_data)
 
-    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
-    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
-    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
-    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+    for frame in write_success_frames():
+        fake_serial.feed(frame)
 
     operator = _make_operator_with_comm(comm)
 

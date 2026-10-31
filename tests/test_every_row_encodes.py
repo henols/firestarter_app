@@ -18,25 +18,24 @@ import pytest
 from firestarter.chip_resolver import resolve_chip
 from firestarter.command_codec import encode_command
 from firestarter.constants import COMMAND_READ
-from firestarter.database import EpromDatabase
 from firestarter.exceptions import ChipNotImplementedError
 
-_DB = EpromDatabase(skip_local_override=True)
+from .plan_corpus import REAL_DB
 
 
 def _qualified_names() -> list[str]:
     names = []
-    for manufacturer, ics in _DB.proms.items():
+    for manufacturer, ics in REAL_DB.proms.items():
         for ic in ics:
             alias = ic.get("part_number", "").split(",")[0].strip()
-            names.append(_DB.qualified_chip_name(alias, ic, manufacturer))
+            names.append(REAL_DB.qualified_chip_name(alias, ic, manufacturer))
     return names
 
 
 @pytest.mark.parametrize("name", _qualified_names())
 def test_a_resolvable_row_encodes(name: str) -> None:
     try:
-        data = resolve_chip(name, db=_DB)
+        data = resolve_chip(name, db=REAL_DB)
     except ChipNotImplementedError:
         return
     encode_command({**data, "cmd": COMMAND_READ})
