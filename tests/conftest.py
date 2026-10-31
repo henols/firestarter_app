@@ -4,27 +4,14 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Shared pytest fixtures for the firestarter_app test suite.
+Shared pytest fixtures and helpers for the firestarter_app test suite.
 
-This file is the host sub-repo's pytest entry point (first-ever pytest
-infrastructure landed by Phase 6 Plan 03). It exposes:
-
-    MAGIC_PREAMBLE_REF  — independent 4-byte magic preamble reference.
-    _ref_crc8_ccitt     — table-free CRC8 reference (poly 0x07, seed 0x00).
-    build_frame         — helper that assembles an ID-encoded wire frame.
-    fake_serial         — fixture: BytesIO-backed serial port stand-in.
-    make_comm           — fixture: factory for a SerialCommunicator bypassing
-                          real serial I/O (uses __new__ + injected fake serial).
-    collect_ignore      — Phase 127 / Plan 127-06 (HOST-04): conditional
-                          collection gate excluding
-                          tests/test_pyusb_api_surface.py when pyusb is not
-                          importable.
-    make_app_context    — Phase 132 Plan 05 (RETIRE-05, D-10): typed
-                          keyword-only AppContext factory -- the shared
-                          replacement for the four surviving per-module
-                          untyped `**overrides` (typed `object`) copies.
-    app_context         — fixture: thin no-argument wrapper around
-                          make_app_context() for the common case.
+Wire: MAGIC_PREAMBLE_REF, _ref_crc8_ccitt, id_frame_body, build_frame,
+decoded_response, write_success_frames, read_phase_frames.
+Port and comm: fake_serial, make_comm, comm_on, fresh_serial_and_comm,
+connect_via.
+CLI: runner, make_app_context, adapter_required_db.
+Autouse: _offline_gh, _short_drain_window, _isolated_config.
 
 The reference CRC implementation here is deliberately table-free (the
 production code in firestarter.serial_comm uses a 256-byte lookup table).
@@ -170,17 +157,20 @@ def _ref_crc8_ccitt(data: bytes) -> int:
     return crc
 
 
+def id_frame_body(msg_id: int, params: bytes = b"") -> bytes:
+    """The body of one id frame: id | params | crc8 (reference CRC)."""
+    body = bytes([msg_id]) + params
+    return body + bytes([_ref_crc8_ccitt(body)])
+
+
 def build_frame(msg_id: int, params: bytes) -> bytes:
     """Assemble a wire frame: magic | len_u16 | id | params | crc | 0x0A.
 
-    `len` (u16, big-endian) counts (id + params + crc) per Phase 8 W-04.
-    The trailing 0x0A is a re-sync anchor (not a delimiter — length is
-    authoritative).
+    `len` (u16, big-endian) counts id + params + crc. The trailing 0x0A is a
+    re-sync anchor (not a delimiter: the length is authoritative).
     """
-    body = bytes([msg_id]) + params
-    crc = _ref_crc8_ccitt(body)
-    length = len(body) + 1  # id + params + crc
-    return MAGIC_PREAMBLE_REF + struct.pack(">H", length) + body + bytes([crc, 0x0A])
+    body = id_frame_body(msg_id, params)
+    return MAGIC_PREAMBLE_REF + struct.pack(">H", len(body)) + body + b"\x0a"
 
 
 def decoded_response(msg_id: int, params: bytes):
@@ -188,8 +178,7 @@ def decoded_response(msg_id: int, params: bytes):
     from firestarter.codec import decode_id_frame
     from firestarter.frame_parser import Response
 
-    body = bytes([msg_id]) + params
-    body += bytes([_ref_crc8_ccitt(body)])
+    body = id_frame_body(msg_id, params)
     decoded = decode_id_frame(len(body), body)
     assert decoded is not None, f"id 0x{msg_id:02x} did not decode"
     return Response(
@@ -454,19 +443,6 @@ def make_app_context(
         firmware_manager=cast("FirmwareManager", firmware_manager),
         eprom_presenter=cast("EpromConsolePresenter", eprom_presenter),
     )
-
-
-@pytest.fixture
-def app_context() -> AppContext:
-    """Return a default AppContext for the common no-argument case.
-
-    Serves only the no-variation case; per-test variation (a real operator,
-    a fixed port, a caller-supplied database) goes through
-    `make_app_context(...)` directly -- that variation is exactly why the
-    four surviving test modules kept their own local factory instead of
-    being forced onto a single shared fixture (D-10).
-    """
-    return make_app_context()
 
 
 # The shipped database has no adapter-required row since the DIP24_2816 family
