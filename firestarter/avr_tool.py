@@ -154,19 +154,3 @@ class Avrdude:
         """Test the connection to the microcontroller."""
         options = self.build_options(extra_flags)
         return self._execute_command(options)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
-    avrdude = Avrdude(
-        partno="atmega328p",
-        programmer_id="arduino",
-        baud_rate=115200,
-        port="/dev/ttyACM0",
-        # avrdude_path="/home/henrik/.platformio/packages/tool-avrdude@1.60300.200527",
-    )
-
-    # Test connection to the microcontroller
-    stderr, returncode = avrdude.test_connection()
-    logger.error(stderr)
