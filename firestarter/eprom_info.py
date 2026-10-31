@@ -11,7 +11,6 @@ import copy
 import json
 import logging
 import re
-from typing import Dict  # noqa: UP035
 
 from firestarter.database import EpromDatabase, format_mv  # Changed import
 from firestarter.ic_layout import (
@@ -92,7 +91,7 @@ class EpromConsolePresenter:
     def _json_output_formatted(self, data: dict) -> str:
         """
         Formats a dictionary as a pretty-printed JSON string with special formatting for lists of numbers.
-        """  # noqa: E501
+        """
         json_str = json.dumps(data, indent=4)
         # Compact lists of numbers (e.g., bus configurations)
         json_str = re.sub(
@@ -119,7 +118,7 @@ class EpromConsolePresenter:
         manufacturer: str | None,  # Pre-fetched from db.get_eprom_config()
         include_export_config: bool = False,
         include_adapter: bool = False,
-    ) -> Dict | None:  # noqa: UP006
+    ) -> dict | None:
         """
         Prepares a comprehensive data structure for a specific EPROM,
         ready for presentation. It fetches raw specifications, constructs
@@ -211,10 +210,10 @@ class EpromConsolePresenter:
 
     def _prepare_export_configuration_data(
         self,
-        raw_config_data: Dict | None,  # noqa: UP006
+        raw_config_data: dict | None,
         manufacturer: str | None,
         eprom_name: str,
-    ) -> Dict | None:  # noqa: UP006
+    ) -> dict | None:
         """
         Prepare the chip's database entry and its pin map for export.
 
@@ -253,14 +252,14 @@ class EpromConsolePresenter:
 
     def present_eprom_details(
         self,
-        chip_data: Dict | None,  # noqa: UP006
+        chip_data: dict | None,
         show_export_config: bool = False,
         show_adapter: bool = False,
     ):
         """
         Formats and prints the structured chip data to the console.
         This method now incorporates the logic from the former print_structured_chip_data.
-        """  # noqa: E501
+        """
         if not chip_data:
             # prepare_detailed_eprom_data already logs an error if chip not found
             return
@@ -319,7 +318,7 @@ class EpromConsolePresenter:
         if chip_data.get("no_pinout_warning"):
             logger.warning("")
             logger.warning(
-                "WARNING: No pinout defined for this chip — hardware operations will fail."  # noqa: E501
+                "WARNING: No pinout defined for this chip — hardware operations will fail."
             )
             logger.warning(
                 "Add a pin-map entry to ~/.firestarter/pin-maps.json to enable it."
@@ -332,7 +331,7 @@ class EpromConsolePresenter:
             logger.info(layout.get("dent"))
             for pair in layout.get("pin_pairs", []):
                 logger.info(
-                    f"  {pair['left_name']:<3} -| {pair['left_num']:2}     {pair['right_num']:2} |- {pair['right_name']:<6}"  # noqa: E501
+                    f"  {pair['left_name']:<3} -| {pair['left_num']:2}     {pair['right_num']:2} |- {pair['right_name']:<6}"
                 )
             logger.info(layout.get("bottom"))
 
@@ -448,7 +447,7 @@ def print_eprom_list_table(
     divider = f"+{'':-<{name_w + 1}}+{'':-<18}+{'':-<6}+{'':-<12}+{'':-<13}+{'':-<6}+"
     logger.info(divider)
     logger.info(
-        f"| {'Name': <{name_w}}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}| {'Type': <12}| {'VPP': <5}|"  # noqa: E501
+        f"| {'Name': <{name_w}}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}| {'Type': <12}| {'VPP': <5}|"
     )
     logger.info(divider)
     for name, ic in zip(rendered_names, eproms_data):
@@ -477,7 +476,7 @@ def print_eprom_list_table(
         type_str_display = type_str[:12]
 
         logger.info(
-            f"| {name: <{name_w}}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str_display: <12}| {vpp_str: <5}|"  # noqa: E501
+            f"| {name: <{name_w}}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str_display: <12}| {vpp_str: <5}|"
         )
     logger.info(divider)
     example = next(

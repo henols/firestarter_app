@@ -33,6 +33,8 @@ disagreement is recorded in AMBIGUOUS_DOC_CITATIONS rather than erased.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 # Import purity: this module's top-level imports are limited to __future__,
 # typing and firestarter.sdp_capability. That third is admitted only because it
 # is itself import-pure, keeping the tree shallow and checkable, and because
@@ -45,7 +47,7 @@ from __future__ import annotations
 # lock_status.py, so the caveat sentence keeps its single home.
 #
 # Mapping comes from typing, not collections.abc, to keep that list literal.
-from typing import Any, Mapping  # noqa: UP035
+from typing import Any
 
 # The one import the declared purity invariant admits beyond {__future__,
 # typing}: `split_part_number_tokens` is not re-implemented

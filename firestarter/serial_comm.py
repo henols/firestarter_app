@@ -12,7 +12,8 @@ import os
 import re
 import struct
 import time
-from typing import Any, Callable, Generator, List, Optional, Tuple  # noqa: UP035
+from collections.abc import Callable, Generator
+from typing import Any, Optional
 
 import serial
 import serial.serialutil
@@ -547,7 +548,7 @@ class SerialCommunicator:
             if response.type and response.type not in NON_RESPONSE_PREFIXES:
                 return response
 
-        # If the generator finishes without yielding a significant response, it's a timeout.  # noqa: E501
+        # If the generator finishes without yielding a significant response, it's a timeout.
         transport_counters.record_response_timeout()
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
@@ -570,11 +571,11 @@ class SerialCommunicator:
                 if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
                     raise ProtocolNotImplementedError(response.message)
                 return response
-            # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
+            # Other significant responses are ignored by this loop, which is the intended behavior.
 
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Tuple[bool, str | None]:  # noqa: UP006
+    ) -> tuple[bool, str | None]:
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
@@ -645,7 +646,7 @@ class SerialCommunicator:
     def _list_potential_ports(
         preferred_port: str | None = None,
         restrict_to_preferred: bool = False,
-    ) -> List[str]:  # noqa: UP006
+    ) -> list[str]:
         """Candidate ports to probe, most preferred first.
 
         `restrict_to_preferred` makes `preferred_port` the ONLY candidate. Set
@@ -700,7 +701,7 @@ class SerialCommunicator:
             return current >= required
         except (ValueError, AttributeError):
             logger.warning(
-                f"Could not parse version string for comparison: '{current_version_str}'"  # noqa: E501
+                f"Could not parse version string for comparison: '{current_version_str}'"
             )
             return False  # If parsing fails, assume it's not sufficient.
 
@@ -728,17 +729,17 @@ class SerialCommunicator:
             major = 0
         if major < 3 and not allow_pre_v12:
             raise FirmwareOutdatedError(
-                f"Firmware version {version_str} is pre-v1.2 (text-format logging). "  # noqa: E501
-                f"This host expects v1.2+ firmware emitting ID-encoded log frames. "  # noqa: E501
-                f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "  # noqa: E501
-                f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "  # noqa: E501
+                f"Firmware version {version_str} is pre-v1.2 (text-format logging). "
+                f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
+                f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
+                f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
                 f'see PROJECT.md "Constraints".)'
             )
         if not SerialCommunicator._is_version_sufficient(version_str, "2.0.0"):
             raise FirmwareOutdatedError(
                 f"Firmware version {version_str} is outdated. "
                 f"Version 2.0.0 or higher is required. "
-                f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                f"Please upgrade the firmware using 'firestarter fw --install'."
             )
 
     # Bus line 11 is where socket pin 21 lands on the 24-pin RURP wiring, and
@@ -936,7 +937,7 @@ class SerialCommunicator:
                     "Programmer did not report a firmware version in its "
                     "operation-setup ack. This host requires firmware that "
                     "carries the version and hardware revision in that ack. "
-                    "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                    "Please upgrade the firmware using 'firestarter fw --install'."
                 )
             logger.debug(
                 f"{self.port_name}: ack carries no firmware identity "
@@ -944,9 +945,9 @@ class SerialCommunicator:
                 f"firmware-update read path."
             )
         elif not allow_outdated_firmware:
-            # Refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
-            # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
-            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
+            # Refuse pre-v1.2 firmware. The firmware bumped
+            # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when
+            # bench-testing a current host against a historical (v2.x) firmware build.
             SerialCommunicator._validate_firmware_version(
                 version_match.group(0).rstrip("."),
                 allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
@@ -1205,7 +1206,7 @@ class SerialCommunicator:
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
-                    # The "Programmer found on..." message is logged by _probe_port on a new line.  # noqa: E501
+                    # The "Programmer found on..." message is logged by _probe_port on a new line.
                     return communicator
             except (
                 FirmwareOutdatedError,

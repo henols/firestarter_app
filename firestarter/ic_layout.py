@@ -7,7 +7,6 @@ IC Layout Generation Module
 """
 
 import logging
-from typing import Dict, List  # noqa: UP035
 
 from firestarter import jumper_table
 from firestarter.database import EpromDatabase, format_mv
@@ -216,7 +215,7 @@ class EpromSpecBuilder:
                 (
                     "High-voltage EPROM algorithm for 32-pin devices",
                     "Uses ≥12 V VPP and EPROM-style timing",
-                    "Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)",  # noqa: E501
+                    "Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)",
                 ),
             ),
             (
@@ -304,7 +303,7 @@ class EpromSpecBuilder:
                 }
         return None
 
-    def _generate_pin_names_for_display(self, eprom_data: dict) -> List[str] | None:  # noqa: UP006
+    def _generate_pin_names_for_display(self, eprom_data: dict) -> list[str] | None:
         pin_count = eprom_data.get("pin-count")
         if pin_count not in self._generic_pin_names_map:
             logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
@@ -315,15 +314,15 @@ class EpromSpecBuilder:
 
         # Default OE pin position (example for 24-pin, adjust if needed for others)
         # This logic was a bit specific in the original, might need generalization
-        # For 24-pin, OE is pin 20 (index 19). For 28-pin, OE/VPP is pin 22 (index 21). For 32-pin, OE is pin 24 (index 23).  # noqa: E501
+        # For 24-pin, OE is pin 20 (index 19). For 28-pin, OE/VPP is pin 22 (index 21). For 32-pin, OE is pin 24 (index 23).
         # Let's assume a generic OE position if not overridden by pin map.
-        # This part of the original logic was a bit hardcoded and might need review for all chip types.  # noqa: E501
+        # This part of the original logic was a bit hardcoded and might need review for all chip types.
         # For simplicity, we'll rely on the pin_map to override.
 
         pin_map_id = eprom_data.get("pin-map")
         pin_map_details = (
             self.db.get_pin_map(pin_count, pin_map_id)
-            if not pin_map_id is None  # noqa: E714
+            if pin_map_id is not None
             else None
         )
 
@@ -334,17 +333,17 @@ class EpromSpecBuilder:
                 self._first_pin(pin_map_details["rw-pin"])
                 if "rw-pin" in pin_map_details
                 else None
-            )  # noqa: E501
+            )
             vpp_pin = (
                 self._first_pin(pin_map_details["vpp-pin"])
                 if "vpp-pin" in pin_map_details
                 else None
-            )  # noqa: E501
+            )
             oe_pin = (
                 self._first_pin(pin_map_details["oe-pin"])
                 if "oe-pin" in pin_map_details
                 else None
-            )  # noqa: E501
+            )
             pgm_pin = (
                 self._first_pin(pin_map_details["pgm-pin"])
                 if "pgm-pin" in pin_map_details
@@ -357,7 +356,7 @@ class EpromSpecBuilder:
                 pin_names[rw_pin - 1] = "R/W(WE)"
             if vpp_pin is not None and vpp_pin <= pin_count:
                 pin_names[vpp_pin - 1] = "VPP"
-                # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different  # noqa: E501
+                # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different
                 if oe_pin is not None and oe_pin != vpp_pin and oe_pin <= pin_count:
                     pin_names[oe_pin - 1] = "OE"
             elif oe_pin is not None and oe_pin <= pin_count:  # Only OE, no separate VPP
@@ -370,7 +369,7 @@ class EpromSpecBuilder:
                         pin_names[pin_num - 1] = "NC" if pin_num in nc_pins else f"A{i}"
         else:
             logger.warning(
-                f"No specific pin map '{pin_map_id}' found for {pin_count}-pin {eprom_data.get('name', 'EPROM')}. Displaying generic layout."  # noqa: E501
+                f"No specific pin map '{pin_map_id}' found for {pin_count}-pin {eprom_data.get('name', 'EPROM')}. Displaying generic layout."
             )
 
         return pin_names
@@ -441,8 +440,8 @@ class EpromSpecBuilder:
 
     def resolve_type_label(
         self,
-        electrical_type: str | None,  # noqa: UP006
-        protocol_id: int | None = None,  # noqa: UP006
+        electrical_type: str | None,
+        protocol_id: int | None = None,
     ) -> str:
         """Return the user-facing chip-type display label (single source of truth).
 
@@ -471,11 +470,11 @@ class EpromSpecBuilder:
             return self._ELECTRICAL_TYPE_LABEL[etype]
         return self.get_chip_type_string(protocol_id)
 
-    def build_specifications(  # noqa: UP006
+    def build_specifications(
         self,
         eprom_data: dict,
-        electrical_type: str | None = None,  # noqa: UP006
-    ) -> Dict | None:  # noqa: UP006
+        electrical_type: str | None = None,
+    ) -> dict | None:
         """Build a dictionary of comprehensive technical specifications for the EPROM.
 
         This includes basic properties, pin names for layout, jumper settings,

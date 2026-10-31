@@ -9,7 +9,7 @@ hardware-specific bus configuration.
 
 `EpromDatabase` is a singleton -- it initialises once and later instantiations
 return the same instance.
-"""  # noqa: E501
+"""
 
 import json
 import logging
@@ -243,7 +243,7 @@ class EpromDatabase:
         """
         Merges two pin map configuration dictionaries. `manual_pin_map` takes precedence.
         Modifies and returns the `pin_maps_base` dictionary.
-        """  # noqa: E501
+        """
         for key, sub_map in manual_pin_map.items():
             if key not in pin_maps_base:
                 # Add new top-level key entirely if it doesn't exist
@@ -288,7 +288,7 @@ class EpromDatabase:
                     bus.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."  # noqa: E501
+                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."
                     )
             map_config["bus"] = bus
         else:
@@ -312,11 +312,11 @@ class EpromDatabase:
                 if pin_to_check in pin_conversions.get(pins, {}):
                     resolved = pin_conversions[pins][pin_to_check]
                     if pin_func == "vpp-pin" and resolved in (ROM_CE, ROM_OE):
-                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)  # noqa: E501
+                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)
                     map_config[pin_func] = resolved
                 else:
                     logger.warning(
-                        f"Pin function '{source}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
+                        f"Pin function '{source}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."
                     )
 
         if "static-high-pins" in pin_map_data and pins in pin_conversions:
@@ -326,7 +326,7 @@ class EpromDatabase:
                     static_high.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
+                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."
                     )
             if static_high:
                 map_config["static-high"] = static_high
@@ -338,7 +338,7 @@ class EpromDatabase:
         Returns [(pin_number, signal_name), ...] for every physical DIP pin 1..pin_count.
         Derived directly from pinouts.json. Returns [] if the pinout key is unknown.
         Used to display adapter wiring via `firestarter info --adapter`.
-        """  # noqa: E501
+        """
         pin_map_data = self.get_pin_map(pin_count, pinout_key)
         if not pin_map_data:
             return []
@@ -749,6 +749,6 @@ class EpromDatabase:
                             selected_proms.append(ic_copy)
                     except ValueError:
                         logger.warning(
-                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"  # noqa: E501
+                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"
                         )
         return selected_proms

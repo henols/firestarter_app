@@ -40,7 +40,8 @@ safe", never as "probably fine".
 
 from __future__ import annotations
 
-from typing import Any, Mapping  # noqa: UP035
+from collections.abc import Mapping
+from typing import Any
 
 from firestarter.address_parser import parse_address
 from firestarter.constants import (

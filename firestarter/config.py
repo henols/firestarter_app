@@ -34,7 +34,7 @@ def get_config_dir() -> str:
 
 HOME_PATH = get_config_dir()
 CONFIG_FILE_DEFAULT = "config.json"  # Default filename
-# CONFIG_FILE = os.path.join(HOME_PATH, "config.json") # No longer used directly as a global fixed path for ConfigManager  # noqa: E501
+# CONFIG_FILE = os.path.join(HOME_PATH, "config.json") # No longer used directly as a global fixed path for ConfigManager
 DATABASE_FILE = os.path.join(HOME_PATH, "database.json")
 PIN_MAP_FILE = os.path.join(HOME_PATH, "pin-maps.json")
 
@@ -46,10 +46,10 @@ def get_local_database():
     Loads the local user EPROM database override file.
     Returns:
         dict or None: The parsed JSON data if the file exists and is valid, otherwise None.
-    """  # noqa: E501
+    """
     if os.path.exists(DATABASE_FILE):
         try:
-            with open(DATABASE_FILE, "rt") as file:  # noqa: UP015
+            with open(DATABASE_FILE) as file:
                 return json.load(file)
         except json.JSONDecodeError:
             logger.error(f"Warning: Database file {DATABASE_FILE} is not a valid JSON.")
@@ -61,10 +61,10 @@ def get_local_pin_maps():
     Loads the local user pin map override file.
     Returns:
         dict or None: The parsed JSON data if the file exists and is valid, otherwise None.
-    """  # noqa: E501
+    """
     if os.path.exists(PIN_MAP_FILE):
         try:
-            with open(PIN_MAP_FILE, "rt") as file:  # noqa: UP015
+            with open(PIN_MAP_FILE) as file:
                 return json.load(file)
         except json.JSONDecodeError:
             logger.error(f"Warning: Pin map file {PIN_MAP_FILE} is not a valid JSON.")
@@ -86,14 +86,14 @@ class ConfigManager:
     ] = {}  # Stores instances, keyed by config file path
     _initialized_configs: dict[
         str, bool
-    ] = {}  # Tracks initialization status, keyed by config file path  # noqa: E501
+    ] = {}  # Tracks initialization status, keyed by config file path
 
     def __new__(cls, config_filename: str | None = None, *args, **kwargs):
         actual_filename = config_filename or CONFIG_FILE_DEFAULT
         instance_key = os.path.join(HOME_PATH, actual_filename)
 
         if instance_key not in cls._instances:
-            cls._instances[instance_key] = super(ConfigManager, cls).__new__(cls)  # noqa: UP008
+            cls._instances[instance_key] = super().__new__(cls)
         return cls._instances[instance_key]
 
     def __init__(self, config_filename: str | None = None):
@@ -122,7 +122,7 @@ class ConfigManager:
         """
         if os.path.exists(self.config_file_path):
             try:
-                with open(self.config_file_path, "r") as file:  # noqa: UP015
+                with open(self.config_file_path) as file:
                     self._config = json.load(file)
             except json.JSONDecodeError:
                 logger.error(
@@ -152,7 +152,7 @@ class ConfigManager:
         try:
             with open(self.config_file_path, "w") as f:
                 json.dump(persistable, f, indent=4)
-        except IOError as e:  # noqa: UP024
+        except OSError as e:
             logger.error(
                 f"Error: Unable to save configuration to {self.config_file_path}: {e}"
             )

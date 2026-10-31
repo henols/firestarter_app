@@ -9,7 +9,7 @@ Hardware Management Module
 import logging
 import statistics
 import time
-from typing import NamedTuple, Tuple, TypedDict  # noqa: UP035
+from typing import NamedTuple, TypedDict
 
 from firestarter.codec import volts
 from firestarter.config import ConfigManager
@@ -175,7 +175,7 @@ class HardwareManager:
 
     def _execute_simple_command(
         self, command_dict: dict, operation_name: str
-    ) -> Tuple[bool, str | None]:  # noqa: UP006
+    ) -> tuple[bool, str | None]:
         """
         Connects, sends a command, expects an OK, and disconnects.
         Returns (success_status, message_from_programmer).
@@ -189,7 +189,7 @@ class HardwareManager:
                 logger.info(f"{operation_name}: {comm.programmer_info}")
                 return True, comm.programmer_info
             else:
-                # This case should ideally be caught by find_and_connect if expect_ack fails.  # noqa: E501
+                # This case should ideally be caught by find_and_connect if expect_ack fails.
                 logger.error(f"Failed to {operation_name.lower()}. No valid response.")
                 return False, None
         except SerialError as e:
@@ -393,7 +393,7 @@ class HardwareManager:
         try:
             comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
 
-            # Wait for the firmware to signal it's ready before we start the reading loop.  # noqa: E501
+            # Wait for the firmware to signal it's ready before we start the reading loop.
             # This establishes a handshake and prevents a race condition.
             is_ok, msg = comm.expect_ack()
             if not is_ok:
@@ -403,7 +403,7 @@ class HardwareManager:
                 return False
             logger.debug(f"Firmware ready for voltage reading: {msg}")
 
-            # After receiving ready, send an ACK to start the reading loop on the firmware.  # noqa: E501
+            # After receiving ready, send an ACK to start the reading loop on the firmware.
             comm.send_ack()
 
             # The VCC warning is printed once per command, not once per
@@ -430,7 +430,7 @@ class HardwareManager:
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
                         print()  # Newline after continuous printing
                         logger.info(
-                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."  # noqa: E501
+                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."
                         )
                         return True
 
@@ -438,7 +438,7 @@ class HardwareManager:
                 elif response_type == "OK":
                     print()
                     logger.info(
-                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"  # noqa: E501
+                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"
                     )
                     return True
                 elif response_type == "WARN":
@@ -454,7 +454,7 @@ class HardwareManager:
                 else:  # Timeout or unexpected
                     print()
                     logger.error(
-                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"  # noqa: E501
+                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"
                     )
                     return False
         except (SerialError, HardwareOperationError) as e:

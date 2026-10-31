@@ -13,9 +13,10 @@ import os
 import shutil
 import statistics
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import BinaryIO, Callable, Dict, Tuple  # noqa: UP035
+from typing import BinaryIO
 
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -443,7 +444,7 @@ class ClassProgressHandler:
         if self.pbar:
             self.pbar.update(completed_steps)
         else:
-            # If no progress bar, we can't do much with incremental updates without a total.  # noqa: E501
+            # If no progress bar, we can't do much with incremental updates without a total.
             logger.info(f"Progress: +{completed_steps} steps")
 
     def set_progress(self, current, total):
@@ -609,7 +610,7 @@ class EpromOperator:
             return float(budget)
         return WRITE_BLOCK_TIMEOUT_FALLBACK_S
 
-    def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
+    def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager
         self,
         eprom_name: str,  # For logging
         eprom_data_dict: dict,  # Pre-fetched EPROM data
@@ -621,7 +622,7 @@ class EpromOperator:
         region_length: int | None = None,
         preferred_port: str | None = None,
         restrict_to_port: bool | None = None,
-    ) -> Tuple[Dict | None, int]:  # noqa: UP006
+    ) -> tuple[dict | None, int]:
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
@@ -636,7 +637,7 @@ class EpromOperator:
         only that one candidate, so a later connect that cannot reach it
         fails closed (`ProgrammerNotFoundError`) instead of silently
         discovering a different board.
-        """  # noqa: E501
+        """
         operation = COMMAND_NAMES[cmd]  # Get command name
         logger.debug(f"Performing {operation} for {eprom_name.upper()}")
 
@@ -732,7 +733,7 @@ class EpromOperator:
                 return None, 0
             buffer_size = self._calculate_buffer_size()
             logger.debug(
-                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s, leased). Buffer size: {buffer_size}"  # noqa: E501
+                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s, leased). Buffer size: {buffer_size}"
             )
             return command_dict, buffer_size
 
@@ -746,7 +747,7 @@ class EpromOperator:
             )
             buffer_size = self._calculate_buffer_size()
             logger.debug(
-                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"  # noqa: E501
+                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"
             )
             return command_dict, buffer_size
         except (FirmwareOutdatedError, HardwareRevisionUnsupportedError):
@@ -876,7 +877,7 @@ class EpromOperator:
         operation_name: str,
         main_phase_handler: Callable | None = None,
         **handler_kwargs,
-    ) -> Tuple[bool, str | None]:  # noqa: UP006
+    ) -> tuple[bool, str | None]:
         """A unified state machine driver for all operations."""
         if not self.comm:
             return False, "Not connected"
@@ -1159,7 +1160,7 @@ class EpromOperator:
                     continue
                 if response.type != "OK":
                     raise EpromOperationError(
-                        f"Programmer did not request data chunk, got {response.type}: {response.message}"  # noqa: E501
+                        f"Programmer did not request data chunk, got {response.type}: {response.message}"
                     )
 
                 if file_handle.tell() < file_size:
@@ -1332,10 +1333,10 @@ class EpromOperator:
                     )
                 if is_ok:
                     logger.info(
-                        f"Read complete ({time.time() - start_time:.2f}s). Data saved to {actual_output_file}"  # noqa: E501
+                        f"Read complete ({time.time() - start_time:.2f}s). Data saved to {actual_output_file}"
                     )
                 return is_ok
-            except IOError as e:  # noqa: UP024
+            except OSError as e:
                 logger.error(f"File I/O error with {actual_output_file}: {e}")
                 return False
             finally:
@@ -1453,7 +1454,7 @@ class EpromOperator:
                                     _start=cmd_data.get("address", 0),
                                 ):
                                     # Mirror read_eprom's _write_to_file inner closure
-                                    # (eprom_operations.py:408-411). Use relative-from-start  # noqa: E501
+                                    # (eprom_operations.py:408-411). Use relative-from-start
                                     # offset so the file fills from byte 0 regardless of
                                     # absolute start_addr.
                                     _fh.seek(address - _start)
@@ -1466,7 +1467,7 @@ class EpromOperator:
                                     end_addr=cmd_data.get("memory-size", 0),
                                     process_data_chunk_callback=_writer,
                                 )
-                        except IOError as e:  # noqa: UP024
+                        except OSError as e:
                             logger.error(f"Run {i}: file I/O error on {run_path}: {e}")
                             return 2
 
@@ -1635,7 +1636,7 @@ class EpromOperator:
                                 end_addr=cmd_data.get("memory-size", 0),
                                 process_data_chunk_callback=_writer,
                             )
-                    except IOError as e:  # noqa: UP024
+                    except OSError as e:
                         logger.error(f"Cycle {i}: file I/O error on {cycle_path}: {e}")
                         return 2
 
@@ -1748,7 +1749,7 @@ class EpromOperator:
                     # prevent connection (fault never fired, or firmware accepted a
                     # corrupt frame) — run the read so an unexpected success is caught.
                     if direction == "incoming":
-                        assert self.comm is not None  # noqa: S101
+                        assert self.comm is not None
                         fault_comm = FaultInjectingSerialCommunicator.__new__(
                             FaultInjectingSerialCommunicator
                         )
@@ -1777,7 +1778,7 @@ class EpromOperator:
                                 end_addr=cmd_data.get("memory-size", 0),
                                 process_data_chunk_callback=_writer_corrupt,
                             )
-                    except IOError as e:  # noqa: UP024
+                    except OSError as e:
                         logger.error(f"fault_inject_cycle: file I/O error: {e}")
                         return False
                     error_latency_s = time.monotonic() - _t0
@@ -1847,7 +1848,7 @@ class EpromOperator:
                             end_addr=cmd_data_clean.get("memory-size", 0),
                             process_data_chunk_callback=_writer_clean,
                         )
-                except IOError as e:  # noqa: UP024
+                except OSError as e:
                     logger.error(
                         f"fault_inject_cycle: clean-transfer file I/O error: {e}"
                     )
@@ -1904,7 +1905,7 @@ class EpromOperator:
                     f"sub_second_clean_error_no_2s_cascade: {cascade}\n"
                     f"detail: {detail}\n"
                 )
-        except IOError as e:  # noqa: UP024
+        except OSError as e:
             logger.error(f"fault_inject_cycle: could not write fault log: {e}")
 
     @staticmethod
@@ -1914,7 +1915,7 @@ class EpromOperator:
             try:
                 with open(log_path, "a") as fh:
                     fh.write(f"{line}\n")
-            except IOError as e:  # noqa: UP024
+            except OSError as e:
                 logger.error(f"fault_inject_cycle: could not append fault log: {e}")
 
     def measure_command_nak_latency(
@@ -2064,11 +2065,11 @@ class EpromOperator:
                     f"recovery_clean_command_same_connection_ok: {recovery_ok}\n"
                     f"detail: {detail}\n"
                 )
-        except IOError as e:  # noqa: UP024
+        except OSError as e:
             logger.error(f"measure_command_nak_latency: could not write log: {e}")
 
     @staticmethod
-    def _summarize_connect_samples(samples: list) -> Dict[str, str]:  # noqa: UP006
+    def _summarize_connect_samples(samples: list) -> dict[str, str]:
         """Aggregate a list of observed connect durations (MEAS-01 numeric contract).
 
         Pure: no clock read, no file I/O, fully testable without a board.
@@ -2189,8 +2190,8 @@ class EpromOperator:
         port: str,
         controller_identity: str,
         samples: list,
-        summary: Dict[str, str],  # noqa: UP006
-        counters: Dict[str, int],  # noqa: UP006
+        summary: dict[str, str],
+        counters: dict[str, int],
     ) -> None:
         """Write the connect-cost artifact (MEAS-01 bench harness)."""
         log_path = output_path / "connect-cost-log.txt"
@@ -2210,7 +2211,7 @@ class EpromOperator:
                     f"remainder: {summary['remainder']}\n"
                     f"{counter_lines}\n"
                 )
-        except IOError as e:  # noqa: UP024
+        except OSError as e:
             logger.error(f"measure_connect_cost: could not write log: {e}")
 
     def dev_read_eprom(
@@ -2235,7 +2236,7 @@ class EpromOperator:
             start_addr = cmd_data.get("address", 0)
             end_addr = cmd_data.get("memory-size", start_addr)
             logger.info(
-                f"Reading {end_addr - start_addr} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"  # noqa: E501
+                f"Reading {end_addr - start_addr} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"
             )
             start_time = time.time()
 
@@ -2292,7 +2293,7 @@ class EpromOperator:
             return False
 
         logger.info(
-            f"Setting registers: MSB: 0x{msb:02X}, LSB: 0x{lsb:02X}, CTRL: 0x{ctrl_reg:02X}"  # noqa: E501
+            f"Setting registers: MSB: 0x{msb:02X}, LSB: 0x{lsb:02X}, CTRL: 0x{ctrl_reg:02X}"
         )
         try:
             self.comm.send_ack()  # Tell programmer to expect register data
@@ -2766,7 +2767,7 @@ class EpromOperator:
             if not suppress_verdict_line:
                 if is_ok:
                     logger.info(
-                        f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                        f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."
                     )
                 else:
                     logger.error(f"Write to {eprom_name.upper()} failed.")
@@ -3044,14 +3045,14 @@ class EpromOperator:
                         region_length=region_length,
                         on_result=on_result,
                     )
-            except IOError as e:  # noqa: UP024
+            except OSError as e:
                 logger.error(f"File I/O error with {input_file_path}: {e}")
                 return 2
 
             if not suppress_verdict_line:
                 if verdict == 0:
                     logger.info(
-                        f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                        f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."
                     )
                 else:
                     logger.error(f"Verify for {eprom_name.upper()} failed.")
@@ -3086,7 +3087,7 @@ class EpromOperator:
             is_ok, final_msg = self._run_state_machine(op_name)
             if is_ok:
                 logger.info(
-                    f"Erase for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                    f"Erase for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"
                 )
             return is_ok
 
@@ -3134,7 +3135,7 @@ class EpromOperator:
             is_ok, final_msg = self._run_state_machine(op_name)
             if is_ok:
                 logger.info(
-                    f"SDP unlock for {eprom_name.upper()} emitted ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                    f"SDP unlock for {eprom_name.upper()} emitted ({time.time() - start_time:.2f}s). {final_msg or ''}"
                 )
             return is_ok
 
@@ -3182,7 +3183,7 @@ class EpromOperator:
             is_ok, final_msg = self._run_state_machine(op_name)
             if is_ok:
                 logger.info(
-                    f"SDP lock for {eprom_name.upper()} emitted ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                    f"SDP lock for {eprom_name.upper()} emitted ({time.time() - start_time:.2f}s). {final_msg or ''}"
                 )
             return is_ok
 
@@ -3284,7 +3285,7 @@ class EpromOperator:
             )
             if verdict == 0:
                 logger.info(
-                    f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                    f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."
                 )
             else:
                 logger.error(f"Blank check for {eprom_name.upper()} failed.")
@@ -3292,7 +3293,7 @@ class EpromOperator:
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> Tuple[bool, int | None]:  # noqa: UP006
+    ) -> tuple[bool, int | None]:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
@@ -3309,12 +3310,12 @@ class EpromOperator:
             detected_chip_id_value = None
             if is_ok:
                 logger.info(
-                    f"Chip ID check passed for {eprom_name.upper()}: {final_msg} ({time.time() - start_time:.2f}s)"  # noqa: E501
+                    f"Chip ID check passed for {eprom_name.upper()}: {final_msg} ({time.time() - start_time:.2f}s)"
                 )
                 detected_chip_id_value = cmd_data.get("chip-id")
             else:
                 logger.warning(
-                    f"Chip ID check for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}"  # noqa: E501
+                    f"Chip ID check for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}"
                 )
                 detected_chip_id_value = extract_hex_to_decimal(final_msg or "")
                 if detected_chip_id_value is not None:
@@ -3323,7 +3324,7 @@ class EpromOperator:
                     )
                 else:
                     logger.error(
-                        f"Failed to extract a valid chip ID from programmer response: {final_msg}"  # noqa: E501
+                        f"Failed to extract a valid chip ID from programmer response: {final_msg}"
                     )
             return is_ok, detected_chip_id_value
 
@@ -3370,7 +3371,7 @@ class EpromOperator:
 
     def read_protection_status(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> Tuple[bool, bytes | None]:  # noqa: UP006
+    ) -> tuple[bool, bytes | None]:
         """Send `CMD_LOCK_STATUS` and return `(True, payload)` on an
         accepted command, `(False, None)` otherwise.
 
@@ -3419,11 +3420,11 @@ class EpromOperator:
             )
             if is_ok:
                 logger.info(
-                    f"Protection status read for {eprom_name.upper()}: {final_msg or ''}"  # noqa: E501
+                    f"Protection status read for {eprom_name.upper()}: {final_msg or ''}"
                 )
             else:
                 logger.warning(
-                    f"Protection status read for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}"  # noqa: E501
+                    f"Protection status read for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}"
                 )
             return is_ok, captured[0]
 
