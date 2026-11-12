@@ -73,9 +73,8 @@ from firestarter.diagnostic_report import (
     _is_transport_suspect,
 )
 from firestarter.exceptions import SerialTimeoutError
-from firestarter.frame_parser import _crc8_ccitt
 from firestarter.messages import MSG_OK_READY
-from tests.conftest import MAGIC_PREAMBLE_REF, build_frame
+from tests.conftest import MAGIC_PREAMBLE_REF, build_frame, id_frame_body
 from tests.test_diagnostic_report import _build_report
 
 
@@ -87,14 +86,11 @@ def _corrupted_ok_ready_body() -> bytes:
     """A valid MSG_OK_READY body with its trailing CRC byte XOR'd by one.
 
     Same construction as `tests/test_serial_comm.py`'s CAP-01 CRC-flip
-    trigger: a 2-byte param region, a real `_crc8_ccitt`, then one flipped
-    bit in the CRC byte -- guaranteed to fail `codec.decode_id_frame`'s CRC
-    check without touching any other field.
+    trigger: a 2-byte param region, a correct CRC, then one flipped bit in
+    the CRC byte -- guaranteed to fail `codec.decode_id_frame`'s CRC check
+    without touching any other field.
     """
-    params = b"\x02\x00"
-    msg_id_byte = bytes([MSG_OK_READY])
-    crc = _crc8_ccitt(msg_id_byte + params)
-    body = bytearray(msg_id_byte + params + bytes([crc]))
+    body = bytearray(id_frame_body(MSG_OK_READY, b"\x02\x00"))
     body[-1] ^= 1
     return bytes(body)
 
@@ -127,10 +123,7 @@ def test_decode_id_frame_corrupt_crc_raises_decode_failures_by_one_and_nothing_e
 ) -> None:
     transport_counters.reset()
     comm = make_comm()
-    good_params = b"\x02\x00"
-    good_msg_id_byte = bytes([MSG_OK_READY])
-    good_crc = _crc8_ccitt(good_msg_id_byte + good_params)
-    good_body = good_msg_id_byte + good_params + bytes([good_crc])
+    good_body = id_frame_body(MSG_OK_READY, b"\x02\x00")
 
     good_result = comm._decode_id_frame(len(good_body), good_body)
     unmoved = transport_counters.snapshot()

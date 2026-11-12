@@ -31,6 +31,16 @@ from firestarter import submit
 # sanitize_dict -- one test per leak vector (A3 fails-open discipline)
 
 
+def _capturing_console() -> tuple[Mock, list]:
+    """A console double and the list of the first argument of each print."""
+    printed: list = []
+    console = Mock()
+    console.print.side_effect = lambda *args, **kwargs: printed.append(
+        args[0] if args else ""
+    )
+    return console, printed
+
+
 def test_sanitize_home_dir_path():
     d = {"reason": "failed reading /home/alice/scratch/file.bin"}
     out = submit.sanitize_dict(d, user="somebody")
@@ -252,37 +262,13 @@ def test_a_transport_faulted_report_still_reaches_the_confirm_prompt():
     report = _make_report()
     report.run_status = "ERROR"
     report.results = [_step("id", "SKIPPED", status="ERROR")]
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
 
-    confirm_fn = Mock(return_value=False)
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
-    )
-    confirm_fn.assert_called_once()
+    r = _submit(report, tty=True, confirm=False)
+    r.confirm_fn.assert_called_once()
 
-    second_confirm_fn = Mock(return_value=False)
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=second_confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
-    )
-    second_confirm_fn.assert_called_once()
+    # A fresh `confirm_fn` is reached once again on a second call.
+    r = _submit(report, tty=True, confirm=False)
+    r.confirm_fn.assert_called_once()
 
     title = submit.build_title(report, "W27C512")
     assert "INCONCLUSIVE (harness)" in title
@@ -707,9 +693,7 @@ def test_submit_via_gh_failure_prints_captured_stderr():
             stderr="GraphQL: Resource not accessible by personal access token",
         )
     )
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
     result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
     assert result is None
     assert any(
@@ -720,9 +704,7 @@ def test_submit_via_gh_failure_prints_captured_stderr():
 
 def test_submit_via_gh_failure_with_blank_stderr_still_reports():
     run_fn = Mock(return_value=Mock(returncode=3, stdout="", stderr=""))
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
     result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
     assert result is None
     assert any(m.strip() and "3" in m for m in printed)
@@ -870,28 +852,10 @@ def test_dedup_distinguishes_all_three_signals(returncode, stdout, expected):
 
 
 def test_every_interactive_run_asks_even_when_the_check_fails():
-    report = _make_report()
-    find_prior_report_fn = Mock(return_value=(None, False))
-    confirm_fn = Mock(return_value=False)
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    r = _submit(tty=True, confirm=False, prior=(None, False))
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    confirm_fn.assert_called_once()
-    assert any("could not run" in m.lower() for m in printed)
+    r.confirm_fn.assert_called_once()
+    assert any("could not run" in m.lower() for m in r.printed)
 
 
 def _small_body() -> str:
@@ -1026,9 +990,7 @@ def test_browser_unreachable_returns_none_and_prints_url_and_local_path():
 
     browser_open = Mock(return_value=False)
     saved = Path("/home/alice/.firestarter/reports/dev-test-x.json")
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
 
     result = submit.submit_via_browser(
         "My Title", _small_body(), saved, browser_open=browser_open, console=console
@@ -1084,56 +1046,71 @@ def _make_report(*, chip="W27C512", protocol="7", host_version="3.0.0b11", pii=N
     return report
 
 
-def test_refuse_missing_protocol_prints_field_and_does_not_send():
-    report = _make_report(protocol=None)
-    which_fn = Mock()
-    run_fn = Mock()
-    browser_open = Mock()
-    isatty_fn = Mock(return_value=True)
-    confirm_fn = Mock(return_value=True)
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
+_SEAM_DEFAULT = object()
 
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=console,
+def _gh_files(stdout: str, *, returncode: int = 0, **create) -> Mock:
+    """A `run_fn` for a `gh` that is authenticated and then answers the
+    issue create with `returncode`/`stdout` (plus any other attribute)."""
+    return Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(returncode=returncode, stdout=stdout, **create),  # gh issue create
+        ]
     )
 
-    assert any("protocol" in m for m in printed)
-    which_fn.assert_not_called()
-    run_fn.assert_not_called()
-    browser_open.assert_not_called()
-    confirm_fn.assert_not_called()
-    isatty_fn.assert_not_called()
+
+def _submit(
+    report=None,
+    *,
+    chip="W27C512",
+    tty=False,
+    confirm=True,
+    gh=_SEAM_DEFAULT,
+    prior=(None, True),
+    **overrides,
+) -> SimpleNamespace:
+    """Call `submit.submit_report` with a Mock for every seam.
+
+    `tty`, `confirm` and `prior` are what `isatty_fn`, `confirm_fn` and the
+    dedup query return; `gh` is what `which_fn` returns (a bare Mock when not
+    given). A keyword in `overrides` replaces that seam or argument. Returns
+    every seam, plus `printed`: the messages sent to the default console.
+    """
+    console, printed = _capturing_console()
+    seams = {
+        "which_fn": Mock() if gh is _SEAM_DEFAULT else Mock(return_value=gh),
+        "run_fn": Mock(),
+        "browser_open": Mock(),
+        "isatty_fn": Mock(return_value=tty),
+        "confirm_fn": Mock(return_value=confirm),
+        "console": console,
+        "find_prior_report_fn": Mock(return_value=prior),
+        **overrides,
+    }
+    submit.submit_report(
+        _make_report() if report is None else report,
+        chip,
+        SimpleNamespace(name="dev-test-w27c512.json"),
+        **seams,
+    )
+    return SimpleNamespace(printed=printed, **seams)
+
+
+def test_refuse_missing_protocol_prints_field_and_does_not_send():
+    r = _submit(_make_report(protocol=None), tty=True)
+
+    assert any("protocol" in m for m in r.printed)
+    r.which_fn.assert_not_called()
+    r.run_fn.assert_not_called()
+    r.browser_open.assert_not_called()
+    r.confirm_fn.assert_not_called()
+    r.isatty_fn.assert_not_called()
 
 
 def test_refuse_missing_chip_names_chip():
-    report = _make_report(chip=None)
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
-    submit.submit_report(
-        report,
-        "",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=Mock(return_value=True),
-        console=console,
-    )
-    assert any("chip" in m for m in printed)
+    r = _submit(_make_report(chip=None), chip="", tty=True)
+    assert any("chip" in m for m in r.printed)
 
 
 def test_offtty_prints_url_not_body_and_never_sends():
@@ -1145,38 +1122,15 @@ def test_offtty_prints_url_not_body_and_never_sends():
     reaches `build_issue_url` below (proven by the URL assertion staying):
     the test proves the ECHO went, not that the body stopped being built.
     """
-    report = _make_report()
-    which_fn = Mock()
-    run_fn = Mock()
-    browser_open = Mock()
-    confirm_fn = Mock()
-    isatty_fn = Mock(return_value=False)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
+    r = _submit()
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    assert not any("| id | OK |" in m for m in printed)
-    assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in printed)
-    find_prior_report_fn.assert_called_once()
-    browser_open.assert_not_called()
-    run_fn.assert_not_called()
-    confirm_fn.assert_not_called()
-    which_fn.assert_not_called()
+    assert not any("| id | OK |" in m for m in r.printed)
+    assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in r.printed)
+    r.find_prior_report_fn.assert_called_once()
+    r.browser_open.assert_not_called()
+    r.run_fn.assert_not_called()
+    r.confirm_fn.assert_not_called()
+    r.which_fn.assert_not_called()
 
 
 def test_tty_prints_no_body_before_the_confirm_prompt():
@@ -1186,219 +1140,65 @@ def test_tty_prints_no_body_before_the_confirm_prompt():
     absence -- this one does: the confirm prompt is still reached (and
     declined, so nothing is filed), but the body's markdown table line is
     never printed."""
-    report = _make_report()
-    which_fn = Mock()
-    run_fn = Mock()
-    browser_open = Mock()
-    confirm_fn = Mock(return_value=False)
-    isatty_fn = Mock(return_value=True)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
+    r = _submit(tty=True, confirm=False)
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    assert not any("| id | OK |" in m for m in printed)
-    confirm_fn.assert_called_once()
-    browser_open.assert_not_called()
-    run_fn.assert_not_called()
+    assert not any("| id | OK |" in m for m in r.printed)
+    r.confirm_fn.assert_called_once()
+    r.browser_open.assert_not_called()
+    r.run_fn.assert_not_called()
 
 
 def test_tty_decline_aborts_without_sending():
-    report = _make_report()
-    which_fn = Mock()
-    run_fn = Mock()
-    browser_open = Mock()
-    confirm_fn = Mock(return_value=False)
-    isatty_fn = Mock(return_value=True)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
+    r = _submit(tty=True, confirm=False)
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    confirm_fn.assert_called_once()
-    browser_open.assert_not_called()
-    run_fn.assert_not_called()
+    r.confirm_fn.assert_called_once()
+    r.browser_open.assert_not_called()
+    r.run_fn.assert_not_called()
 
 
 def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
-    report = _make_report()
-    which_fn = Mock(return_value="/usr/bin/gh")
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),  # gh auth status
-            Mock(
-                returncode=0,
-                stdout="https://github.com/henols/firestarter/issues/9\n",
-            ),  # gh issue create
-        ]
-    )
-    browser_open = Mock()
-    confirm_fn = Mock(return_value=True)
-    isatty_fn = Mock(return_value=True)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files("https://github.com/henols/firestarter/issues/9\n"),
     )
 
-    assert run_fn.call_count == 2
-    browser_open.assert_not_called()
+    assert r.run_fn.call_count == 2
+    r.browser_open.assert_not_called()
 
 
 def test_tty_confirm_gh_success_echoes_the_created_issue_url():
     # Step 6: the URL submit_via_gh returns must reach the tester. Before this,
     # a successful submission printed nothing -- indistinguishable from a
     # failed one (proven live: firestarter_prom#18 was filed with no output).
-    report = _make_report()
     created = f"https://github.com/{submit.SUBMIT_REPO}/issues/18"
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),  # gh auth status
-            Mock(returncode=0, stdout=created + "\n"),  # gh issue create
-        ]
-    )
-    browser_open = Mock()
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    r = _submit(tty=True, gh="/usr/bin/gh", run_fn=_gh_files(created + "\n"))
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="dev-test-w27c512.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=Mock(return_value=True),
-        console=console,
-        find_prior_report_fn=Mock(return_value=(None, True)),
-    )
-
-    assert any(created in m for m in printed)
+    assert any(created in m for m in r.printed)
     # A success must never be narrated as a degradation.
-    assert not any("degrad" in m.lower() for m in printed)
-    browser_open.assert_not_called()
+    assert not any("degrad" in m.lower() for m in r.printed)
+    r.browser_open.assert_not_called()
 
 
 def test_tty_confirm_gh_success_with_blank_stdout_still_confirms():
     # returncode 0 means gh created it; blank stdout must not read as silence.
-    report = _make_report()
-    run_fn = Mock(
-        side_effect=[Mock(returncode=0), Mock(returncode=0, stdout="  \n")],
-    )
-    console = Mock()
-    printed: list[str] = []
-    console.print.side_effect = lambda msg: printed.append(msg)
+    r = _submit(tty=True, gh="/usr/bin/gh", run_fn=_gh_files("  \n"))
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="dev-test-w27c512.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=Mock(return_value=True),
-        console=console,
-        find_prior_report_fn=Mock(return_value=(None, True)),
-    )
-
-    assert any(submit.SUBMIT_REPO in m and "filed" in m.lower() for m in printed)
+    assert any(submit.SUBMIT_REPO in m and "filed" in m.lower() for m in r.printed)
 
 
 def test_tty_confirm_gh_unavailable_dispatches_to_browser():
-    report = _make_report()
-    which_fn = Mock(return_value=None)
-    run_fn = Mock()
-    browser_open = Mock()
-    confirm_fn = Mock(return_value=True)
-    isatty_fn = Mock(return_value=True)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
+    r = _submit(tty=True, gh=None)
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    browser_open.assert_called_once()
-    run_fn.assert_not_called()
+    r.browser_open.assert_called_once()
+    r.run_fn.assert_not_called()
 
 
 def test_tty_confirm_gh_create_fails_falls_back_to_browser():
-    report = _make_report()
-    which_fn = Mock(return_value="/usr/bin/gh")
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),  # gh auth status: authed
-            Mock(returncode=1, stdout=""),  # gh issue create: fails
-        ]
-    )
-    browser_open = Mock()
-    confirm_fn = Mock(return_value=True)
-    isatty_fn = Mock(return_value=True)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
+    r = _submit(tty=True, gh="/usr/bin/gh", run_fn=_gh_files("", returncode=1))
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    browser_open.assert_called_once()
-    assert run_fn.call_count == 2
+    r.browser_open.assert_called_once()
+    assert r.run_fn.call_count == 2
 
 
 def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
@@ -1408,44 +1208,22 @@ def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
     # it. A single shared `printed` list (fed by both console.print AND a
     # browser_open side_effect sentinel) is the only way a mocked test can
     # honestly prove ordering across two different injected seams.
-    report = _make_report()
-    which_fn = Mock(return_value="/usr/bin/gh")
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),  # gh auth status: authed
-            Mock(
-                returncode=1,
-                stdout="",
-                stderr="GraphQL: Resource not accessible by personal access token",
-            ),  # gh issue create: fails
-        ]
-    )
-    confirm_fn = Mock(return_value=True)
-    isatty_fn = Mock(return_value=True)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    saved = SimpleNamespace(name="dev-test-w27c512.json")
-
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    console, printed = _capturing_console()
 
     def _browser_open_sentinel(url):
         printed.append("BROWSER_OPEN_SENTINEL")
         return True
 
-    browser_open = Mock(side_effect=_browser_open_sentinel)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        saved,
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
+    _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files(
+            "",
+            returncode=1,
+            stderr="GraphQL: Resource not accessible by personal access token",
+        ),
+        browser_open=Mock(side_effect=_browser_open_sentinel),
         console=console,
-        find_prior_report_fn=find_prior_report_fn,
     )
 
     stderr_idx = next(
@@ -1457,7 +1235,6 @@ def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
         i for i, m in enumerate(printed) if "degrad" in m.lower() and "GraphQL" not in m
     )
     sentinel_idx = printed.index("BROWSER_OPEN_SENTINEL")
-
     assert stderr_idx < sentinel_idx
     assert degrade_idx < sentinel_idx
 
@@ -1465,309 +1242,147 @@ def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
 def test_tty_body_sent_to_gh_is_sanitized():
     # A PII vector present in a step reason must never reach the seam
     # unscrubbed (end-to-end sanitize integration).
-    report = _make_report(pii="failed reading /home/alice/scratch/file.bin")
-    which_fn = Mock(return_value="/usr/bin/gh")
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),
-            Mock(returncode=0, stdout="https://github.com/x/y/issues/1\n"),
-        ]
+    r = _submit(
+        _make_report(pii="failed reading /home/alice/scratch/file.bin"),
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files("https://github.com/x/y/issues/1\n"),
     )
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=Mock(return_value=True),
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
-    )
-    create_call = run_fn.call_args_list[1]
+    create_call = r.run_fn.call_args_list[1]
     sent_body = create_call.kwargs["input"]
     assert "alice" not in sent_body
     assert "/home/<user>/scratch/file.bin" in sent_body
 
 
 def test_tty_body_sent_to_browser_is_sanitized():
-    report = _make_report(pii="port /dev/ttyACM0 gone")
-    browser_open = Mock()
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value=None),
-        run_fn=Mock(),
-        browser_open=browser_open,
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=Mock(return_value=True),
-        console=Mock(),
+    r = _submit(
+        _make_report(pii="port /dev/ttyACM0 gone"),
+        tty=True,
+        gh=None,
+        find_prior_report_fn=submit.find_prior_report,
     )
     from urllib.parse import parse_qs, urlparse
 
-    sent_url = browser_open.call_args[0][0]
+    sent_url = r.browser_open.call_args[0][0]
     sent_body = parse_qs(urlparse(sent_url).query)["body"][0]
     assert "ttyACM0" not in sent_body
     assert "/dev/tty<redacted>" in sent_body
 
 
 def test_refuse_never_calls_isatty():
-    report = _make_report(host_version=None)
-    isatty_fn = Mock(return_value=True)
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=isatty_fn,
-        confirm_fn=Mock(),
-        console=Mock(),
-    )
-    isatty_fn.assert_not_called()
+    r = _submit(_make_report(host_version=None), tty=True)
+    r.isatty_fn.assert_not_called()
 
 
 def test_dedup_seam_invoked_before_confirm_fn_on_every_ask_path():
-    report = _make_report()
     order: list[str] = []
-    find_prior_report_fn = Mock(
-        side_effect=lambda *a, **k: (order.append("dedup"), (None, True))[1]
-    )
-    confirm_fn = Mock(side_effect=lambda *a, **k: (order.append("confirm"), True)[1])
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value=None),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
+    _submit(
+        tty=True,
+        gh=None,
+        find_prior_report_fn=Mock(
+            side_effect=lambda *a, **k: (order.append("dedup"), (None, True))[1]
+        ),
+        confirm_fn=Mock(side_effect=lambda *a, **k: (order.append("confirm"), True)[1]),
     )
 
     assert order == ["dedup", "confirm"]
 
 
 def test_no_duplicate_asks_once_and_dispatches_to_create_on_yes():
-    report = _make_report()
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),  # gh auth status
-            Mock(
-                returncode=0,
-                stdout="https://github.com/henols/firestarter/issues/9\n",
-            ),  # gh issue create
-        ]
-    )
-    confirm_fn = Mock(return_value=True)
-    find_prior_report_fn = Mock(return_value=(None, True))
-    comment_via_gh_fn = Mock()
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files("https://github.com/henols/firestarter/issues/9\n"),
+        comment_via_gh_fn=Mock(),
     )
 
-    confirm_fn.assert_called_once()
-    ask_text = confirm_fn.call_args[0][0]
+    r.confirm_fn.assert_called_once()
+    ask_text = r.confirm_fn.call_args[0][0]
     assert "Submit this report" in ask_text
-    comment_via_gh_fn.assert_not_called()
-    assert run_fn.call_count == 2
+    r.comment_via_gh_fn.assert_not_called()
+    assert r.run_fn.call_count == 2
 
 
 def test_duplicate_found_asks_comment_question_and_dispatches_to_comment_on_yes():
-    report = _make_report()
     prior_url = "https://github.com/henols/firestarter_prom/issues/18"
-    find_prior_report_fn = Mock(return_value=(prior_url, True))
-    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
-    confirm_fn = Mock(return_value=True)
-    run_fn = Mock()
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        prior=(prior_url, True),
+        comment_via_gh_fn=Mock(return_value=prior_url + "#issuecomment-1"),
     )
 
-    confirm_fn.assert_called_once()
-    ask_text = confirm_fn.call_args[0][0]
+    r.confirm_fn.assert_called_once()
+    ask_text = r.confirm_fn.call_args[0][0]
     assert prior_url in ask_text
     assert "comment" in ask_text.lower()
-    comment_via_gh_fn.assert_called_once()
-    assert comment_via_gh_fn.call_args[0][0] == prior_url
+    r.comment_via_gh_fn.assert_called_once()
+    assert r.comment_via_gh_fn.call_args[0][0] == prior_url
     # No new-issue create call is ever made on the duplicate branch.
-    run_fn.assert_not_called()
+    r.run_fn.assert_not_called()
 
 
 def test_duplicate_comment_decline_does_not_comment():
-    report = _make_report()
     prior_url = "https://github.com/henols/firestarter_prom/issues/18"
-    find_prior_report_fn = Mock(return_value=(prior_url, True))
-    comment_via_gh_fn = Mock()
-    confirm_fn = Mock(return_value=False)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        tty=True,
+        confirm=False,
+        gh="/usr/bin/gh",
+        prior=(prior_url, True),
+        comment_via_gh_fn=Mock(),
     )
 
-    comment_via_gh_fn.assert_not_called()
+    r.comment_via_gh_fn.assert_not_called()
 
 
 def test_duplicate_comment_fails_falls_back_to_browser_on_existing_issue():
-    report = _make_report()
     prior_url = "https://github.com/henols/firestarter_prom/issues/18"
-    find_prior_report_fn = Mock(return_value=(prior_url, True))
-    comment_via_gh_fn = Mock(return_value=None)
-    browser_open = Mock()
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=Mock(),
-        browser_open=browser_open,
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=Mock(return_value=True),
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        prior=(prior_url, True),
+        comment_via_gh_fn=Mock(return_value=None),
     )
 
-    browser_open.assert_called_once()
+    r.browser_open.assert_called_once()
 
 
 def test_dedup_check_failed_still_asks_and_prints_could_not_run_line():
-    report = _make_report()
-    find_prior_report_fn = Mock(return_value=(None, False))
-    confirm_fn = Mock(return_value=False)
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    r = _submit(tty=True, confirm=False, gh=None, prior=(None, False))
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value=None),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    confirm_fn.assert_called_once()
-    ask_text = confirm_fn.call_args[0][0]
+    r.confirm_fn.assert_called_once()
+    ask_text = r.confirm_fn.call_args[0][0]
     assert "Submit this report" in ask_text
-    assert any("could not run" in m.lower() for m in printed)
+    assert any("could not run" in m.lower() for m in r.printed)
 
 
 def test_off_tty_names_existing_issue_when_duplicate_found():
-    report = _make_report()
     prior_url = "https://github.com/henols/firestarter_prom/issues/18"
-    find_prior_report_fn = Mock(return_value=(prior_url, True))
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    r = _submit(prior=(prior_url, True))
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=False),
-        confirm_fn=Mock(),
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    assert any(prior_url in m for m in printed)
+    assert any(prior_url in m for m in r.printed)
 
 
 def test_off_tty_prints_could_not_run_line_when_dedup_check_failed():
-    report = _make_report()
-    find_prior_report_fn = Mock(return_value=(None, False))
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    r = _submit(prior=(None, False))
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=False),
-        confirm_fn=Mock(),
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-    )
-
-    assert any("could not run" in m.lower() for m in printed)
+    assert any("could not run" in m.lower() for m in r.printed)
 
 
 def test_comment_body_sent_is_sanitized():
     # A PII vector present in a step reason must never reach comment_via_gh
     # unscrubbed (mirrors test_tty_body_sent_to_gh_is_sanitized for the
     # duplicate-comment branch).
-    report = _make_report(pii="failed reading /home/alice/scratch/file.bin")
     prior_url = "https://github.com/henols/firestarter_prom/issues/18"
-    find_prior_report_fn = Mock(return_value=(prior_url, True))
-    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=Mock(return_value=True),
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        _make_report(pii="failed reading /home/alice/scratch/file.bin"),
+        tty=True,
+        gh="/usr/bin/gh",
+        prior=(prior_url, True),
+        comment_via_gh_fn=Mock(return_value=prior_url + "#issuecomment-1"),
     )
 
-    sent_body = comment_via_gh_fn.call_args[0][1]
+    sent_body = r.comment_via_gh_fn.call_args[0][1]
     assert "alice" not in sent_body
     assert "/home/<user>/scratch/file.bin" in sent_body
 
@@ -1775,266 +1390,104 @@ def test_comment_body_sent_is_sanitized():
 def test_auto_submit_default_is_unchanged_on_a_tty():
     """Called without `auto_submit`, behavior is byte-identical to today on
     a TTY: the confirm prompt is still reached."""
-    report = _make_report()
-    confirm_fn = Mock(return_value=False)
-    isatty_fn = Mock(return_value=True)
+    r = _submit(tty=True, confirm=False)
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=Mock(),
-        isatty_fn=isatty_fn,
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
-    )
-
-    isatty_fn.assert_called_once()
-    confirm_fn.assert_called_once()
+    r.isatty_fn.assert_called_once()
+    r.confirm_fn.assert_called_once()
 
 
 def test_auto_submit_default_is_unchanged_off_a_tty():
     """Called without `auto_submit`, behavior is byte-identical to today off
     a TTY: `isatty_fn` is consulted and nothing is filed."""
-    report = _make_report()
-    run_fn = Mock()
-    browser_open = Mock()
-    isatty_fn = Mock(return_value=False)
+    r = _submit()
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=isatty_fn,
-        confirm_fn=Mock(),
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
-    )
-
-    isatty_fn.assert_called_once()
-    run_fn.assert_not_called()
-    browser_open.assert_not_called()
+    r.isatty_fn.assert_called_once()
+    r.run_fn.assert_not_called()
+    r.browser_open.assert_not_called()
 
 
-def test_auto_submit_never_calls_isatty_on_a_tty():
-    report = _make_report()
-    isatty_fn = Mock(return_value=True)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=Mock(
-            side_effect=[
-                Mock(returncode=0),  # gh auth status
-                Mock(
-                    returncode=0,
-                    stdout="https://github.com/henols/firestarter/issues/9\n",
-                ),
-            ]
-        ),
-        browser_open=Mock(),
-        isatty_fn=isatty_fn,
-        confirm_fn=Mock(),
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
+@pytest.mark.parametrize("tty", [True, False], ids=["on-a-tty", "off-a-tty"])
+def test_auto_submit_never_calls_isatty(tty):
+    r = _submit(
+        tty=tty,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files("https://github.com/henols/firestarter/issues/9\n"),
         auto_submit=True,
     )
 
-    isatty_fn.assert_not_called()
-
-
-def test_auto_submit_never_calls_isatty_off_a_tty():
-    report = _make_report()
-    isatty_fn = Mock(return_value=False)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=Mock(
-            side_effect=[
-                Mock(returncode=0),  # gh auth status
-                Mock(
-                    returncode=0,
-                    stdout="https://github.com/henols/firestarter/issues/9\n",
-                ),
-            ]
-        ),
-        browser_open=Mock(),
-        isatty_fn=isatty_fn,
-        confirm_fn=Mock(),
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
-        auto_submit=True,
-    )
-
-    isatty_fn.assert_not_called()
+    r.isatty_fn.assert_not_called()
 
 
 def test_auto_submit_never_calls_confirm_fn():
-    report = _make_report()
-    confirm_fn = Mock()
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=Mock(
-            side_effect=[
-                Mock(returncode=0),
-                Mock(
-                    returncode=0,
-                    stdout="https://github.com/henols/firestarter/issues/9\n",
-                ),
-            ]
-        ),
-        browser_open=Mock(),
-        isatty_fn=Mock(return_value=True),
-        confirm_fn=confirm_fn,
-        console=Mock(),
-        find_prior_report_fn=Mock(return_value=(None, True)),
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files("https://github.com/henols/firestarter/issues/9\n"),
         auto_submit=True,
     )
 
-    confirm_fn.assert_not_called()
+    r.confirm_fn.assert_not_called()
 
 
 def test_auto_submit_still_refuses_on_a_missing_field():
-    report = _make_report(protocol=None)
-    which_fn = Mock()
-    run_fn = Mock()
-    browser_open = Mock()
-    find_prior_report_fn = Mock()
-    comment_via_gh_fn = Mock()
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=which_fn,
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        _make_report(protocol=None),
+        tty=True,
+        find_prior_report_fn=Mock(),
+        comment_via_gh_fn=Mock(),
         auto_submit=True,
     )
 
-    assert any("protocol" in m for m in printed)
-    which_fn.assert_not_called()
-    run_fn.assert_not_called()
-    browser_open.assert_not_called()
-    find_prior_report_fn.assert_not_called()
-    comment_via_gh_fn.assert_not_called()
+    assert any("protocol" in m for m in r.printed)
+    r.which_fn.assert_not_called()
+    r.run_fn.assert_not_called()
+    r.browser_open.assert_not_called()
+    r.find_prior_report_fn.assert_not_called()
+    r.comment_via_gh_fn.assert_not_called()
 
 
 def test_auto_submit_prior_issue_comments_and_files_nothing_new():
-    report = _make_report()
     prior_url = "https://github.com/henols/firestarter/issues/18"
-    find_prior_report_fn = Mock(return_value=(prior_url, True))
-    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
-    run_fn = Mock()
-    browser_open = Mock()
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=run_fn,
-        browser_open=browser_open,
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        tty=True,
+        prior=(prior_url, True),
+        comment_via_gh_fn=Mock(return_value=prior_url + "#issuecomment-1"),
         auto_submit=True,
     )
 
-    comment_via_gh_fn.assert_called_once()
-    assert comment_via_gh_fn.call_args[0][0] == prior_url
-    run_fn.assert_not_called()
-    browser_open.assert_not_called()
+    r.comment_via_gh_fn.assert_called_once()
+    assert r.comment_via_gh_fn.call_args[0][0] == prior_url
+    r.run_fn.assert_not_called()
+    r.browser_open.assert_not_called()
 
 
 def test_auto_submit_prior_issue_comment_failure_states_reason_no_browser():
-    report = _make_report()
     prior_url = "https://github.com/henols/firestarter/issues/18"
-    find_prior_report_fn = Mock(return_value=(prior_url, True))
-    comment_via_gh_fn = Mock(return_value=None)
-    browser_open = Mock()
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(),
-        run_fn=Mock(),
-        browser_open=browser_open,
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-        comment_via_gh_fn=comment_via_gh_fn,
+    r = _submit(
+        tty=True,
+        prior=(prior_url, True),
+        comment_via_gh_fn=Mock(return_value=None),
         auto_submit=True,
     )
 
-    assert any("failed" in m.lower() for m in printed)
-    browser_open.assert_not_called()
+    assert any("failed" in m.lower() for m in r.printed)
+    r.browser_open.assert_not_called()
 
 
 def test_auto_submit_dedup_check_could_not_run_files_anyway_with_disclosure():
     """OP-2: the dedup check failing does not block filing under consent --
     it files anyway, and discloses that fact both on the console and in
     the body handed to `gh`."""
-    report = _make_report()
-    find_prior_report_fn = Mock(return_value=(None, False))
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),  # gh auth status
-            Mock(
-                returncode=0, stdout="https://github.com/henols/firestarter/issues/20\n"
-            ),
-        ]
-    )
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        prior=(None, False),
+        run_fn=_gh_files("https://github.com/henols/firestarter/issues/20\n"),
         auto_submit=True,
     )
 
-    assert any("could not run" in m.lower() for m in printed)
-    create_call = run_fn.call_args_list[1]
+    assert any("could not run" in m.lower() for m in r.printed)
+    create_call = r.run_fn.call_args_list[1]
     body_sent = create_call.kwargs["input"]
     assert "could not run" in body_sent.lower()
 
@@ -2043,124 +1496,50 @@ def test_auto_submit_dedup_ran_clean_body_carries_no_disclosure():
     """The disclosure sentence is added ONLY on the dedup-could-not-run
     branch -- every other path's body stays exactly what `build_body`
     returned."""
-    report = _make_report()
-    find_prior_report_fn = Mock(return_value=(None, True))
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),
-            Mock(
-                returncode=0, stdout="https://github.com/henols/firestarter/issues/21\n"
-            ),
-        ]
-    )
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files("https://github.com/henols/firestarter/issues/21\n"),
         auto_submit=True,
     )
 
-    create_call = run_fn.call_args_list[1]
+    create_call = r.run_fn.call_args_list[1]
     body_sent = create_call.kwargs["input"]
     assert "could not run" not in body_sent.lower()
 
 
 def test_auto_submit_gh_unavailable_prints_url_states_nothing_filed_no_browser():
-    report = _make_report()
-    find_prior_report_fn = Mock(return_value=(None, True))
-    browser_open = Mock()
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
+    r = _submit(tty=True, gh=None, auto_submit=True)
 
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value=None),
-        run_fn=Mock(),
-        browser_open=browser_open,
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
-        auto_submit=True,
-    )
-
-    assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in printed)
-    assert any("nothing was filed" in m.lower() for m in printed)
-    browser_open.assert_not_called()
+    assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in r.printed)
+    assert any("nothing was filed" in m.lower() for m in r.printed)
+    r.browser_open.assert_not_called()
 
 
 def test_auto_submit_successful_file_prints_created_url():
-    report = _make_report()
     created = f"https://github.com/{submit.SUBMIT_REPO}/issues/22"
-    find_prior_report_fn = Mock(return_value=(None, True))
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),
-            Mock(returncode=0, stdout=created + "\n"),
-        ]
-    )
-    printed: list[str] = []
-    console = Mock()
-    console.print.side_effect = lambda msg: printed.append(msg)
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=console,
-        find_prior_report_fn=find_prior_report_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files(created + "\n"),
         auto_submit=True,
     )
 
-    assert any(created in m for m in printed)
+    assert any(created in m for m in r.printed)
 
 
 def test_auto_submit_create_argv_carries_no_permission_gated_flag():
     """The create argv must carry no `--label` -- `gh issue create --label`
     aborts unless the label pre-exists and the caller has write access, and
     a community tester has neither."""
-    report = _make_report()
-    find_prior_report_fn = Mock(return_value=(None, True))
-    run_fn = Mock(
-        side_effect=[
-            Mock(returncode=0),
-            Mock(
-                returncode=0, stdout="https://github.com/henols/firestarter/issues/23\n"
-            ),
-        ]
-    )
-
-    submit.submit_report(
-        report,
-        "W27C512",
-        SimpleNamespace(name="x.json"),
-        which_fn=Mock(return_value="/usr/bin/gh"),
-        run_fn=run_fn,
-        browser_open=Mock(),
-        isatty_fn=Mock(),
-        confirm_fn=Mock(),
-        console=Mock(),
-        find_prior_report_fn=find_prior_report_fn,
+    r = _submit(
+        tty=True,
+        gh="/usr/bin/gh",
+        run_fn=_gh_files("https://github.com/henols/firestarter/issues/23\n"),
         auto_submit=True,
     )
 
-    create_argv = run_fn.call_args_list[1].args[0]
+    create_argv = r.run_fn.call_args_list[1].args[0]
     assert "--label" not in create_argv
     assert "-l" not in create_argv
     assert create_argv[create_argv.index("--repo") + 1] == submit.SUBMIT_REPO

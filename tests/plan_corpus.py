@@ -54,16 +54,11 @@ built mapping is cached in a module-level private variable on first call and
 returned unchanged on every later call, so the cost is paid once per pytest
 process rather than once per importing module.
 
-**mock_operator.** `Mock(spec=OPERATOR_METHODS)` is load-bearing: without
-`spec=`, an out-of-spec attribute access on the double silently returns a
-truthy `Mock` instead of raising, and a dispatch bug would read as a pass.
-This is the fourth copy of this exact double in this tree -- the other three
-are `tests/test_chip_test.py:1009`, `tests/test_chip_test_sdp_leg.py:239`
-and `tests/test_chip_test_cycle.py:26` -- named here so the drift is visible
-rather than discovered later by a fifth copy. The fixed `check_eprom_id`
-return value `(True, 0x1234)` mismatches most real chips' actual chip IDs,
-which closes the destructive gate `run_plan` consults before every write or
-erase call and makes roughly 1,383 of the corpus's 3,472 supported steps
+**mock_operator.** Re-exported from `tests/fixtures/operator_doubles.py`,
+the one copy of this double in the tree. Its fixed `check_eprom_id` return
+value `(True, 0x1234)` mismatches most real chips' actual chip IDs, which
+closes the destructive gate `run_plan` consults before every write or erase
+call and makes roughly 1,383 of the corpus's 3,472 supported steps
 (181-02: re-measured against the single-reachable-scope corpus) come back
 SKIPPED rather than actually dispatched. A sweep built on this double
 proves step-count alignment and NA-on-unsupported; it does not exercise
@@ -78,10 +73,10 @@ hand-built counter-plan reads badly without a name for it.
 
 from __future__ import annotations
 
-from unittest.mock import Mock
-
 from firestarter.chip_test import Plan, Step, derive_plan, is_uv_eprom
 from firestarter.database import EpromDatabase
+
+from .fixtures.operator_doubles import mock_operator as mock_operator
 
 REAL_DB = EpromDatabase(skip_local_override=True)
 
@@ -110,11 +105,29 @@ PART_NUMBERS = tuple(
 _PLAN_CORPUS_CACHE = None
 
 
-def _reachable_scope(name: str) -> str:
+class _LookupCachingDatabase(EpromDatabase):
+    """The shipped database with `find_chip_configs` cached per name.
+
+    Used only to derive the corpus: `derive_plan` and `_reachable_scope`
+    look the same name up three times, and each lookup scans every row.
+    Each call returns a new list, so no caller shares one.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(skip_local_override=True)
+        self._found: dict[str, list[tuple[dict, str]]] = {}
+
+    def find_chip_configs(self, chip_name: str) -> list[tuple[dict, str]]:
+        if chip_name not in self._found:
+            self._found[chip_name] = super().find_chip_configs(chip_name)
+        return list(self._found[chip_name])
+
+
+def _reachable_scope(name: str, db: EpromDatabase) -> str:
     """`"partial"` for a UV chip, `"full"` otherwise -- the same rule
     `dev_test` inlines at its `derive_plan` call site, measured equivalent
     to `Plan.is_uv` over all 677 names (evidence/181-02-derive-plan-equivalence.txt)."""
-    full = REAL_DB.get_eprom(name)
+    full = db.get_eprom(name)
     return "partial" if full and is_uv_eprom(full) else "full"
 
 
@@ -124,45 +137,12 @@ def plan_corpus():
     pytest process."""
     global _PLAN_CORPUS_CACHE
     if _PLAN_CORPUS_CACHE is None:
+        db = _LookupCachingDatabase()
         _PLAN_CORPUS_CACHE = {
-            name: derive_plan(name, REAL_DB, write_scope=_reachable_scope(name))
+            name: derive_plan(name, db, write_scope=_reachable_scope(name, db))
             for name in PART_NUMBERS
         }
     return _PLAN_CORPUS_CACHE
-
-
-OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-    "sdp_lock",
-    "sdp_unlock",
-]
-
-
-def mock_operator(**returns):
-    """A bench-free `EpromOperator` double. See the module docstring for
-    why this is the fourth copy of this exact shape in the tree, and for
-    the fixed `check_eprom_id` return value's SKIPPED-step consequence."""
-    op = Mock(spec=OPERATOR_METHODS)
-    op.check_eprom_id.return_value = (True, 0x1234)
-    op.read_eprom.return_value = True
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
-    op.check_eprom_blank.return_value = 0
-    op.write_eprom.return_value = True
-    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
-    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
-    op.verify_eprom.return_value = 0
-    op.erase_eprom.return_value = True
-    op.sdp_lock.return_value = True
-    op.sdp_unlock.return_value = True
-    for name, value in returns.items():
-        getattr(op, name).return_value = value
-        getattr(op, name).side_effect = None
-    return op
 
 
 def plan_with_steps(*steps, name="M8720", is_uv=False):

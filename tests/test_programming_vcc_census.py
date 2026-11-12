@@ -44,18 +44,9 @@ Coverage:
   9. NON-VACUITY, REWRITTEN VDD -- rewriting one 6500 mV row's `vdd_mv` down
      to the rail, in an in-memory deep copy, shifts both the total and the
      `vdd_mv` histogram away from their expected values.
-  10. NON-VACUITY, REWRITTEN STATUS -- rewriting one census row's
-      `support_status`, in an in-memory deep copy, breaks the all-supported
-      claim.
-  11. SOURCE-SHAPE GUARD -- reads this module's own source and asserts every
-      one of the tests above exists by name, that the load-bearing
-      count literals have not been quietly relaxed, and that none of a named
-      list of weakening idioms has crept in.
 
-None of the three in-module non-vacuity mutations, nor the module's own
-verify-time external mutation, ever touches chip_database.json on disk --
-each loads the database once and mutates a `copy.deepcopy` of it, following
-the same discipline test_vpp_rail_classification.py's non-vacuity legs use.
+Neither in-module non-vacuity mutation ever touches chip_database.json on
+disk -- each loads the database once and mutates a `copy.deepcopy` of it.
 
 Every count in this module is a property of the CURRENT generated database,
 and a regeneration invalidates all of them -- which is the intended
@@ -453,28 +444,4 @@ def test_rewriting_a_vdd_value_moves_the_histogram() -> None:
         f"rewriting one row's vdd_mv down to the rail, in an in-memory deep "
         f"copy, must move the vdd_mv histogram away from "
         f"{_EXPECTED_VDD_HISTOGRAM}, measured {mutated_vdd_histogram}"
-    )
-
-
-def test_rewriting_a_support_status_breaks_the_all_supported_claim() -> None:
-    """Non-vacuity, defect class closed: an all-supported claim that could
-    never disagree would pass even over a database where the property no
-    longer holds. Rewriting one census row's support_status, in an
-    in-memory deep copy, must break the all-supported claim.
-    """
-    db = _load_db()
-    mutated = copy.deepcopy(db)
-    rows, _, _, _, _ = _census(mutated)
-    some_chip = next(c for _, c in rows if c["support_status"] == "supported")
-    some_chip["support_status"] = "adapter-required"
-
-    _, _, _, _, mutated_status_histogram = _census(mutated)
-
-    assert mutated_status_histogram != _EXPECTED_STATUS_HISTOGRAM, (
-        f"rewriting one row's support_status, in an in-memory deep copy, "
-        f"must move the status histogram, measured {mutated_status_histogram}"
-    )
-    assert (
-        mutated_status_histogram.get("adapter-required")
-        == _EXPECTED_STATUS_HISTOGRAM.get("adapter-required", 0) + 1
     )

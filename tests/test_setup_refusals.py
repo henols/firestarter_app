@@ -33,22 +33,16 @@ def test_setup_command_records_the_refusal_text(make_comm, fake_serial) -> None:
     assert comm.setup_refusal == f"Command refused: {REFUSALS[reason]}"
 
 
-def test_probe_port_hands_the_refusal_to_the_caller(monkeypatch) -> None:
-    def _init(self, port=None, baud_rate=None, **kwargs):
-        self.connection = MagicMock()
-        self.port_name = port
-        self.setup_refusal = None
-
+def test_probe_port_hands_the_refusal_to_the_caller(monkeypatch, fake_serial) -> None:
     def _refusing_setup(self, command_to_send, config_manager, **kwargs):
         self.setup_refusal = "Failed parsing config"
         return False
 
-    monkeypatch.setattr(SerialCommunicator, "__init__", _init)
     monkeypatch.setattr(
-        SerialCommunicator, "consume_remaining_input", lambda self: None
+        "firestarter.serial_comm.serial.Serial", lambda *a, **kw: fake_serial
     )
+    monkeypatch.setattr("firestarter.serial_comm.CONNECTION_STABILIZE_DELAY", 0)
     monkeypatch.setattr(SerialCommunicator, "setup_command", _refusing_setup)
-    monkeypatch.setattr(SerialCommunicator, "disconnect", lambda self: None)
 
     refusals: list[str] = []
     comm = SerialCommunicator._probe_port(
@@ -56,6 +50,7 @@ def test_probe_port_hands_the_refusal_to_the_caller(monkeypatch) -> None:
     )
     assert comm is None
     assert refusals == ["Failed parsing config"]
+    assert not fake_serial.is_open
 
 
 def _walk_with_refusal(monkeypatch, text: str) -> None:

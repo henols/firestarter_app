@@ -34,9 +34,10 @@ calls rather than reading `chip["programming"]` directly; reading raw JSON
 would miss the derivation entirely and could not detect a regression in
 `convert_to_programmer` itself.
 
-One module-level `EpromDatabase(skip_local_override=True)` instance is
-used throughout, so a developer's own `~/.firestarter/database.json`
-override can never change any of the rows checked here.
+The shared `tests.plan_corpus.REAL_DB`, an
+`EpromDatabase(skip_local_override=True)` instance, is used throughout, so
+a developer's own `~/.firestarter/database.json` override can never change
+any of the rows checked here.
 
 Coverage (5 legs):
   1. The algorithm-13 selector reaches chip records: it returns rows both
@@ -89,9 +90,7 @@ from firestarter.chip_test import (
 from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
 
-# One shared, real, on-disk database instance -- no ~/.firestarter override,
-# no serial, deterministic across developer machines.
-_REAL_DB = EpromDatabase(skip_local_override=True)
+from .plan_corpus import REAL_DB, all_rows
 
 _ALGORITHM_0X0D = 13
 _ALGORITHM_FLASH4 = 5
@@ -119,15 +118,6 @@ def _select_algorithm_13_rows(db: EpromDatabase) -> list[tuple[str, dict]]:
     return selected
 
 
-def _all_rows(db: EpromDatabase) -> list[tuple[str, dict]]:
-    """Every (manufacturer, chip_record) pair in the database, exhaustively."""
-    rows = []
-    for manufacturer, chips in db.proms.items():
-        for chip in chips:
-            rows.append((manufacturer, chip))
-    return rows
-
-
 def _erase_capability_bit(db: EpromDatabase, manufacturer: str, chip: dict) -> bool:
     """Convert `chip` through the real `_map_data` -> `convert_to_programmer`
     pipeline and return whether the erase capability bit is set on the wire.
@@ -148,7 +138,7 @@ def _erase_capability_bit(db: EpromDatabase, manufacturer: str, chip: dict) -> b
 def test_algorithm_13_selector_reaches_rows_on_and_off_dip24_2816() -> None:
     """Every other leg filters `_select_algorithm_13_rows`; an empty or
     one-sided selection would let those legs pass vacuously."""
-    pinouts = {chip["pinout"] for _, chip in _select_algorithm_13_rows(_REAL_DB)}
+    pinouts = {chip["pinout"] for _, chip in _select_algorithm_13_rows(REAL_DB)}
     assert "DIP24_2816" in pinouts
     assert pinouts - {"DIP24_2816"}, "no algorithm-13 row off DIP24_2816"
 
@@ -159,12 +149,12 @@ def test_algorithm_13_selector_reaches_rows_on_and_off_dip24_2816() -> None:
 def test_every_algorithm_13_row_off_dip24_2816_carries_the_erase_capability_bit() -> (
     None
 ):
-    algo13_rows = _select_algorithm_13_rows(_REAL_DB)
+    algo13_rows = _select_algorithm_13_rows(REAL_DB)
     offenders = [
         f"{mfr}/{chip.get('part_number', '?')}"
         for mfr, chip in algo13_rows
         if chip["pinout"] != "DIP24_2816"
-        and not _erase_capability_bit(_REAL_DB, mfr, chip)
+        and not _erase_capability_bit(REAL_DB, mfr, chip)
     ]
     assert not offenders, (
         f"every algorithm-13 row off DIP24_2816 must carry the erase "
@@ -177,14 +167,14 @@ def test_no_dip24_2816_row_carries_the_erase_capability_bit() -> None:
     bytes as data. The firmware must never be told it may erase them."""
     dip24 = [
         (mfr, chip)
-        for mfr, chip in _select_algorithm_13_rows(_REAL_DB)
+        for mfr, chip in _select_algorithm_13_rows(REAL_DB)
         if chip["pinout"] == "DIP24_2816"
     ]
     assert len(dip24) == 19
     carrying = [
         f"{mfr}/{chip['part_number']}"
         for mfr, chip in dip24
-        if _erase_capability_bit(_REAL_DB, mfr, chip)
+        if _erase_capability_bit(REAL_DB, mfr, chip)
     ]
     assert not carrying, carrying
 
@@ -200,13 +190,13 @@ def test_no_non_algorithm_13_row_gained_the_erase_capability_bit() -> None:
     invariant rather than merely freezing whatever the code currently does.
     """
     offenders = []
-    for mfr, chip in _all_rows(_REAL_DB):
+    for mfr, chip in all_rows(REAL_DB):
         algo = chip.get("programming", {}).get("algorithm")
         if algo == _ALGORITHM_0X0D:
             continue
         etype = chip.get("electrical", {}).get("type", "")
         expected = etype in _ERASABLE_ELECTRICAL_TYPES and algo != _ALGORITHM_FLASH4
-        actual = _erase_capability_bit(_REAL_DB, mfr, chip)
+        actual = _erase_capability_bit(REAL_DB, mfr, chip)
         if actual != expected:
             offenders.append(
                 f"{mfr}/{chip.get('part_number', '?')}: algorithm={algo} "
@@ -233,7 +223,7 @@ def test_algorithm_5_rows_still_do_not_carry_the_erase_capability_bit() -> None:
     """
     algo5_rows = [
         (mfr, chip)
-        for mfr, chip in _all_rows(_REAL_DB)
+        for mfr, chip in all_rows(REAL_DB)
         if chip.get("programming", {}).get("algorithm") == _ALGORITHM_FLASH4
     ]
     assert len(algo5_rows) > 0, (
@@ -245,7 +235,7 @@ def test_algorithm_5_rows_still_do_not_carry_the_erase_capability_bit() -> None:
     offenders = [
         f"{mfr}/{chip.get('part_number', '?')}"
         for mfr, chip in algo5_rows
-        if _erase_capability_bit(_REAL_DB, mfr, chip)
+        if _erase_capability_bit(REAL_DB, mfr, chip)
     ]
     assert not offenders, (
         f"algorithm-5 (flash4) rows must NEVER carry the erase capability "
@@ -281,7 +271,7 @@ def test_at28c256_full_plan_shape_is_pinned() -> None:
     equality on the op sequence so an inserted or reordered step fails
     loudly rather than being missed by a membership check.
     """
-    plan = derive_plan(_AT28C256_CHIP_NAME, _REAL_DB, write_scope="full")
+    plan = derive_plan(_AT28C256_CHIP_NAME, REAL_DB, write_scope="full")
     ops = [step.op for step in plan.steps]
 
     assert ops == _AT28C256_FULL_EXPECTED_OP_ORDER, (

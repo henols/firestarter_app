@@ -6,7 +6,8 @@ exists for `test_serial_comm.py`/`test_serial_characterization.py`. No new
 harness is built here.
 
 Six legs:
-  1. The outgoing command frame carries `COMMAND_LOCK_STATUS`.
+  1. `read_protection_status` sends `COMMAND_LOCK_STATUS` and returns the
+     DATA frame's payload.
   2. Both definite decodes (`DECODE_UNPROTECTED`/`DECODE_PROTECTED`) parse and
      the raw byte reaches the caller exactly as fed.
   3. A raw byte with bits set in both nibbles survives an unrecognised
@@ -22,9 +23,7 @@ from __future__ import annotations
 
 import pytest
 
-from firestarter import command_frame
 from firestarter.constants import COMMAND_LOCK_STATUS
-from firestarter.frame_parser import cobs_decode
 from firestarter.lock_status import (
     DECODE_INDETERMINATE,
     DECODE_PROTECTED,
@@ -36,31 +35,42 @@ from firestarter.messages import MSG_DATA_PROTECTION_STATUS
 from firestarter.protection_readability import GATE_TOKEN_READ_PERMITTED
 from firestarter.serial_comm import SerialTimeoutError
 
-from .conftest import build_frame
+from .conftest import build_frame, connect_via
 
 
-def test_outgoing_command_carries_command_lock_status_constant(
+def test_read_protection_status_sends_lock_status_and_returns_the_payload(
     make_comm, fake_serial
 ) -> None:
-    """Leg 1 (frame build). `EpromOperator._setup_operation` builds a
-    command dict with `cmd=COMMAND_LOCK_STATUS` and hands it to
-    `SerialCommunicator.find_and_connect`, which drives
-    `send_command` at connect time -- this is the request the host
-    actually emits for this command. Asserted against the constant, never
-    a bare literal command-value integer, so this leg survives a
-    deliberate renumber and reddens only on an accidental one."""
-    comm = make_comm()
-    comm.send_command({"cmd": COMMAND_LOCK_STATUS, "algorithm": 6})
+    """Leg 1 (frame build). `EpromOperator.read_protection_status` connects
+    with a command dict whose `cmd` is `COMMAND_LOCK_STATUS`, without the
+    force flag, and returns the two params of the DATA frame the firmware
+    sends in the MAIN phase. Asserted against the constant, never a bare
+    literal command-value integer."""
+    from firestarter.config import ConfigManager
+    from firestarter.constants import FLAG_FORCE
+    from firestarter.eprom_operations import EpromOperator
+    from firestarter.messages import MSG_END_DONE, MSG_INIT_DONE, MSG_MAIN_DONE
 
-    fake_serial._buf.seek(0)
-    written = fake_serial._buf.read()
+    raw = 0x3C
+    for frame in (
+        build_frame(MSG_INIT_DONE, b""),
+        build_frame(MSG_DATA_PROTECTION_STATUS, bytes([raw, DECODE_PROTECTED])),
+        build_frame(MSG_MAIN_DONE, b""),
+        build_frame(MSG_END_DONE, b""),
+    ):
+        fake_serial.feed(frame)
 
-    assert written[-1:] == b"\x00"
-    body = written[:-1]
-    decoded = cobs_decode(body)
-    payload = decoded[:-1]  # strip the trailing CRC8 byte
-    assert payload[0] == command_frame.MAGIC
-    assert payload[2] == COMMAND_LOCK_STATUS
+    operator = EpromOperator(ConfigManager())
+    with connect_via(make_comm) as captured:
+        ok, payload = operator.read_protection_status(
+            "W27C512", {"memory-size": 65536, "flags": 0}
+        )
+
+    assert len(captured) == 1
+    assert captured[0]["cmd"] == COMMAND_LOCK_STATUS
+    assert captured[0]["flags"] & FLAG_FORCE == 0
+    assert ok is True
+    assert payload == bytes([raw, DECODE_PROTECTED])
 
 
 @pytest.mark.parametrize("decode_byte", [DECODE_UNPROTECTED, DECODE_PROTECTED])

@@ -1,31 +1,26 @@
 """Phase 42 / ERR-03 coverage lift for ``ConfigManager`` get/set/persist
 + override file resolution (D-14.4).
 
-ConfigManager is a per-config-file-path singleton; tests use unique filenames
-under ``tmp_path`` so each test instantiates a fresh singleton bucket.
+ConfigManager is a per-config-file-path singleton. The autouse
+``_isolated_config`` fixture in conftest gives each test an empty config
+directory and an empty singleton cache.
 """
 
 import json
 import os
-from typing import Iterator  # noqa: UP035
 from unittest.mock import patch
 
 import pytest
 
+from firestarter import config
 from firestarter.config import ConfigManager
 
 
 @pytest.fixture
-def tmp_config_dir(tmp_path, monkeypatch) -> Iterator[str]:
-    """Redirect ``HOME_PATH`` (where ConfigManager writes config.json) to
-    ``tmp_path`` for the duration of the test. Resets ConfigManager's
-    singleton cache so each test instantiates fresh.
-    """
-    monkeypatch.setattr("firestarter.config.HOME_PATH", str(tmp_path))
-    # Wipe singleton state between tests so the tmp_path-rooted file is loaded fresh.
-    ConfigManager._instances.clear()
-    ConfigManager._initialized_configs.clear()
-    yield str(tmp_path)
+def tmp_config_dir() -> str:
+    """The isolated config directory (``HOME_PATH``), created."""
+    os.makedirs(config.HOME_PATH, exist_ok=True)
+    return config.HOME_PATH
 
 
 def test_config_manager_get_default_value(tmp_config_dir: str) -> None:
@@ -80,11 +75,9 @@ def test_config_manager_remove_key_persists(tmp_config_dir: str) -> None:
     cm.set_value("port", None, persist=True)
     assert cm.get_value("port") is None
 
-    # Reload from disk: the key should be gone.
-    ConfigManager._instances.clear()
-    ConfigManager._initialized_configs.clear()
-    cm2 = ConfigManager(config_filename="t_remove_key.json")
-    assert cm2.get_value("port") is None
+    # The key is gone from the file on disk.
+    with open(os.path.join(tmp_config_dir, "t_remove_key.json")) as f:
+        assert "port" not in json.load(f)
 
 
 def test_config_manager_list_all_returns_copy(tmp_config_dir: str) -> None:
@@ -118,8 +111,6 @@ def test_config_manager_invalid_json_resets_to_empty(tmp_config_dir: str) -> Non
     with open(cfg_path, "w") as f:
         f.write("{ this is not valid json ")
 
-    ConfigManager._instances.clear()
-    ConfigManager._initialized_configs.clear()
     cm = ConfigManager(config_filename="t_invalid.json")
     # Corrupted file loads as empty dict — get_value returns default.
     assert cm.get_value("any_key") is None

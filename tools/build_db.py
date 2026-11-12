@@ -311,6 +311,18 @@ def intel28f_vpp_conflict_pins(pinout_key, pin_count, address_lines):
     return []
 
 
+def decode_vpp_mv(voltages):
+    """The VPP in mV that the low byte of an infoic `voltages` field selects.
+
+    0xF1 and 0xF2 are whole-byte indices. Every other byte selects through its
+    high nibble only, because the low nibble is a VCC index (vpp_byte_vcc_mv).
+    """
+    vpp_byte = voltages & 0xFF
+    if vpp_byte in _VPP_EXACT_LOW_BYTES:
+        return VPP_MV[vpp_byte]
+    return VPP_MV.get(vpp_byte & 0xF0, 0)
+
+
 def vpp_byte_vcc_mv(voltages):
     """The VCC that the low nibble of the VPP byte selects, or None.
 
@@ -913,12 +925,7 @@ def main():
                     type_int, proto_id, pm_idx, flags, pinout_key, mem_size
                 )
 
-                _voltages_lo = voltages & 0xFF
-                _d_vpp_mv = (
-                    VPP_MV[_voltages_lo]
-                    if _voltages_lo in _VPP_EXACT_LOW_BYTES
-                    else VPP_MV.get(_voltages_lo & 0xF0, 0)
-                )
+                _d_vpp_mv = decode_vpp_mv(voltages)
                 # A 3V part names its supply in the VPP byte, not in the vcc
                 # nibble. A 5V-class value there (4.75, 5.25, 5.5) is ignored.
                 _byte_vcc_mv = vpp_byte_vcc_mv(voltages)

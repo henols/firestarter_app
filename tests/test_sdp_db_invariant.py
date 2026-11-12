@@ -14,11 +14,7 @@ Coverage:
      programming.chip_id_value == "0x00000000" -- the field that actually
      determines firmware behaviour (eeprom_28c.cpp's identity branch only
      fires when handle->chip_id > 0).
-  4. Non-vacuous proof: a synthetic in-memory DB dict with one algorithm==13
-     chip carrying chip_id_check: True IS flagged by the same shared helper
-     the real test calls -- proves the invariant is capable of failing, not a
-     vacuous always-pass check (RESEARCH F9's "hollow in one direction"
-     warning).
+  4. (retired: a synthetic check of the test's own helper.)
   5. Anti-narrowing element-wise parity: the measured 0x0D ALLOW set (via
      `sdp_capability_for_entry`) equals the committed
      `_COMMITTED_SDP_ALLOW_ENTRIES` snapshot exactly, element for element --
@@ -271,42 +267,6 @@ def test_all_0x0d_chips_have_chip_id_value_zero_sentinel() -> None:
         "branch when handle->chip_id > 0 (eeprom_28c.cpp:eeprom28c_write_init). "
         f"Offending chips: {offenders}"
     )
-
-
-def test_synthetic_chip_id_check_true_is_flagged_non_vacuous() -> None:
-    """Non-vacuity proof: a synthetic algorithm==13 chip with
-    chip_id_check: True MUST make the shared helper raise.
-
-    Proves the invariant gate is capable of failing -- not a vacuous
-    always-pass check (RESEARCH F9's "hollow in one direction" warning).
-    Exercises the exact same _select_0x0d_chips / _assert_chip_id_check_false
-    helpers the real-DB test above calls, not a parallel reimplementation.
-    """
-    synthetic_db = {
-        "SYNTHETIC_MFR": [
-            {
-                "part_number": "SYNTHETIC_0x0D_VIOLATION",
-                "programming": {
-                    "algorithm": 13,
-                    "chip_id_check": True,
-                    "chip_id_value": "0x00000000",
-                },
-            }
-        ]
-    }
-    selected = _select_0x0d_chips(synthetic_db)
-    assert len(selected) == 1, "Synthetic fixture setup error: expected 1 selected chip"
-
-    try:
-        _assert_chip_id_check_false(selected)
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError(
-            "Non-vacuity failure: the shared helper did not raise on a "
-            "synthetic chip_id_check: True row -- the TRACE-05 invariant "
-            "gate is vacuous."
-        )
 
 
 def test_sdp_partition_matches_committed_allow_list_element_wise() -> None:

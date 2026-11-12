@@ -38,19 +38,14 @@ from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 
 from .conftest import make_app_context
+from .plan_corpus import REAL_DB
 
 _CHIP = "AT28C256"
 
 
-# Measured this session -- see module docstring.
-@pytest.fixture()
-def runner() -> CliRunner:
-    return CliRunner()
-
-
 @pytest.fixture(scope="module")
 def real_db() -> EpromDatabase:
-    return EpromDatabase(skip_local_override=True)
+    return REAL_DB
 
 
 # Leg 1: `blank` is registered and its help text renders.

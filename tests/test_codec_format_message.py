@@ -22,6 +22,8 @@ from firestarter.messages import (
     MSG_WARN_VPP_LOW_MV,
 )
 
+from .conftest import id_frame_body
+
 
 def test_format_msg_ok_rev_no_override_returns_silkscreen() -> None:
     """MSG_OK_REV with effective=0xFF (no override) returns the physical silkscreen string."""
@@ -93,20 +95,15 @@ def test_format_message_unmatched_id_returns_none() -> None:
     assert out is None
 
 
-def _cfg_body(params: bytes) -> bytes:
-    from firestarter.frame_parser import _crc8_ccitt
-
-    head = bytes([MSG_OK_CFG]) + params
-    return head + bytes([_crc8_ccitt(head)])
-
-
 def test_decode_msg_ok_cfg_current_13_byte_form() -> None:
     """The current ack carries r1, r2, override, the bandgap and its count."""
     import struct
 
     from firestarter.codec import decode_id_frame
 
-    body = _cfg_body(struct.pack(">IIBHH", 270000, 44000, 0xFF, 1100, 225))
+    body = id_frame_body(
+        MSG_OK_CFG, struct.pack(">IIBHH", 270000, 44000, 0xFF, 1100, 225)
+    )
     msg = decode_id_frame(len(body), body)
     assert msg is not None
     assert msg.text == "R1: 270000, R2: 44000, Bandgap: 1100 mV, Bandgap count: 225"
@@ -126,7 +123,7 @@ def test_decode_msg_ok_cfg_other_lengths_rejected() -> None:
         struct.pack(">IIBB", 270000, 44000, 0xFF, 1),
         struct.pack(">IIBHB", 270000, 44000, 0xFF, 1100, 0),
     ):
-        body = _cfg_body(params)
+        body = id_frame_body(MSG_OK_CFG, params)
         assert decode_id_frame(len(body), body) is None
 
 

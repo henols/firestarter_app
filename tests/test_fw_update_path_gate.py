@@ -23,8 +23,9 @@ paths. Meanwhile the version was sitting in the very next ack as
 
 The pair of tests per case is the point: every waiver test has a twin that
 proves the strict path is UNCHANGED without the flag. The waiver must never
-become reachable from a chip operation, so a source-level tripwire below pins
-the set of production call sites that pass it.
+become reachable from a chip operation, so TestWaiverPlumbing pins that
+find_and_connect keeps the strict gate by default and that the updater is the
+caller that opts in.
 
 D2 — `_maybe_auto_route_to_pre` gated the beta-app pre-channel auto-route on
 `--install`, so on a pre-release app bare `fw` compared against the newest
@@ -34,41 +35,31 @@ resolved the stable asset — a DOWNGRADE to firmware this host cannot speak to.
 
 import contextlib
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from firestarter.exceptions import FirmwareOutdatedError
 from firestarter.firmware import FirmwareManager
-from firestarter.frame_parser import Response
 from firestarter.serial_comm import SerialCommunicator
+
+from .conftest import AnsweringSerial, port_opens
+from .fixtures.ready_ack import ready_ack_frame
 
 # Helpers
 
 
 @contextlib.contextmanager
-def _probe_with_identity(identity):
-    """Patch out serial I/O and pin the CAP-02 firmware identity string.
+def _probe_with_identity(identity, *later_replies: bytes):
+    """Open a fake port whose setup ack carries the CAP-02 identity string.
 
     Same shape as tests/test_fwguard.py's helper — deliberately duplicated
-    rather than imported so this file states its own preconditions.
+    rather than imported so this file states its own preconditions. None
+    sends the 2-byte ack of firmware before CAP-02. `later_replies` follow
+    the ack on the wire.
     """
-    with (
-        patch.object(
-            SerialCommunicator,
-            "expect_ack_response",
-            return_value=Response(type="OK", message="Ready"),
-        ),
-        patch.object(SerialCommunicator, "send_command", return_value=42),
-        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
-        patch.object(SerialCommunicator, "disconnect", return_value=None),
-        patch.object(SerialCommunicator, "firmware_identity", identity),
-        patch.object(SerialCommunicator, "hw_revision", None),
-        patch.object(SerialCommunicator, "port_name", "/dev/null", create=True),
-        # setup_command asserts the link is open (207.1 D-11)
-        patch.object(SerialCommunicator, "is_connected", return_value=True),
-        patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
-    ):
+    ack = ready_ack_frame(identity=identity) + b"".join(later_replies)
+    with port_opens(AnsweringSerial(ack)):
         yield
 
 
@@ -87,10 +78,6 @@ def _probe(**kwargs):
 
 
 class TestOutdatedFirmwareWaiverScope:
-    @pytest.fixture(autouse=True)
-    def _clear_escape_hatch(self, monkeypatch):
-        monkeypatch.delenv("FIRESTARTER_DEV_ALLOW_PRE_V12", raising=False)
-
     def test_absent_identity_is_tolerated_on_the_update_path(self):
         """D1 core: pre-CAP-02 ack must NOT abort the firmware-update read."""
         with _probe_with_identity(None):
@@ -139,7 +126,7 @@ class TestOutdatedFirmwareWaiverScope:
                 SerialCommunicator._probe_port(
                     port_name="/dev/null",
                     baud_rate=250000,
-                    command_to_send={"bus-config": {"vpp-pin": 11}},
+                    command_to_send={"cmd": 1, "bus-config": {"vpp-pin": 11}},
                     config_manager=MagicMock(),
                     allow_outdated_firmware=True,
                 )
@@ -208,13 +195,6 @@ class TestWaiverPlumbing:
 class TestUpdateDecisionReachedOnPreCap02Firmware:
     """The end-to-end regression: the update decision must be REACHED."""
 
-    @pytest.fixture(autouse=True)
-    def _prerelease_cli(self, monkeypatch):
-        """A pre-release CLI: a stable CLI refuses the pre-release tags below."""
-        import firestarter as _pkg
-
-        monkeypatch.setattr(_pkg, "__version__", "3.0.0b19")
-
     def test_manage_firmware_update_reaches_the_download_boundary(self, monkeypatch):
         """No identity in the ack, version from the legacy text ack, then install.
 
@@ -280,15 +260,11 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
         )
         monkeypatch.setattr(fm, "_download_firmware_file", lambda url: None)
 
-        with _probe_with_identity(None):
-            with patch.object(
-                SerialCommunicator,
-                "expect_ack",
-                return_value=(True, "FW: 3.0.0b11:uno"),
-            ):
-                # Not raising is the assertion. Return value is False because
-                # the (stubbed) download fails, which is a later stage.
-                fm.manage_firmware_update(install_flag=True, port_override="/dev/null")
+        # The second ack is the legacy text line with the version.
+        with _probe_with_identity(None, b"OK: FW: 3.0.0b11:uno\n"):
+            # Not raising is the assertion. Return value is False because
+            # the (stubbed) download fails, which is a later stage.
+            fm.manage_firmware_update(install_flag=True, port_override="/dev/null")
 
 
 # D2 — channel resolution on a pre-release app
@@ -296,12 +272,6 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
 
 class TestChannelAutoRouteIsNotGatedOnInstall:
     """A pre-release app must compare against, and install from, its own channel."""
-
-    @pytest.fixture(autouse=True)
-    def _isolate_version(self, monkeypatch):
-        import firestarter as _pkg
-
-        monkeypatch.setattr(_pkg, "__version__", _pkg.__version__)
 
     def _args(self, **over):
         from types import SimpleNamespace

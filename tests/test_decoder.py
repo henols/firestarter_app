@@ -24,14 +24,14 @@ from conftest.py. No real serial port is opened.
 import logging
 import struct
 
-import pytest  # noqa: F401
+import pytest
 
 from firestarter.messages import (
     CATALOG,
     DBG_CMD,
     MSG_DATA_CHUNK,
     MSG_DATA_PROGRESS,
-    MSG_DATA_SENDING,  # noqa: F401
+    MSG_DATA_SENDING,
     MSG_DEBUG,
     MSG_END_DONE,
     MSG_ERR_WRITE_FAILED,
@@ -47,14 +47,15 @@ from firestarter.messages import (
     MSG_OK_REV,
     MSG_WARN_MEM_SIZE_TOO_SMALL,
 )
-from firestarter.serial_comm import (
-    MAGIC_PREAMBLE,  # noqa: F401
-    LogMessage,
-    Response,
-    _crc8_ccitt,
-)
+from firestarter.serial_comm import LogMessage, Response
 
-from .conftest import build_frame
+from .conftest import (
+    build_frame,
+    connect_via,
+    fresh_serial_and_comm,
+    id_frame_body,
+    read_phase_frames,
+)
 
 
 def _drive_one_response(comm, timeout: float = 1.0):
@@ -66,62 +67,158 @@ def _drive_one_response(comm, timeout: float = 1.0):
         return None
 
 
+def _cfg_params(override: int, bandgap_mv: int, bandgap_count: int) -> bytes:
+    """MSG_OK_CFG params: u32 r1=10000, u32 r2=4700, u8 override, u16 bandgap
+    in mV, u16 bandgap count."""
+    return (
+        struct.pack(">II", 10000, 4700)
+        + bytes([override])
+        + struct.pack(">HH", bandgap_mv, bandgap_count)
+    )
+
+
+# One frame in, one (severity label, rendered text) out. Each row names the
+# catalog shape or render rule it pins.
+_RENDER_CASES = [
+    # LHOST-01: a zero-param frame.
+    pytest.param(MSG_OK_READY, b"", "OK", "Ready", id="ok_ready-zero_param"),
+    # LHOST-01/02: a u32 param through printf format substitution.
+    pytest.param(
+        MSG_WARN_MEM_SIZE_TOO_SMALL,
+        bytes.fromhex("00010000"),
+        "WARN",
+        "Memory size 65536 too small for chip-id check",
+        id="u32_param",
+    ),
+    # LHOST-02: u24 render-hint 'hex_addr' renders as 0x%06x lowercase.
+    pytest.param(
+        MSG_INFO_ADDR,
+        bytes.fromhex("01F4A2"),
+        "INFO",
+        "Address: 0x01f4a2",
+        id="u24_hex_addr",
+    ),
+    # LHOST-01: (u24 addr, u8 retries, u16 bad bytes) renders all three.
+    pytest.param(
+        MSG_ERR_WRITE_FAILED,
+        bytes.fromhex("01F4A2" + "05" + "0003"),
+        "ERROR",
+        "Failed to write memory, 0x01f4a2, retries: 5, bad bytes: 3",
+        id="multi_param",
+    ),
+    # Two back-to-back u32 params, DATA severity.
+    pytest.param(
+        MSG_DATA_PROGRESS,
+        bytes.fromhex("00000001" + "00010000"),
+        "DATA",
+        "1/65536",
+        id="data_progress-u32_pair",
+    ),
+    # W-01/W-02: state-machine acks route by the catalog severity band, not
+    # by line-prefix matching.
+    pytest.param(MSG_INIT_DONE, b"", "INIT", "(init done)", id="init_done"),
+    pytest.param(MSG_MAIN_DONE, b"", "MAIN", "(main done)", id="main_done"),
+    pytest.param(MSG_END_DONE, b"", "END", "(end done)", id="end_done"),
+    # P-02: MSG_OK_REV (physical, effective). With an override, the override
+    # comes first, then the revision the board detected; 0xFF is no override.
+    pytest.param(
+        MSG_OK_REV,
+        bytes([0x01, 0x02]),
+        "OK",
+        "Rev 2.0-class, Detected HW: Rev 1",
+        id="ok_rev-override",
+    ),
+    pytest.param(
+        MSG_OK_REV, bytes([0x01, 0xFF]), "OK", "Rev 1", id="ok_rev-no_override"
+    ),
+    # P-03: the override byte renders through the same silkscreen lookup as
+    # MSG_OK_REV (WR-02); an unknown byte falls back to 'Rev<n>' (no space).
+    pytest.param(
+        MSG_OK_CFG,
+        _cfg_params(0x02, 1100, 206),
+        "OK",
+        "R1: 10000, R2: 4700, Override HW: Rev 2.0-class, Bandgap: 1100 mV, "
+        "Bandgap count: 206",
+        id="ok_cfg-override",
+    ),
+    pytest.param(
+        MSG_OK_CFG,
+        _cfg_params(0x99, 1019, 200),
+        "OK",
+        "R1: 10000, R2: 4700, Override HW: Rev153, Bandgap: 1019 mV, "
+        "Bandgap count: 200",
+        id="ok_cfg-unknown_override",
+    ),
+    # D-03: MSG_INFO_HW / MSG_INFO_PHYSICAL_HW use the silkscreen lookup;
+    # 0xFE (REVISION_UNKNOWN) is 'rev_unknown', not 'Rev254'; an unmapped
+    # byte falls back to 'Rev<n>' (no space, as MSG_OK_REV).
+    pytest.param(MSG_INFO_HW, bytes([0x01]), "INFO", "HW: Rev 1", id="info_hw-rev1"),
+    pytest.param(
+        MSG_INFO_HW, bytes([0xFE]), "INFO", "HW: rev_unknown", id="info_hw-rev_unknown"
+    ),
+    pytest.param(
+        MSG_INFO_HW, bytes([0x99]), "INFO", "HW: Rev153", id="info_hw-unmapped"
+    ),
+    pytest.param(
+        MSG_INFO_PHYSICAL_HW,
+        bytes([0x01]),
+        "INFO",
+        "Physical HW: Rev 1",
+        id="info_physical_hw-rev1",
+    ),
+    pytest.param(
+        MSG_INFO_PHYSICAL_HW,
+        bytes([0xFE]),
+        "INFO",
+        "Physical HW: rev_unknown",
+        id="info_physical_hw-rev_unknown",
+    ),
+    pytest.param(
+        MSG_INFO_PHYSICAL_HW,
+        bytes([0x99]),
+        "INFO",
+        "Physical HW: Rev153",
+        id="info_physical_hw-unmapped",
+    ),
+    # MSG_DEBUG params = [sub_id u8, cmd u8]: DBG_CMD names a known command
+    # from COMMAND_NAMES, and renders an unmapped one as bare hex.
+    pytest.param(
+        MSG_DEBUG,
+        bytes([DBG_CMD, 0x02]),
+        "DATA",
+        "Cmd: 0x02 (WRITE)",
+        id="dbg_cmd-known",
+    ),
+    pytest.param(
+        MSG_DEBUG, bytes([DBG_CMD, 0xFE]), "DATA", "Cmd: 0xfe", id="dbg_cmd-unmapped"
+    ),
+]
+
+
 class TestIdFrameDecoder:
     """End-to-end binary-frame acceptance tests for the host decoder."""
 
-    def test_zero_param_frame_decodes_as_ready(self, fake_serial, make_comm):
-        """LHOST-01: zero-param MSG_OK_READY frame → Response(type='OK', message='Ready')."""  # noqa: E501
+    @pytest.mark.parametrize(("msg_id", "params", "severity", "text"), _RENDER_CASES)
+    def test_frame_renders_severity_and_text(
+        self, fake_serial, make_comm, msg_id, params, severity, text
+    ):
+        """LHOST-01/02/03: one id frame through _read_and_parse_lines yields
+        Response(type=severity label, message=rendered text)."""
         comm = make_comm()
-        frame = build_frame(MSG_OK_READY, b"")
-        fake_serial.feed(frame)
+        fake_serial.feed(build_frame(msg_id, params))
 
         response = _drive_one_response(comm)
         assert response is not None
-        assert response.type == "OK"
-        assert response.message == "Ready"
+        assert response.type == severity
+        assert response.message == text
 
-        # Direct _decode_id_frame path — body = [id, crc] = [0x01, 0x07].
-        body = bytes([MSG_OK_READY, _crc8_ccitt(bytes([MSG_OK_READY]))])
+    def test_zero_param_body_decodes_to_log_message(self, make_comm):
+        """LHOST-01: the direct _decode_id_frame path — body = [id, crc]."""
+        comm = make_comm()
+        body = id_frame_body(MSG_OK_READY)
         decoded = comm._decode_id_frame(frame_len=2, body=body)
         assert decoded == LogMessage(
             severity="OK", text="Ready", id=MSG_OK_READY, params=(b"",)
-        )
-
-    def test_u32_param_renders_via_format_string(self, fake_serial, make_comm):
-        """LHOST-01/02: u32 param renders via printf format substitution."""
-        comm = make_comm()
-        params = bytes.fromhex("00010000")  # 0x10000 / 65536
-        fake_serial.feed(build_frame(MSG_WARN_MEM_SIZE_TOO_SMALL, params))
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "WARN"
-        assert response.message == "Memory size 65536 too small for chip-id check"
-
-    def test_u24_render_as_hex_addr(self, fake_serial, make_comm):
-        """LHOST-02: u24 render-hint 'hex_addr' renders as 0x%06x lowercase."""
-        comm = make_comm()
-        params = bytes.fromhex("01F4A2")
-        fake_serial.feed(build_frame(MSG_INFO_ADDR, params))
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "Address: 0x01f4a2"
-
-    def test_multi_param_frame(self, fake_serial, make_comm):
-        """LHOST-01: multi-param (u24, u8, u16) frame renders all three positions."""
-        comm = make_comm()
-        # 0x01F4A2 (addr), 0x05 (retries), 0x0003 (bad bytes)
-        params = bytes.fromhex("01F4A2" + "05" + "0003")
-        fake_serial.feed(build_frame(MSG_ERR_WRITE_FAILED, params))
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "ERROR"
-        assert (
-            response.message
-            == "Failed to write memory, 0x01f4a2, retries: 5, bad bytes: 3"
         )
 
     def test_crc_mismatch_rejected(self, fake_serial, make_comm, caplog):
@@ -146,7 +243,7 @@ class TestIdFrameDecoder:
         comm = make_comm()
         # 0x77 is not in the seed catalog (verify).
         assert 0x77 not in CATALOG
-        body = bytes([0x77]) + bytes([_crc8_ccitt(bytes([0x77]))])
+        body = id_frame_body(0x77)
 
         with caplog.at_level(logging.WARNING, logger="SerialComm"):
             decoded = comm._decode_id_frame(frame_len=2, body=body)
@@ -203,19 +300,6 @@ class TestIdFrameDecoder:
             type="OK", message="Ready", id=MSG_OK_READY, params=(b"",)
         )
 
-    def test_data_progress_u32_pair(self, fake_serial, make_comm):
-        """Extra: MSG_DATA_PROGRESS (id 0xE0, two u32 params) — exercises
-        the back-to-back u32 case and DATA severity routing."""
-        comm = make_comm()
-        # done=0x00000001, total=0x00010000  →  '1/65536'
-        params = bytes.fromhex("00000001" + "00010000")
-        fake_serial.feed(build_frame(MSG_DATA_PROGRESS, params))
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "DATA"
-        assert response.message == "1/65536"
-
     def test_wire_format_text_catalog_id_rejected_as_id_frame(
         self, fake_serial, make_comm, caplog
     ):
@@ -233,7 +317,7 @@ class TestIdFrameDecoder:
 
         # Hand-build a well-formed id-frame body for id=0x03 with no params.
         # CRC is valid; the only reason to reject is the wire_format mismatch.
-        body = bytes([MSG_OK_FW_VERSION, _crc8_ccitt(bytes([MSG_OK_FW_VERSION]))])
+        body = id_frame_body(MSG_OK_FW_VERSION)
 
         with caplog.at_level(logging.WARNING, logger="SerialComm"):
             decoded = comm._decode_id_frame(frame_len=2, body=body)
@@ -305,8 +389,7 @@ class TestIdFrameDecoder:
         # Total params_bytes len = 4 (one length byte + 3 string bytes),
         # CRC covers [id] + params_bytes.
         bad_payload = bytes([10]) + b"ABC"  # claims 10 bytes, supplies 3
-        crc = _crc8_ccitt(bytes([MSG_INFO_BIT_STR]) + bad_payload)
-        body = bytes([MSG_INFO_BIT_STR]) + bad_payload + bytes([crc])
+        body = id_frame_body(MSG_INFO_BIT_STR, bad_payload)
 
         with caplog.at_level(logging.WARNING, logger="SerialComm"):
             decoded = comm._decode_id_frame(frame_len=len(body), body=body)
@@ -324,118 +407,11 @@ class TestIdFrameDecoder:
             f"{[r.message for r in caplog.records]}"
         )
 
-    # Wave 0 gap tests: INIT/MAIN/END ID-frame decode (W-01 / W-02)
-
-    def test_init_done_arrives_as_id_frame(self, fake_serial, make_comm):
-        """W-01/W-02: MSG_INIT_DONE zero-param frame → Response(type='INIT',
-        message='(init done)').  Proves the host decoder routes state-machine
-        acks via the catalog severity-band, not line-prefix matching."""
-        comm = make_comm()
-        frame = build_frame(MSG_INIT_DONE, b"")
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INIT"
-        assert response.message == "(init done)"
-
-    def test_main_done_arrives_as_id_frame(self, fake_serial, make_comm):
-        """W-01/W-02: MSG_MAIN_DONE zero-param frame → Response(type='MAIN',
-        message='(main done)')."""
-        comm = make_comm()
-        frame = build_frame(MSG_MAIN_DONE, b"")
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "MAIN"
-        assert response.message == "(main done)"
-
-    def test_end_done_arrives_as_id_frame(self, fake_serial, make_comm):
-        """W-01/W-02: MSG_END_DONE zero-param frame → Response(type='END',
-        message='(end done)')."""
-        comm = make_comm()
-        frame = build_frame(MSG_END_DONE, b"")
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "END"
-        assert response.message == "(end done)"
-
-    # Wave 0 gap tests: P-02 MSG_OK_REV sentinel rendering
-
-    def test_ok_rev_p02_with_override_decodes(self, fake_serial, make_comm):
-        """P-02: MSG_OK_REV with physical=0x01, effective=0x02 (override active)
-        renders 'Rev 2.0-class, Detected HW: Rev 1': the override, then the
-        revision the board detected."""
-        comm = make_comm()
-        # params: u8 physical=0x01, u8 effective=0x02
-        params = bytes([0x01, 0x02])
-        frame = build_frame(MSG_OK_REV, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "OK"
-        assert response.message == "Rev 2.0-class, Detected HW: Rev 1"
-
-    def test_ok_rev_p02_no_override_decodes(self, fake_serial, make_comm):
-        """P-02: MSG_OK_REV with physical=0x01, effective=0xFF sentinel renders
-        'Rev 1' per Phase 34 D-05 Path A silkscreen-string mapping (was 'Rev1'
-        pre-Phase-34)."""
-        comm = make_comm()
-        # params: u8 physical=0x01, u8 effective=0xFF (sentinel = no override)
-        params = bytes([0x01, 0xFF])
-        frame = build_frame(MSG_OK_REV, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "OK"
-        assert response.message == "Rev 1"
-
-    # Wave 0 gap tests: P-03 MSG_OK_CFG sentinel rendering
-
-    def test_ok_cfg_p03_with_override_decodes(self, fake_serial, make_comm):
-        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0x02 (REVISION_2_0)
-        renders 'R1: 10000, R2: 4700, Override HW: Rev 2.0-class' via the
-        Phase 35 D-04 silkscreen-aware lookup (was 'Override HW: Rev2'
-        pre-Phase-35). Closes 34-REVIEW.md WR-02 — the same byte must not
-        render as 'Rev 2.0-class' on the MSG_OK_REV ack and 'Rev2' on the
-        adjacent MSG_OK_CFG ack."""
-        comm = make_comm()
-        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02 (REVISION_2_0),
-        # u16 bandgap_mv=1100, u16 bandgap count=206
-        params = (
-            struct.pack(">II", 10000, 4700)
-            + bytes([0x02])
-            + struct.pack(">HH", 1100, 206)
-        )
-        frame = build_frame(MSG_OK_CFG, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "OK"
-        assert (
-            response.message
-            == "R1: 10000, R2: 4700, Override HW: Rev 2.0-class, Bandgap: 1100 mV, "
-            "Bandgap count: 206"
-        )
-
     def test_ok_cfg_p03_no_override_decodes(self, fake_serial, make_comm):
-        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0xFF sentinel renders
-        'R1: 10000, R2: 4700' (no override clause)."""
+        """P-03: MSG_OK_CFG with override=0xFF sentinel renders no override
+        clause, and the decoded params keep the sentinel."""
         comm = make_comm()
-        # params: u32 r1=10000, u32 r2=4700, u8 override=0xFF (sentinel = no override)
-        params = (
-            struct.pack(">II", 10000, 4700)
-            + bytes([0xFF])
-            + struct.pack(">HH", 1100, 206)
-        )
-        frame = build_frame(MSG_OK_CFG, params)
-        fake_serial.feed(frame)
+        fake_serial.feed(build_frame(MSG_OK_CFG, _cfg_params(0xFF, 1100, 206)))
 
         response = _drive_one_response(comm)
         assert response is not None
@@ -444,145 +420,6 @@ class TestIdFrameDecoder:
             "R1: 10000, R2: 4700, Bandgap: 1100 mV, Bandgap count: 206"
         )
         assert response.params == (10000, 4700, 0xFF, 1100, 206)
-
-    def test_ok_cfg_p03_with_unknown_override_decodes(self, fake_serial, make_comm):
-        """P-03: MSG_OK_CFG with override=0x99 (unknown byte) falls back to
-        'R1: ..., R2: ..., Override HW: Rev153' (no space — mirrors MSG_OK_REV
-        fallback shape). Per Phase 35 D-04 + WR-02 close."""
-        comm = make_comm()
-        params = (
-            struct.pack(">II", 10000, 4700)
-            + bytes([0x99])
-            + struct.pack(">HH", 1019, 200)
-        )
-        frame = build_frame(MSG_OK_CFG, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "OK"
-        assert (
-            response.message
-            == "R1: 10000, R2: 4700, Override HW: Rev153, Bandgap: 1019 mV, "
-            "Bandgap count: 200"
-        )
-
-    def test_info_hw_silkscreen_known_rev_decodes(self, fake_serial, make_comm):
-        """D-03: MSG_INFO_HW with byte=0x01 (REVISION_1) renders 'HW: Rev 1'
-        via _REVISION_SILKSCREEN lookup. Phase 35 WR-01 close — see
-        34-REVIEW.md WR-01 + 35-CONTEXT.md D-03."""
-        comm = make_comm()
-        params = bytes([0x01])
-        frame = build_frame(MSG_INFO_HW, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "HW: Rev 1"
-
-    def test_info_hw_silkscreen_rev_unknown_decodes(self, fake_serial, make_comm):
-        """D-03: MSG_INFO_HW with byte=0xFE (REVISION_UNKNOWN) renders
-        'HW: rev_unknown' instead of the catalog-default 'HW: Rev254'.
-        Phase 35 WR-01 close — co-designed with Plan 01's CR-02 hard-fail-loud
-        emit at boot time."""
-        comm = make_comm()
-        params = bytes([0xFE])
-        frame = build_frame(MSG_INFO_HW, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "HW: rev_unknown"
-
-    def test_info_hw_silkscreen_unknown_byte_falls_back(self, fake_serial, make_comm):
-        """D-03: MSG_INFO_HW with an unmapped byte (0x99) falls back to
-        'HW: Rev153' (no space — mirrors MSG_OK_REV fallback shape).
-        Phase 35 WR-01 close."""
-        comm = make_comm()
-        params = bytes([0x99])
-        frame = build_frame(MSG_INFO_HW, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "HW: Rev153"
-
-    def test_info_physical_hw_silkscreen_known_rev_decodes(
-        self, fake_serial, make_comm
-    ):
-        """D-03: MSG_INFO_PHYSICAL_HW with byte=0x01 (REVISION_1) renders
-        'Physical HW: Rev 1' via _REVISION_SILKSCREEN lookup. Phase 35 WR-01
-        close — mirrors MSG_INFO_HW shape with the 'Physical HW: ' prefix."""
-        comm = make_comm()
-        params = bytes([0x01])
-        frame = build_frame(MSG_INFO_PHYSICAL_HW, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "Physical HW: Rev 1"
-
-    def test_info_physical_hw_silkscreen_rev_unknown_decodes(
-        self, fake_serial, make_comm
-    ):
-        """D-03: MSG_INFO_PHYSICAL_HW with byte=0xFE (REVISION_UNKNOWN) renders
-        'Physical HW: rev_unknown' instead of the catalog-default 'Physical HW: Rev254'.
-        Phase 35 WR-01 close."""
-        comm = make_comm()
-        params = bytes([0xFE])
-        frame = build_frame(MSG_INFO_PHYSICAL_HW, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "Physical HW: rev_unknown"
-
-    def test_info_physical_hw_silkscreen_unknown_byte_falls_back(
-        self, fake_serial, make_comm
-    ):
-        """D-03: MSG_INFO_PHYSICAL_HW with an unmapped byte (0x99) falls back to
-        'Physical HW: Rev153' (no space — mirrors MSG_OK_REV fallback shape).
-        Phase 35 WR-01 close."""
-        comm = make_comm()
-        params = bytes([0x99])
-        frame = build_frame(MSG_INFO_PHYSICAL_HW, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "Physical HW: Rev153"
-
-    # MSG_DEBUG / DBG_CMD: cmd byte annotated with symbolic name from
-    # COMMAND_NAMES via the MSG_DEBUG sub_id decode path.
-
-    def test_dbg_cmd_renders_with_symbolic_name(self, fake_serial, make_comm):
-        """DBG_CMD (sub_id 0x04) with cmd=0x02 (COMMAND_WRITE) renders
-        'Cmd: 0x02 (WRITE)'. Wire shape: MSG_DEBUG params = [sub_id u8, cmd u8]."""
-        comm = make_comm()
-        frame = build_frame(MSG_DEBUG, bytes([DBG_CMD, 0x02]))
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "DATA"
-        assert response.message == "Cmd: 0x02 (WRITE)"
-
-    def test_dbg_cmd_unknown_falls_back_to_bare_hex(self, fake_serial, make_comm):
-        """DBG_CMD with an unmapped cmd byte renders bare hex."""
-        comm = make_comm()
-        frame = build_frame(MSG_DEBUG, bytes([DBG_CMD, 0xFE]))
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "DATA"
-        assert response.message == "Cmd: 0xfe"
 
     # W-04 MSG_DATA_CHUNK roundtrip tests
 
@@ -607,77 +444,32 @@ class TestIdFrameDecoder:
             "Response.payload must match the transmitted chunk bytes exactly"
         )
 
-    def test_chip_read_loop_concatenates_multiple_chunks(self, fake_serial, make_comm):
-        """W-04: chip-read loop in _main_phase_read_data concatenates N
-        MSG_DATA_CHUNK frames into an in-order byte stream.
+    def test_read_concatenates_multiple_chunks(self, tmp_path):
+        """W-04: a read writes N MSG_DATA_CHUNK frames to the output file in
+        order, skips the zero-param MSG_DATA_SENDING before them, and acks
+        each chunk once: three chunks cost two acks more than one chunk."""
+        from firestarter.config import ConfigManager
+        from firestarter.eprom_operations import EpromOperator
 
-        Simulates the firmware emitting:
-          MSG_DATA_SENDING (zero-param, before first chunk)
-          MSG_DATA_CHUNK(chunk0: 256 bytes)
-          MSG_DATA_CHUNK(chunk1: 256 bytes)
-          MSG_DATA_CHUNK(chunk2: 256 bytes)
-          MSG_MAIN_DONE (end of read)
-
-        Asserts the concatenated output is 768 bytes in the correct order.
-        """
-        from firestarter.messages import MSG_DATA_SENDING, MSG_MAIN_DONE  # noqa: F811
-
-        comm = make_comm()
-
-        # Build the simulated firmware byte stream.
         chunk0 = bytes(range(256))  # 0x00..0xFF
         chunk1 = bytes(range(256))[::-1]  # 0xFF..0x00
         chunk2 = bytes([0xAA] * 256)  # all 0xAA
+        payload = chunk0 + chunk1 + chunk2
 
-        stream = (
-            build_frame(MSG_DATA_SENDING, b"")  # zero-param batch-start ack
-            + build_frame(MSG_DATA_CHUNK, chunk0)
-            + build_frame(MSG_DATA_CHUNK, chunk1)
-            + build_frame(MSG_DATA_CHUNK, chunk2)
-            + build_frame(MSG_MAIN_DONE, b"")
-        )
-        fake_serial.feed(stream)
+        def _read(chunk: int) -> tuple[bytes, int]:
+            serial, factory = fresh_serial_and_comm()
+            init, *rest = read_phase_frames(payload, chunk)
+            for frame in [init, build_frame(MSG_DATA_SENDING, b""), *rest]:
+                serial.feed(frame)
+            out = tmp_path / f"out-{chunk}.bin"
+            with connect_via(factory):
+                assert EpromOperator(ConfigManager()).read_eprom(
+                    "W27C512", {"memory-size": len(payload), "flags": 0}, str(out)
+                )
+            return out.read_bytes(), serial.written.count(b"OK")
 
-        # Drive the read loop manually.
-        from firestarter.eprom_operations import (
-            ClassProgressHandler,
-            EpromOperationError,
-        )
+        data, acks = _read(256)
+        _, one_chunk_acks = _read(len(payload))
 
-        collected = bytearray()
-        start_addr = [0]  # mutable box for callback closure  # noqa: F841
-
-        def _collect(address, data_chunk):
-            collected.extend(data_chunk)
-
-        # Patch comm.send_ack so the loop's send_ack calls don't fail.
-        ack_calls = []
-        original_send_ack = comm.send_ack  # noqa: F841
-        comm.send_ack = lambda: ack_calls.append(1)
-
-        progress = ClassProgressHandler()
-        progress.start(768)
-
-        # Manually drive _main_phase_read_data by calling get_response loop.
-        # We simulate it inline since the method needs self.comm (which is comm).
-        from firestarter.messages import MSG_DATA_CHUNK as _MSG_DATA_CHUNK  # noqa: F401
-
-        while True:
-            response = comm.get_response(timeout=1.0)
-            if response.type == "MAIN":
-                break
-            if response.type == "ERROR":
-                raise EpromOperationError(response.message)
-            if response.type == "DATA":
-                if response.payload is not None:
-                    _collect(0, response.payload)
-                    comm.send_ack()
-                # else: MSG_DATA_SENDING — skip
-
-        assert len(collected) == 768, f"Expected 768 bytes, got {len(collected)}"
-        assert bytes(collected[:256]) == chunk0, "First chunk mismatch"
-        assert bytes(collected[256:512]) == chunk1, "Second chunk mismatch"
-        assert bytes(collected[512:]) == chunk2, "Third chunk mismatch"
-        assert len(ack_calls) == 3, (
-            f"Expected 3 ACKs (one per chunk), got {len(ack_calls)}"
-        )
+        assert data == payload
+        assert acks == one_chunk_acks + 2

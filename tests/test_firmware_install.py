@@ -25,7 +25,6 @@ Wave 0 contract:
   matching the Phase 15 / Phase 6 monkeypatch.setattr style.
 """
 
-import json  # noqa: F401
 import logging
 from unittest.mock import MagicMock
 
@@ -150,11 +149,6 @@ class TestFirmwareInstallStable:
                       D-16 (channel='stable' delegates to /releases/latest).
     """
 
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        """Clear any Phase 18 relevant env state before each test."""
-        monkeypatch.delenv("FIRESTARTER_DEV_ALLOW_PRE_V12", raising=False)
-
     def test_stable_default_hits_releases_latest(self, monkeypatch):
         """INST-01 — fetch_release_info(channel='stable') returns (version, url).
 
@@ -214,10 +208,6 @@ class TestVersionComparator:
     Decisions pinned: D-15 (comparator refactored in-place, not replaced),
                       Pattern 4 from RESEARCH.md (VERIFIED via shell: packaging 26.2).
     """
-
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        pass  # no env to clear for pure unit tests
 
     def test_stable_versions(self):
         """INST-01 — _compare_versions handles simple X.Y.Z comparisons correctly.
@@ -291,10 +281,6 @@ class TestFirmwareInstallPreRelease:
                       D-05 (silent fallback to stable when no pre-release exists),
                       D-06 (beta app always gets some firmware).
     """
-
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        pass
 
     def test_pre_selects_highest_prerelease(self, monkeypatch):
         """INST-02 / D-03 — highest pre-release by PEP 440 sort wins.
@@ -510,10 +496,6 @@ class TestFirmwareInstallPinned:
                       D-09 (404 or missing asset → fatal error, (None, None)).
     """
 
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        pass
-
     def test_pinned_404_returns_none_none(self, monkeypatch):
         """INST-03 / D-09 — 404 from /releases/tags/{tag} returns (None, None).
 
@@ -623,10 +605,6 @@ class TestFirmwareList:
                       D-12 (--json outputs JSON array with 5 keys),
                       D-13 (--pre/--stable/--all channel filter mutex).
     """
-
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        pass
 
     def _mixed_releases(self):
         """Returns a list of mixed stable + pre-release releases in shuffled order."""
@@ -835,13 +813,6 @@ class TestMagicDefault:
                       D-25 (always logs INFO: 'Beta app detected ...').
     """
 
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        """Restore firestarter.__version__ after each test."""
-        import firestarter as _pkg
-
-        monkeypatch.setattr(_pkg, "__version__", _pkg.__version__)
-
     def test_dev_suffix_is_prerelease(self, monkeypatch):
         """D-21 / D-22 — dev-suffix version triggers magic default.
 
@@ -997,10 +968,6 @@ class TestFirmwareCommandDispatch:
     the argparse `fw_parser.error(...)` form with `raise click.UsageError(...)`.
     """
 
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        pass
-
     def test_json_without_list_post_parse_error(self, monkeypatch):
         """D-14 — --json without --list must be rejected with SystemExit.
 
@@ -1033,10 +1000,6 @@ class TestUno328pbResolution:
       test 4   : FAILS with AssertionError (default 'atmega328p' branch).
       test 5   : FAILS with SystemExit (choices=['uno','leonardo'] rejects).
     """
-
-    @pytest.fixture(autouse=True)
-    def _isolate_env(self, monkeypatch):
-        monkeypatch.delenv("FIRESTARTER_DEV_ALLOW_PRE_V12", raising=False)
 
     def test_uno328pb_stable_path_resolves_correct_asset(self, monkeypatch):
         """INST-01 / D-01 — fetch_release_info(channel='stable', board='uno328pb')

@@ -19,8 +19,8 @@ running a bench pass that could not have proved anything.
 The remaining three legs measure the rest of criterion 4's real shape: the
 page sizes the native suite must cover, the AE29F2008/W29C020 two-name
 silicon identity (a whole-row comparison, not a field list), and the
-`dev test` default write region's consequence counted over all 27 rows
-whose algorithm is the flash4 protocol id.
+page-alignment gate's verdict on the `dev test` write region of each of the
+27 rows whose algorithm is the flash4 protocol id, per write scope.
 
 Every database read here goes directly to the generated JSON as data, or
 through EpromDatabase with the no-local-override convention -- never a
@@ -33,13 +33,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from firestarter import page_size_gate
+from firestarter.chip_test import OP_WRITE, OP_WRITE_PARTIAL, derive_plan
 from firestarter.database import EpromDatabase
+from firestarter.exceptions import PageAlignmentError
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 
 _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
-
-_DEV_TEST_REGION_LENGTH = 256
 
 _W29C020_PART_NUMBER = "W29C020,W29C020C,W29C022"
 _W29C040_PART_NUMBER = "W29C040,W29C042"
@@ -66,13 +67,13 @@ def _raw_row(manufacturer: str, part_number: str) -> dict:
     )
 
 
-def _all_flash4_raw_rows() -> list[dict]:
+def _all_flash4_raw_rows() -> list[tuple[str, dict]]:
     raw = _load_raw_database()
     rows = []
-    for chips in raw.values():
+    for manufacturer, chips in raw.items():
         for row in chips:
             if row.get("programming", {}).get("algorithm") == FLASH4_PROTOCOL_ID:
-                rows.append(row)
+                rows.append((manufacturer, row))
     return rows
 
 
@@ -122,40 +123,47 @@ def test_ae29f2008_and_w29c020_are_the_same_silicon_under_two_names():
     assert ae29f2008 == w29c020
 
 
-def test_dev_test_region_matrix_over_all_27_protocol_0x05_rows():
-    """D-12, as a count rather than a sentence: dev test's 256-byte write
-    region at address 0 is a whole number of pages for 25 of the 27
-    protocol 0x05 rows and a refused partial page for exactly the
-    remaining 2 -- both of which record page size 512 -- and none of the
-    three protocol 0x05 validated parts is among the refused two."""
-    rows = _all_flash4_raw_rows()
-    assert len(rows) == 27
-
-    aligned = []
-    refused = []
-    for row in rows:
-        page_size = row["programming"]["page_size"]
-        if _DEV_TEST_REGION_LENGTH % page_size == 0:
-            aligned.append(row)
-        else:
-            refused.append(row)
-
-    assert len(aligned) == 25
-    assert len(refused) == 2
-    assert all(row["programming"]["page_size"] == 512 for row in refused)
-
-    refused_part_numbers = {row["part_number"] for row in refused}
-    for validated_part_number in (
-        _W29C020_PART_NUMBER,
-        _W29C040_PART_NUMBER,
-        _AE29F2008_PART_NUMBER,
-    ):
-        assert validated_part_number not in refused_part_numbers
-
-
-def test_module_reads_the_database_with_the_no_local_override_convention():
-    """This module's own regression surface must not be able to absorb a
-    row from the user's own configuration file -- the same discipline
-    every other gate on this path already follows."""
+def _write_step_refusals(write_scope: str, tmp_path: Path) -> dict[str, int]:
+    """Run each protocol 0x05 row's `dev test` write region, as `derive_plan`
+    decides it, through the pre-connect page-alignment gate that
+    `write_eprom` applies. Returns {qualified name: page size} for the rows
+    the gate refuses."""
     db = EpromDatabase(skip_local_override=True)
-    assert db.get_eprom("W29C020") is not None
+    payload = tmp_path / f"{write_scope}.bin"
+    refused = {}
+    for manufacturer, row in _all_flash4_raw_rows():
+        name = f"{row['part_number'].split(',')[0]}@{manufacturer}"
+        programmer_data = db.convert_to_programmer(db.get_eprom(name))
+        assert programmer_data["algorithm"] == FLASH4_PROTOCOL_ID, name
+        plan = derive_plan(name, db, write_scope=write_scope)
+        (write_step,) = [
+            step for step in plan.steps if step.op in (OP_WRITE, OP_WRITE_PARTIAL)
+        ]
+        start, length = write_step.write_region
+        payload.write_bytes(b"\xff" * length)
+        try:
+            page_size_gate.require_page_alignment(
+                name, programmer_data, "write", hex(start), str(payload)
+            )
+        except PageAlignmentError:
+            refused[name] = row["programming"]["page_size"]
+    return refused
+
+
+def test_dev_test_full_write_region_passes_the_alignment_gate_on_every_0x05_row(
+    tmp_path: Path,
+):
+    assert len(_all_flash4_raw_rows()) == 27
+    assert _write_step_refusals("full", tmp_path) == {}
+
+
+def test_dev_test_partial_write_region_is_refused_on_exactly_two_0x05_rows(
+    tmp_path: Path,
+):
+    """D-12, as a count rather than a sentence: the partial scope writes 256
+    bytes at the top of the device. That is a whole number of pages for 25 of
+    the 27 protocol 0x05 rows, and the gate refuses the remaining 2, both with
+    page size 512. None of the three protocol 0x05 validated parts is among
+    them."""
+    refused = _write_step_refusals("partial", tmp_path)
+    assert refused == {"AT29BV040@ATMEL": 512, "AT29C040@ATMEL": 512}

@@ -20,11 +20,6 @@ Test taxonomy:
     test_generate_pattern_high_base_differs   -> no full-chip assumption
     test_prepass_images                       -> (0x00*n, 0xFF*n)
 
-  Shared byte-diff-offset helper (D-04 reuse target; retired 202-03 D-02 --
-  the primitive now lives in `firestarter.compare.diff_summary`, exercised
-  directly in `tests/test_compare.py`)
-    test_diff_offsets_unequal_length          -> cmp_len = min(len_a, len_b)
-
   Fingerprint classifier (PATT-02)
     test_fp_blank_near_all_ff                 -> "blank/contact"
     test_fp_address_line_bit_a8               -> "address-line", line==8
@@ -97,7 +92,7 @@ from firestarter.chip_test import (
     run_plan,
     run_status,
 )
-from firestarter.compare import CompareResult, Fingerprint, diff_summary
+from firestarter.compare import CompareResult, Fingerprint
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import (
     ChipNotFoundError,
@@ -106,6 +101,13 @@ from firestarter.exceptions import (
     SerialError,
 )
 from firestarter.sdp_capability import sdp_capability_for_entry
+
+from .fixtures.operator_doubles import (
+    OPERATOR_METHODS,
+    mock_operator,
+    sdp_aware_operator,
+)
+from .plan_corpus import REAL_DB
 
 
 def test_address_fold_byte_zero():
@@ -136,24 +138,6 @@ def test_prepass_images():
     zeros, ffs = prepass_images(n)
     assert zeros == b"\x00" * n
     assert ffs == b"\xff" * n
-
-
-def test_diff_offsets_unequal_length():
-    # `_diff_offsets` retired 202-03 (D-02); the primitive is now
-    # `compare.diff_summary`. `test_diff_offsets_equal_arrays` and
-    # `test_diff_offsets_known_positions` (the two siblings this test used
-    # to sit beside) are retired outright rather than re-pointed -- their
-    # coverage is superseded by the direct `diff_summary` unit tests in
-    # `tests/test_compare.py`. This one survives because it is also the
-    # in-module proof, through `chip_test`'s own import surface, that
-    # unequal-length inputs compare over the common prefix and never raise.
-    a = bytes([1, 2, 3, 4, 5])
-    b = bytes([1, 2, 9])
-    # Only compares min(len_a, len_b) == 3, and does not raise.
-    summary = diff_summary(a, b)
-    assert summary.cmp_len == 3
-    assert summary.bad == 1
-    assert summary.first_offset == 2
 
 
 def test_fp_blank_near_all_ff():
@@ -273,13 +257,11 @@ def test_fingerprint_evidence_fields():
 #   DS1220(RW)   -- protocol 0x28, SRAM, blank-check must be NA
 #   X88C64P,X88C64S -- support_status "protocol-not-implemented" (resolve_chip refuses)
 
-_REAL_DB = EpromDatabase(skip_local_override=True)
-
 
 def test_is_uv_eprom_exact_301_over_real_db():
     # Enumerate the real database rather than hardcoding a spot check, so a
     # future DB change that moves the count is caught (acceptance criterion).
-    eproms = _REAL_DB.get_eproms()
+    eproms = REAL_DB.get_eproms()
     assert sum(1 for e in eproms if is_uv_eprom(e)) == 304
 
 
@@ -303,7 +285,7 @@ def test_is_uv_eprom_simple_true_false_missing():
     ],
 )
 def test_is_uv_eprom_four_chip_table(name, expected):
-    full = _REAL_DB.get_eprom(name)
+    full = REAL_DB.get_eprom(name)
     assert full is not None, f"{name} missing from live DB"
     assert is_uv_eprom(full) is expected
 
@@ -312,7 +294,7 @@ def test_is_uv_eprom_exact_where_algorithm_proxy_is_not():
     # M27C512 (algorithm 0x07) and AM27C020 (algorithm 0x08) both return
     # True from is_uv_eprom, while the algorithm==0x0B proxy would miss both.
     for name in ("M27C512", "AM27C020"):
-        full = _REAL_DB.get_eprom(name)
+        full = REAL_DB.get_eprom(name)
         assert full["electrical-type"] == "UV-EPROM"
         assert full["protocol-id"] != 0x0B
         assert is_uv_eprom(full) is True
@@ -326,13 +308,13 @@ def test_plan_and_step_carried_fields_default():
 
 
 def test_derive_plan_id_check_first():
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
     assert plan.steps[0].op == "id"
 
 
 def test_derive_plan_reads_via_get_eprom_and_convert_to_programmer_only():
-    full = _REAL_DB.get_eprom("M8720")
-    prog = _REAL_DB.convert_to_programmer(full)
+    full = REAL_DB.get_eprom("M8720")
+    prog = REAL_DB.convert_to_programmer(full)
 
     spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
     spy_db.get_eprom.return_value = full
@@ -358,25 +340,25 @@ def test_derive_plan_never_calls_resolve_chip(monkeypatch):
     spy = Mock(side_effect=AssertionError("resolve_chip must not be called"))
     monkeypatch.setattr(chip_resolver_mod, "resolve_chip", spy)
 
-    derive_plan("M8720", _REAL_DB, write_scope="full")
+    derive_plan("M8720", REAL_DB, write_scope="full")
 
     spy.assert_not_called()
 
 
 def test_derive_bypasses_guard_for_non_supported_chip():
     name = "X88C64P,X88C64S"
-    raw_config, _manufacturer = _REAL_DB.get_eprom_config(name)
+    raw_config, _manufacturer = REAL_DB.get_eprom_config(name)
     assert raw_config.get("support_status") == "protocol-not-implemented"
 
     # must NOT raise ChipNotImplementedError
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
 
     assert len(plan.steps) > 0
     assert plan.steps[0].op == "id"
 
 
 def test_derive_plan_unknown_chip_returns_empty_plan_with_reason():
-    plan = derive_plan("NO-SUCH-CHIP-XYZ", _REAL_DB, write_scope="full")
+    plan = derive_plan("NO-SUCH-CHIP-XYZ", REAL_DB, write_scope="full")
     assert plan.steps == []
     assert plan.reason
 
@@ -390,7 +372,7 @@ def _step(plan, op):
 
 def test_derive_plan_id_step_supported_when_chip_id_present():
     # AS29F002T has a real nonzero chip-id (21168).
-    plan = derive_plan("AS29F002T", _REAL_DB, write_scope="full")
+    plan = derive_plan("AS29F002T", REAL_DB, write_scope="full")
     id_step = _step(plan, "id")
     assert id_step.supported is True
 
@@ -398,7 +380,7 @@ def test_derive_plan_id_step_supported_when_chip_id_present():
 def test_derive_plan_id_step_na_when_chip_id_absent():
     # AM2716 (UV-EPROM, protocol 0x0B) carries the chip-id sentinel 0 in the
     # programmer dict -- nothing to compare against, so the id step is NA.
-    plan = derive_plan("AM2716", _REAL_DB, write_scope="partial")
+    plan = derive_plan("AM2716", REAL_DB, write_scope="partial")
     id_step = _step(plan, "id")
     assert id_step.supported is False
     assert id_step.reason
@@ -407,11 +389,11 @@ def test_derive_plan_id_step_na_when_chip_id_absent():
 def test_derive_plan_flash4_erase_na():
     # AE29F1008 -- protocol 0x05 (flash4), Flash/EEPROM. FLAG_CAN_ERASE is
     # deliberately clear for 0x05 (auto-erase per page; Pitfall 6).
-    full = _REAL_DB.get_eprom("AE29F1008")
+    full = REAL_DB.get_eprom("AE29F1008")
     assert full["protocol-id"] == 5
     assert full["electrical-type"] == "Flash/EEPROM"
 
-    plan = derive_plan("AE29F1008", _REAL_DB, write_scope="full")
+    plan = derive_plan("AE29F1008", REAL_DB, write_scope="full")
     erase_step = _step(plan, "erase")
     assert erase_step.supported is False
     assert erase_step.reason
@@ -420,10 +402,10 @@ def test_derive_plan_flash4_erase_na():
 def test_derive_plan_uv_eprom_erase_na():
     # AM2716 -- UV-EPROM, no electrical erase; FLAG_CAN_ERASE never set for
     # UV-EPROM electrical-type.
-    full = _REAL_DB.get_eprom("AM2716")
+    full = REAL_DB.get_eprom("AM2716")
     assert full["electrical-type"] == "UV-EPROM"
 
-    plan = derive_plan("AM2716", _REAL_DB, write_scope="partial")
+    plan = derive_plan("AM2716", REAL_DB, write_scope="partial")
     erase_step = _step(plan, "erase")
     assert erase_step.supported is False
     assert erase_step.reason
@@ -432,15 +414,15 @@ def test_derive_plan_uv_eprom_erase_na():
 def test_derive_plan_eeprom_erase_supported_when_can_erase_set():
     # AS29F002T -- protocol 0x06, Flash/EEPROM -- FLAG_CAN_ERASE is set
     # (etype in {EEPROM, Flash/EEPROM} and algorithm != 5).
-    full = _REAL_DB.get_eprom("AS29F002T")
-    prog = _REAL_DB.convert_to_programmer(full)
+    full = REAL_DB.get_eprom("AS29F002T")
+    prog = REAL_DB.convert_to_programmer(full)
     assert full["electrical-type"] == "Flash/EEPROM"
     assert prog["algorithm"] != 5
     from firestarter.constants import FLAG_CAN_ERASE
 
     assert prog["flags"] & FLAG_CAN_ERASE
 
-    plan = derive_plan("AS29F002T", _REAL_DB, write_scope="full")
+    plan = derive_plan("AS29F002T", REAL_DB, write_scope="full")
     erase_step = _step(plan, "erase")
     assert erase_step.supported is True
 
@@ -449,17 +431,17 @@ def test_derive_plan_blank_check_na_for_sram_chip():
     # DS1220(RW) -- protocol 0x28, SRAM. derive_plan must own this NA
     # decision up front (RESEARCH nuance recommendation (a)), not rely on
     # the operator's own check_eprom_blank short-circuit.
-    full = _REAL_DB.get_eprom("DS1220(RW)")
+    full = REAL_DB.get_eprom("DS1220(RW)")
     assert full["electrical-type"] == "SRAM"
 
-    plan = derive_plan("DS1220(RW)", _REAL_DB, write_scope="full")
+    plan = derive_plan("DS1220(RW)", REAL_DB, write_scope="full")
     blank_step = _step(plan, "blank-check")
     assert blank_step.supported is False
     assert blank_step.reason
 
 
 def test_derive_plan_blank_check_supported_for_regular_eeprom():
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
     blank_step = _step(plan, "blank-check")
     assert blank_step.supported is True
 
@@ -467,17 +449,17 @@ def test_derive_plan_blank_check_supported_for_regular_eeprom():
 def test_derive_plan_read_and_verify_always_present():
     for name in ("M8720", "AM2716", "AE29F1008", "DS1220(RW)"):
         scope = "partial" if name == "AM2716" else "full"
-        plan = derive_plan(name, _REAL_DB, write_scope=scope)
+        plan = derive_plan(name, REAL_DB, write_scope=scope)
         read_step = _step(plan, "read")
         assert read_step.supported is True
 
-        plan_destructive = derive_plan(name, _REAL_DB, write_scope="full")
+        plan_destructive = derive_plan(name, REAL_DB, write_scope="full")
         verify_step = _step(plan_destructive, "verify")
         assert verify_step.supported is True
 
 
 def test_derive_plan_write_present_and_destructive():
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
     write_step = _step(plan, "write")
     assert write_step.supported is True
     assert write_step.destructive is True
@@ -499,7 +481,7 @@ def test_derive_plan_erase_needs_the_flag_and_a_non_flash4_protocol(
     other than 0x05 (flash4 auto-erases per page), whatever the flag says."""
     from firestarter.constants import FLAG_CAN_ERASE
 
-    real_convert = _REAL_DB.convert_to_programmer
+    real_convert = REAL_DB.convert_to_programmer
 
     def _convert(full):
         prog = real_convert(full)
@@ -510,13 +492,13 @@ def test_derive_plan_erase_needs_the_flag_and_a_non_flash4_protocol(
             "algorithm": protocol,
         }
 
-    monkeypatch.setattr(_REAL_DB, "convert_to_programmer", _convert)
-    plan = derive_plan("AS29F002T", _REAL_DB, write_scope="full")
+    monkeypatch.setattr(REAL_DB, "convert_to_programmer", _convert)
+    plan = derive_plan("AS29F002T", REAL_DB, write_scope="full")
     assert _step(plan, "erase").supported is supported
 
 
 def test_derive_plan_destructive_flag_strips_not_annotates():
-    plan_destructive = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan_destructive = derive_plan("M8720", REAL_DB, write_scope="full")
     ops_destructive = [s.op for s in plan_destructive.steps]
 
     # Quick task 260807-kaq moved this assertion's write_scope="full" order:
@@ -544,7 +526,7 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
 
 
 def test_derive_plan_verify_gated_behind_destructive():
-    plan_destructive = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan_destructive = derive_plan("M8720", REAL_DB, write_scope="full")
     d_ops = [s.op for s in plan_destructive.steps]
     assert OP_VERIFY in d_ops
     assert d_ops.index(OP_VERIFY) > d_ops.index(OP_WRITE)
@@ -552,15 +534,15 @@ def test_derive_plan_verify_gated_behind_destructive():
 
 
 def test_derive_plan_destructive_keeps_and_empties_advisory():
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
     ops = {s.op for s in plan.steps}
     assert "write" in ops
     assert "erase" in ops
 
 
 def test_derive_plan_partial_same_ops_as_full_different_region():
-    plan_full = derive_plan("M8720", _REAL_DB, write_scope="full")
-    plan_partial = derive_plan("M8720", _REAL_DB, write_scope="partial")
+    plan_full = derive_plan("M8720", REAL_DB, write_scope="full")
+    plan_partial = derive_plan("M8720", REAL_DB, write_scope="partial")
 
     ops_full = [s.op for s in plan_full.steps]
     ops_partial = [s.op for s in plan_partial.steps]
@@ -582,11 +564,11 @@ def test_derive_plan_partial_same_ops_as_full_different_region():
 
 
 def test_derive_plan_partial_write_region_uv_memory_size():
-    full = _REAL_DB.get_eprom("M27C512")
+    full = REAL_DB.get_eprom("M27C512")
     assert full["electrical-type"] == "UV-EPROM"
     assert full["memory-size"] == 65536
 
-    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    plan = derive_plan("M27C512", REAL_DB, write_scope="partial")
     write_step = _step(plan, "write-partial")
     verify_step = _step(plan, "verify")
     assert write_step.write_region == (65280, 256)
@@ -615,7 +597,7 @@ def test_derive_plan_partial_write_region_missing_memory_size_falls_back():
 def test_derive_plan_full_device_region_non_uv_eeprom():
     # AT28C256 (EEPROM, 32768 B, protocol 0x0D -- not flash4): full-device
     # policy, whole-device region.
-    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    plan = derive_plan("AT28C256", REAL_DB, write_scope="full")
     write_step = _step(plan, "write")
     verify_step = _step(plan, "verify")
     assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
@@ -630,7 +612,7 @@ def test_derive_plan_full_device_region_flash4_carves_boot_blocks():
     # the two 16 KiB boot blocks, and a reason naming the exclusion even
     # though this is a SUCCESSFUL carve-out (D-D: the exclusion is stated
     # and visible, not merely a refusal-path artifact).
-    plan = derive_plan("W29C040", _REAL_DB, write_scope="full")
+    plan = derive_plan("W29C040", REAL_DB, write_scope="full")
     write_step = _step(plan, "write")
     assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
     assert write_step.write_region == (16384, 491520)
@@ -662,7 +644,7 @@ def test_derive_plan_uv_full_scope_uses_uv_slot_policy_and_permits_full_device()
     # M27C512 (UV, 65536 B): region_policy uv-slot, write_region is the
     # FIRST slot candidate (top-anchored, unchanged from pre-task
     # behaviour), and full_device_permitted is True at "full" (D-C).
-    plan = derive_plan("M27C512", _REAL_DB, write_scope="full")
+    plan = derive_plan("M27C512", REAL_DB, write_scope="full")
     write_step = _step(plan, "write")
     verify_step = _step(plan, "verify")
     assert write_step.region_policy == REGION_POLICY_UV_SLOT
@@ -675,7 +657,7 @@ def test_derive_plan_uv_partial_scope_forbids_full_device_outcome():
     # Same first slot candidate as "full", but full_device_permitted is
     # False -- the scope literal forbids the D-C full-device-if-blank
     # outcome regardless of chip state.
-    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    plan = derive_plan("M27C512", REAL_DB, write_scope="partial")
     write_step = _step(plan, "write-partial")
     assert write_step.region_policy == REGION_POLICY_UV_SLOT
     assert write_step.write_region == (65280, 256)
@@ -687,7 +669,7 @@ def test_derive_plan_sdp_leg_keeps_fixed_region_at_full_scope():
     # scope -- (0, 256) at full for AT28C256 -- and carry region_policy
     # fixed. They are never widened to the full device even though the
     # chip's OWN write step now is.
-    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    plan = derive_plan("AT28C256", REAL_DB, write_scope="full")
     write_step = _step(plan, "write")
     assert write_step.write_region == (0, 32768)  # the chip's own write IS widened
     for sdp_op in _SDP_LEG_STEP_ORDER:
@@ -754,7 +736,7 @@ def test_derive_plan_is_uv_wired_from_is_uv_eprom(name, expected_is_uv):
     # Proven through derive_plan (NOT by calling is_uv_eprom directly) so
     # the wiring itself is proven, using the four-chip table from Task 1.
     scope = "partial" if expected_is_uv else "full"
-    plan = derive_plan(name, _REAL_DB, write_scope=scope)
+    plan = derive_plan(name, REAL_DB, write_scope=scope)
     assert plan.is_uv is expected_is_uv
 
 
@@ -762,107 +744,6 @@ def test_derive_plan_is_uv_wired_from_is_uv_eprom(name, expected_is_uv):
 # outcome; resolve_chip runs for real against EpromDatabase(skip_local_override
 # =True) (no ~/.firestarter, no serial). M8720 is real+supported (protocol
 # 0x08, EEPROM) so resolve_chip succeeds for every step by default.
-
-_OPERATOR_METHODS = [
-    "check_eprom_id",
-    "read_eprom",
-    "check_eprom_blank",
-    "write_eprom",
-    "verify_eprom",
-    "erase_eprom",
-    "sdp_lock",
-    "sdp_unlock",
-]
-
-
-def _mock_operator(**returns):
-    op = Mock(spec=_OPERATOR_METHODS)
-    op.check_eprom_id.return_value = (True, 0x1234)
-    op.read_eprom.return_value = True
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank), the
-    # same convention verify_eprom adopted in 202-01.
-    op.check_eprom_blank.return_value = 0
-    op.write_eprom.return_value = True
-    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
-    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
-    op.verify_eprom.return_value = 0
-    op.erase_eprom.return_value = True
-    op.sdp_lock.return_value = True
-    op.sdp_unlock.return_value = True
-    for name, value in returns.items():
-        getattr(op, name).return_value = value
-        getattr(op, name).side_effect = None
-    return op
-
-
-def _sdp_leg_readback_operator():
-    """A stateful, SDP-lock-AWARE operator double for the AT28C256 0x0D
-    sweeps below (v1.30 Phase 134, plan 134-03).
-
-    `_mock_operator`'s `read_eprom` returns `True` while writing NO file --
-    the SDP leg's read-back-equality oracle would then see an empty
-    read-back on every leg step and report all six BAD via the length gate
-    (`_dispatch_sdp_leg`'s D-04 length gate), silently reducing an
-    "all-OK" sweep assertion to a false negative that happens to still
-    read green for the wrong reason.
-
-    This double instead maintains a small in-memory chip image and honours
-    real SDP semantics: while `locked`, a write carrying
-    `FLAG_SKIP_SDP_UNLOCK` (write-inhibited's own flag, deliberately set on
-    that op alone) is genuinely REJECTED by the simulated chip -- the image
-    is left unchanged, exactly what a genuinely-protecting chip does --
-    while every other write (no SKIP flag, or the chip unlocked) applies
-    normally. This is what makes a real end-to-end run across the full
-    twelve-step AT28C256 plan (id/read/blank-check/write/verify/erase-NA
-    plus the six SDP-leg ops) genuinely all-OK, rather than a fixed-payload
-    double that could only ever satisfy one of the leg's several distinct
-    expected read-backs.
-    """
-    from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
-
-    state = {"image": b"", "locked": False}
-
-    op = Mock(spec=_OPERATOR_METHODS)
-    op.check_eprom_id.return_value = (True, 0x1234)
-    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
-    op.check_eprom_blank.return_value = 0
-    op.erase_eprom.return_value = True
-
-    def _write_eprom(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
-        payload = Path(source_path).read_bytes()
-        if state["locked"] and (flags & FLAG_SKIP_SDP_UNLOCK):
-            # Genuinely blocked: the chip ignores the write while locked
-            # and the firmware's own auto-unlock-wrap was deliberately
-            # skipped -- write-inhibited's whole point.
-            pass
-        else:
-            state["image"] = payload
-        return True
-
-    def _read_eprom(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["image"])
-        return True
-
-    def _verify_eprom(name, eprom_data, source_path, *_args, **_kwargs):
-        # 202-01 D-10: int, 0 == match -- see the return_value comment above.
-        expected = Path(source_path).read_bytes()
-        return 0 if expected == state["image"] else 1
-
-    def _sdp_lock(name, eprom_data):
-        state["locked"] = True
-        return True
-
-    def _sdp_unlock(name, eprom_data):
-        state["locked"] = False
-        return True
-
-    op.write_eprom.side_effect = _write_eprom
-    op.read_eprom.side_effect = _read_eprom
-    op.verify_eprom.side_effect = _verify_eprom
-    op.sdp_lock.side_effect = _sdp_lock
-    op.sdp_unlock.side_effect = _sdp_unlock
-    return op
 
 
 def _plan_with_steps(*steps):
@@ -877,7 +758,7 @@ def _result(results, op):
 
 
 def test_run_plan_non_fatal_raising_step_does_not_abort_later_steps():
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = EpromOperationError(
         "boot block locked", error_code=0xA4
     )
@@ -885,7 +766,7 @@ def test_run_plan_non_fatal_raising_step_does_not_abort_later_steps():
         Step(op=OP_READ, supported=True, reason=""),
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
     )
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     read_result = _result(results, OP_READ)
     write_result = _result(results, OP_WRITE)
@@ -897,12 +778,12 @@ def test_run_plan_non_fatal_raising_step_does_not_abort_later_steps():
 
 
 def test_run_plan_verdict_vocabulary_and_na_not_executed():
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_BLANK_CHECK, supported=False, reason="not applicable"),
         Step(op=OP_READ, supported=True, reason=""),
     )
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     blank_result = _result(results, OP_BLANK_CHECK)
     read_result = _result(results, OP_READ)
@@ -924,9 +805,9 @@ def test_run_plan_resolver_refusal_maps_to_skipped(monkeypatch):
     spy = Mock(side_effect=ChipNotImplementedError("adapter-required"))
     monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
 
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict in (VERDICT_SKIPPED, VERDICT_NA)
@@ -940,9 +821,9 @@ def test_run_plan_chip_not_found_maps_to_skipped(monkeypatch):
     spy = Mock(side_effect=ChipNotFoundError("no-such-chip"))
     monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
 
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(Step(op=OP_ID, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     id_result = _result(results, OP_ID)
     assert id_result.verdict in (VERDICT_SKIPPED, VERDICT_NA)
@@ -956,16 +837,16 @@ def test_run_plan_routes_through_resolve_chip_not_derivation_dict(monkeypatch):
     spy = Mock(side_effect=real_resolve)
     monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
 
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    run_plan(plan, operator, _REAL_DB)
+    run_plan(plan, operator, REAL_DB)
 
-    spy.assert_called_once_with("M8720", db=_REAL_DB)
+    spy.assert_called_once_with("M8720", db=REAL_DB)
     # The operator was called with the freshly-resolved dict, not any
     # derive_plan-internal structure.
     called_args = operator.read_eprom.call_args
     assert called_args.args[0] == "M8720"
-    assert called_args.args[1] == real_resolve("M8720", db=_REAL_DB)
+    assert called_args.args[1] == real_resolve("M8720", db=REAL_DB)
 
 
 # AS29F002T carries a real nonzero chip-id (21168 == 0x52B0) in the DB --
@@ -974,8 +855,8 @@ def test_run_plan_routes_through_resolve_chip_not_derivation_dict(monkeypatch):
 
 
 def _real_expected_chip_id(name: str) -> int:
-    full = _REAL_DB.get_eprom(name)
-    prog = _REAL_DB.convert_to_programmer(full)
+    full = REAL_DB.get_eprom(name)
+    prog = REAL_DB.convert_to_programmer(full)
     return prog["chip-id"]
 
 
@@ -984,7 +865,7 @@ def test_id_mismatch_gate_skips_destructive_steps_without_calling_operator():
     expected_id = _real_expected_chip_id(name)
     assert expected_id  # sanity: this chip has a real nonzero chip-id
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (False, 0x9999)
     plan = Plan(
         name=name,
@@ -995,7 +876,7 @@ def test_id_mismatch_gate_skips_destructive_steps_without_calling_operator():
             Step(op=OP_ERASE, supported=True, reason="", destructive=True),
         ],
     )
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     id_result = _result(results, OP_ID)
     write_result = _result(results, OP_WRITE)
@@ -1021,7 +902,7 @@ def test_id_detected_mismatch_gate_skips_destructive_steps():
     expected_id = _real_expected_chip_id(name)
     assert expected_id
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id + 1)
     plan = Plan(
         name=name,
@@ -1030,7 +911,7 @@ def test_id_detected_mismatch_gate_skips_destructive_steps():
             Step(op=OP_WRITE, supported=True, reason="", destructive=True),
         ],
     )
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     assert _result(results, OP_ID).verdict == VERDICT_BAD
     assert _result(results, OP_WRITE).verdict == VERDICT_SKIPPED
@@ -1041,7 +922,7 @@ def test_id_match_leaves_destructive_steps_ungated():
     name = "AS29F002T"
     expected_id = _real_expected_chip_id(name)
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id)
     plan = Plan(
         name=name,
@@ -1051,7 +932,7 @@ def test_id_match_leaves_destructive_steps_ungated():
             Step(op=OP_ERASE, supported=True, reason="", destructive=True),
         ],
     )
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     assert _result(results, OP_ID).verdict == VERDICT_OK
     assert _result(results, OP_WRITE).verdict == VERDICT_OK
@@ -1062,7 +943,7 @@ def test_id_match_leaves_destructive_steps_ungated():
 
 def test_id_mismatch_does_not_gate_non_destructive_steps():
     name = "AS29F002T"
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (False, 0x9999)
     plan = Plan(
         name=name,
@@ -1072,7 +953,7 @@ def test_id_mismatch_does_not_gate_non_destructive_steps():
             Step(op=OP_BLANK_CHECK, supported=True, reason=""),
         ],
     )
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     assert _result(results, OP_READ).verdict == VERDICT_OK
     assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
@@ -1085,10 +966,10 @@ def test_blank_check_step_records_pass_verdict_when_operator_returns_zero():
     same convention `verify_eprom` adopted in 202-01). A mocked operator
     returning 0 must record the passing OK verdict through the dispatch's
     `== 0` adapter."""
-    operator = _mock_operator(check_eprom_blank=0)
+    operator = mock_operator(check_eprom_blank=0)
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
 
@@ -1096,10 +977,10 @@ def test_blank_check_step_records_pass_verdict_when_operator_returns_zero():
 def test_blank_check_step_records_bad_verdict_when_operator_returns_one():
     """The paired negative: an operator returning 1 (not blank) must not be
     read as success through the same `== 0` adapter."""
-    operator = _mock_operator(check_eprom_blank=1)
+    operator = mock_operator(check_eprom_blank=1)
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_BAD
 
@@ -1111,10 +992,10 @@ def test_blank_check_verdict_2_is_skipped_with_status_error():
     `VERDICT_SKIPPED` + `STATUS_ERROR`, the same two-axis vocabulary
     `_run_step_untimed`'s transport arm already uses. Never `VERDICT_BAD`,
     which would misreport a rig fault as a chip finding."""
-    operator = _mock_operator(check_eprom_blank=2)
+    operator = mock_operator(check_eprom_blank=2)
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     blank_result = _result(results, OP_BLANK_CHECK)
     assert blank_result.verdict == VERDICT_SKIPPED
@@ -1126,10 +1007,10 @@ def test_blank_check_verdict_1_stays_bad():
     verdict 1 (genuinely not blank) still reports `VERDICT_BAD`, and now
     explicitly `STATUS_COMPLETE` -- this run executed validly, the chip
     just was not blank."""
-    operator = _mock_operator(check_eprom_blank=1)
+    operator = mock_operator(check_eprom_blank=1)
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     blank_result = _result(results, OP_BLANK_CHECK)
     assert blank_result.verdict == VERDICT_BAD
@@ -1142,12 +1023,12 @@ def test_blank_check_verdict_1_on_a_uv_prewrite_stays_skipped_complete():
     task -- and must be told apart from a genuine verdict-2 transport fault
     by the status axis alone: both read `VERDICT_SKIPPED`, but this one is
     `STATUS_COMPLETE`."""
-    operator = _mock_operator(check_eprom_blank=1)
+    operator = mock_operator(check_eprom_blank=1)
     plan = _plan_with_steps(
         Step(op=OP_BLANK_CHECK, supported=True, reason="", uv_prewrite=True)
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     blank_result = _result(results, OP_BLANK_CHECK)
     assert blank_result.verdict == VERDICT_SKIPPED
@@ -1187,11 +1068,11 @@ def test_blank_check_carries_compare_evidence_without_a_fingerprint():
             on_result(compare_result)
         return 1
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_blank.side_effect = _fake_check_eprom_blank
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     blank_result = _result(results, OP_BLANK_CHECK)
     assert blank_result.fingerprint is None
@@ -1255,11 +1136,11 @@ def test_blank_check_compare_evidence_takes_the_last_captured_result():
             on_result(final)
         return 1
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_blank.side_effect = _fake_check_eprom_blank
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     blank_result = _result(results, OP_BLANK_CHECK)
     assert blank_result.compare_evidence == {
@@ -1279,12 +1160,12 @@ def test_blank_check_compare_evidence_is_absent_when_the_step_never_ran():
     callback never fires and `compare_evidence` stays at its `None`
     default -- the same non-dispatch already pinned for `verdict`/`reason`
     by `test_run_plan_verdict_vocabulary_and_na_not_executed` above."""
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_BLANK_CHECK, supported=False, reason="not applicable")
     )
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     blank_result = _result(results, OP_BLANK_CHECK)
     operator.check_eprom_blank.assert_not_called()
@@ -1304,11 +1185,11 @@ def test_transport_fault_carries_skipped_verdict_and_error_status():
     None` -- the D-01 shape: the chip-verdict axis never spends a `BAD` on
     a fault that was never the chip's, while the run-validity axis still
     records that this run did not execute validly."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = SerialError("half-seated cable")
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
 
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     result = _result(results, OP_READ)
     assert result.verdict == VERDICT_SKIPPED
@@ -1424,11 +1305,11 @@ def _alternating_read_side_effect(*call_returns: bool):
 
 
 def test_runs_boundary_rejects_below_2_before_any_operator_call():
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=1)
+    results = run_plan(plan, operator, REAL_DB, runs=1)
 
     # No operator method was called -- rejected before resolve/dispatch.
     operator.write_eprom.assert_not_called()
@@ -1442,7 +1323,7 @@ def test_runs_boundary_rejects_below_2_before_any_operator_call():
 def _record_operator_calls(operator, calls, *methods):
     """Make each named operator method append its own name to `calls`.
 
-    Preserves the mock's configured `return_value` -- `_mock_operator` sets
+    Preserves the mock's configured `return_value` -- `mock_operator` sets
     those, and a bare `side_effect` would otherwise shadow them and hand every
     step a `Mock` instead of a bool.
     """
@@ -1469,13 +1350,13 @@ def test_write_and_verify_run_as_a_cycle_not_two_inner_loops():
     verify is what makes the repeat mean anything.
     """
     calls: list[str] = []
-    operator = _mock_operator()
+    operator = mock_operator()
     _record_operator_calls(operator, calls, "write_eprom", "verify_eprom")
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
         Step(op=OP_VERIFY, supported=True, reason=""),
     )
-    run_plan(plan, operator, _REAL_DB, runs=2)
+    run_plan(plan, operator, REAL_DB, runs=2)
 
     assert calls == ["write_eprom", "verify_eprom", "write_eprom", "verify_eprom"]
 
@@ -1488,7 +1369,7 @@ def test_erasable_cycle_puts_the_erase_before_the_next_write():
     cycle and validates that erase every time round.
     """
     calls: list[str] = []
-    operator = _mock_operator()
+    operator = mock_operator()
     _record_operator_calls(
         operator,
         calls,
@@ -1503,7 +1384,7 @@ def test_erasable_cycle_puts_the_erase_before_the_next_write():
         Step(op=OP_ERASE, supported=True, reason="", destructive=True),
         Step(op=OP_BLANK_CHECK, supported=True, reason=""),
     )
-    run_plan(plan, operator, _REAL_DB, runs=2)
+    run_plan(plan, operator, REAL_DB, runs=2)
 
     one_cycle = ["write_eprom", "verify_eprom", "erase_eprom", "check_eprom_blank"]
     assert calls == one_cycle * 2
@@ -1525,7 +1406,7 @@ def test_cycle_block_bounds_matches_each_family_plan_shape():
         ("M27C512", [OP_WRITE, OP_VERIFY, OP_ERASE]),
         ("W29C040", [OP_WRITE, OP_VERIFY, OP_ERASE]),
     ):
-        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        plan = derive_plan(name, REAL_DB, write_scope="full")
         bounds = chip_test_mod.cycle_block_bounds(plan.steps)
         assert bounds is not None, name
         assert [s.op for s in plan.steps[bounds[0] : bounds[1]]] == expected, name
@@ -1542,12 +1423,12 @@ def test_cycle_loop_reports_one_result_per_step_with_run_count_n():
     changes the EXECUTION order only. The report still sees one row per plan
     step, `run_count` still counts operator calls, so the schema-1.7
     disclosure, the banner counts and `dedup_fingerprint` are all untouched."""
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
         Step(op=OP_VERIFY, supported=True, reason=""),
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     assert [r.op for r in results] == [OP_WRITE, OP_VERIFY]
     assert _result(results, OP_WRITE).run_count == 2
@@ -1563,12 +1444,12 @@ def test_a_passing_run_performs_zero_fingerprint_read_backs():
     fingerprint is synthesized instead. A fingerprint only ever describes
     the device's FINAL state, and on an all-passing run that final state
     needs zero additional device reads to report as `match`."""
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
         Step(op=OP_VERIFY, supported=True, reason=""),
     )
-    run_plan(plan, operator, _REAL_DB, runs=3)
+    run_plan(plan, operator, REAL_DB, runs=3)
 
     assert operator.read_eprom.call_count == 0
 
@@ -1576,12 +1457,12 @@ def test_a_passing_run_performs_zero_fingerprint_read_backs():
 def test_a_passing_write_reports_a_synthesized_match_fingerprint():
     """The zero-read-back path still attaches a `Fingerprint` -- never
     `None` -- and it classifies `match` with `bad == 0`."""
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
         Step(op=OP_VERIFY, supported=True, reason=""),
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=3)
+    results = run_plan(plan, operator, REAL_DB, runs=3)
 
     write_result = _result(results, OP_WRITE)
     verify_result = _result(results, OP_VERIFY)
@@ -1608,13 +1489,13 @@ def test_a_bad_blank_check_does_not_force_a_read_back_on_a_passing_write():
     must not force a fingerprint read-back on an unrelated passing `write`
     step in the same plan."""
     # 202-05 D-10: 1 (not 0) is now check_eprom_blank's "not blank" verdict.
-    operator = _mock_operator(check_eprom_blank=1)
+    operator = mock_operator(check_eprom_blank=1)
     plan = _plan_with_steps(
         Step(op=OP_BLANK_CHECK, supported=True, reason=""),
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
         Step(op=OP_VERIFY, supported=True, reason=""),
     )
-    run_plan(plan, operator, _REAL_DB, runs=2)
+    run_plan(plan, operator, REAL_DB, runs=2)
 
     assert operator.read_eprom.call_count == 0
 
@@ -1623,12 +1504,12 @@ def test_a_failing_step_still_performs_its_fingerprint_read_back():
     """A single-cycle failure (both runs disagreeing, so the write reports
     `marginal`) keeps the real fingerprint read-back -- the diagnostic this
     gate exists to preserve for anything that did not cleanly pass."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.write_eprom.side_effect = [True, False]
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    run_plan(plan, operator, _REAL_DB, runs=2)
+    run_plan(plan, operator, REAL_DB, runs=2)
 
     assert operator.read_eprom.call_count > 0
 
@@ -1658,12 +1539,12 @@ def test_cycle_disagreement_still_reports_marginal():
     """`marginal` moved from `_dispatch_multi_run` (which now sees one cycle at
     a time) to the aggregation, with its MEANING unchanged: cycles that
     disagree never fold to a confident OK/BAD."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.write_eprom.side_effect = [True, False]
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_MARGINAL
@@ -1689,12 +1570,12 @@ def test_allow_single_run_admits_runs_1_and_reports_run_count_1():
     step that FAILS; a passing `--fast` write now costs exactly what a
     passing full-repeat write costs -- zero extra reads.
     """
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_READ, supported=True, reason=""),
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+    results = run_plan(plan, operator, REAL_DB, runs=1, allow_single_run=True)
 
     assert _result(results, OP_READ).run_count == 1
     assert _result(results, OP_WRITE).run_count == 1
@@ -1708,11 +1589,11 @@ def test_allow_single_run_still_rejects_runs_below_1():
     """`allow_single_run=True` unlocks ONE run, not zero. A zero-run step
     would report a verdict for an operator call that never happened -- the
     vacuous pass this codebase refuses everywhere else."""
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=0, allow_single_run=True)
+    results = run_plan(plan, operator, REAL_DB, runs=0, allow_single_run=True)
 
     operator.write_eprom.assert_not_called()
     assert len(results) == 1
@@ -1728,12 +1609,12 @@ def test_single_run_write_cannot_report_marginal():
     reports a confident OK and the divergence is INVISIBLE. This is exactly
     what the `--fast` help text warns about.
     """
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.write_eprom.side_effect = [True, False]
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+    results = run_plan(plan, operator, REAL_DB, runs=1, allow_single_run=True)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_OK
@@ -1744,12 +1625,12 @@ def test_single_run_write_cannot_report_marginal():
 def test_repeat_policy_tag_empty_for_the_default_policy():
     from firestarter.chip_test import repeat_policy_tag
 
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_READ, supported=True, reason=""),
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     assert repeat_policy_tag(results) == ""
 
@@ -1760,11 +1641,11 @@ def test_repeat_policy_tag_marks_a_single_run_plan():
         repeat_policy_tag,
     )
 
-    operator = _mock_operator()
+    operator = mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+    results = run_plan(plan, operator, REAL_DB, runs=1, allow_single_run=True)
 
     assert repeat_policy_tag(results) == REPEAT_POLICY_DEGRADED_TAG
 
@@ -1924,13 +1805,13 @@ def test_resolve_error_name_never_raises_over_the_unnamed_range():
 
 
 def test_marginal_on_disagreeing_write_runs():
-    operator = _mock_operator()
+    operator = mock_operator()
     # write#1 True, write#2 False -- the AM27C020 write#1/write#2 case.
     operator.write_eprom.side_effect = [True, False]
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_MARGINAL
@@ -1938,12 +1819,12 @@ def test_marginal_on_disagreeing_write_runs():
 
 
 def test_agreeing_destructive_runs_report_confident_ok():
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.write_eprom.return_value = True
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_OK
@@ -1951,12 +1832,12 @@ def test_agreeing_destructive_runs_report_confident_ok():
 
 
 def test_agreeing_destructive_runs_report_confident_bad():
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.write_eprom.return_value = False
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_BAD
@@ -1964,11 +1845,11 @@ def test_agreeing_destructive_runs_report_confident_bad():
 
 
 def test_marginal_on_disagreeing_verify_runs():
-    operator = _mock_operator()
+    operator = mock_operator()
     # 202-01 D-10: int, 0 == match, 1 == mismatch.
     operator.verify_eprom.side_effect = [0, 1]
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     verify_result = _result(results, OP_VERIFY)
     assert verify_result.verdict == VERDICT_MARGINAL
@@ -1980,10 +1861,10 @@ def test_verify_verdict_2_is_skipped_with_status_error():
     `STATUS_ERROR`, selected BEFORE the `diverged` (marginal) test -- a rig
     that could not complete the compare has not produced a disagreement
     worth naming `marginal`."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.verify_eprom.return_value = 2
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     verify_result = _result(results, OP_VERIFY)
     assert verify_result.verdict == VERDICT_SKIPPED
@@ -2001,10 +1882,10 @@ def test_verify_verdict_2_stops_the_multi_run_loop_after_the_first_run():
     break must not stamp the degraded `runs=1` tag onto a default run."""
     from firestarter.chip_test import repeat_policy_tag
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.verify_eprom.side_effect = [2, 0]
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     verify_result = _result(results, OP_VERIFY)
     assert operator.verify_eprom.call_count == 1
@@ -2018,10 +1899,10 @@ def test_verify_verdict_1_stays_bad():
     """The paired negative on BOTH axes: a mismatch (verdict 1 on every
     run) still reports `VERDICT_BAD`, now explicitly `STATUS_COMPLETE` --
     the compare completed validly and found a real mismatch."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.verify_eprom.return_value = 1
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     verify_result = _result(results, OP_VERIFY)
     assert verify_result.verdict == VERDICT_BAD
@@ -2033,10 +1914,10 @@ def test_verify_verdict_2_performs_no_fingerprint_read_back():
     fingerprint read-back -- the same link that just failed cannot produce
     one -- and the attached fingerprint is `None`, the same value a
     best-effort `_read_region` failure already produces today."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.verify_eprom.return_value = 2
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     verify_result = _result(results, OP_VERIFY)
     assert operator.read_eprom.call_count == 0
@@ -2049,7 +1930,7 @@ _UNMAPPED_OP = "unmapped-op-for-fail-closed-proof"
 
 
 def test_unhandled_op_fails_closed_never_erases():
-    operator = _mock_operator()
+    operator = mock_operator()
     result = _dispatch_multi_run(
         _UNMAPPED_OP, "AT28C256", {"memory-size": 32768}, operator, runs=2
     )
@@ -2060,7 +1941,7 @@ def test_unhandled_op_fails_closed_never_erases():
 
 
 def test_unhandled_op_fails_closed_names_the_op_in_the_reason():
-    operator = _mock_operator()
+    operator = mock_operator()
     result = _dispatch_multi_run(
         _UNMAPPED_OP, "AT28C256", {"memory-size": 32768}, operator, runs=2
     )
@@ -2075,7 +1956,7 @@ def test_unhandled_op_fails_closed_names_the_op_in_the_reason():
 
 
 def test_dispatch_step_refuses_an_op_outside_the_multi_run_allow_list():
-    operator = _mock_operator()
+    operator = mock_operator()
     step = Step(op=_UNMAPPED_OP, supported=True, reason="")
     result = _dispatch_step("AT28C256", step, {"memory-size": 32768}, operator, runs=2)
 
@@ -2087,7 +1968,7 @@ def test_dispatch_step_refuses_an_op_outside_the_multi_run_allow_list():
 
 
 def test_run_plan_sampler_brackets_write():
-    operator = _mock_operator()
+    operator = mock_operator()
     calls: list[str] = []
 
     def sampler(phase):
@@ -2096,7 +1977,7 @@ def test_run_plan_sampler_brackets_write():
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2, sampler=sampler)
+    results = run_plan(plan, operator, REAL_DB, runs=2, sampler=sampler)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_OK
@@ -2108,7 +1989,7 @@ def test_run_plan_sampler_brackets_write():
 
 
 def test_run_plan_sampler_not_invoked_around_non_write_ops():
-    operator = _mock_operator()
+    operator = mock_operator()
     calls: list[str] = []
 
     def sampler(phase):
@@ -2121,7 +2002,7 @@ def test_run_plan_sampler_not_invoked_around_non_write_ops():
         Step(op=OP_VERIFY, supported=True, reason=""),
         Step(op=OP_ERASE, supported=True, reason=""),
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2, sampler=sampler)
+    results = run_plan(plan, operator, REAL_DB, runs=2, sampler=sampler)
 
     assert calls == []
     for op in (OP_ID, OP_READ, OP_BLANK_CHECK, OP_VERIFY, OP_ERASE):
@@ -2129,18 +2010,18 @@ def test_run_plan_sampler_not_invoked_around_non_write_ops():
 
 
 def test_run_plan_sampler_none_is_noop_matches_baseline():
-    baseline_operator = _mock_operator()
+    baseline_operator = mock_operator()
     plan_a = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    baseline_results = run_plan(plan_a, baseline_operator, _REAL_DB, runs=2)
+    baseline_results = run_plan(plan_a, baseline_operator, REAL_DB, runs=2)
 
-    sampler_free_operator = _mock_operator()
+    sampler_free_operator = mock_operator()
     plan_b = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
     explicit_none_results = run_plan(
-        plan_b, sampler_free_operator, _REAL_DB, runs=2, sampler=None
+        plan_b, sampler_free_operator, REAL_DB, runs=2, sampler=None
     )
 
     baseline_write = _result(baseline_results, OP_WRITE)
@@ -2153,7 +2034,7 @@ def test_run_plan_sampler_none_is_noop_matches_baseline():
 
 
 def test_run_plan_sampler_exception_does_not_abort_write_step():
-    operator = _mock_operator()
+    operator = mock_operator()
 
     def raising_sampler(phase):
         raise RuntimeError(f"bench sampler exploded during {phase}")
@@ -2161,7 +2042,7 @@ def test_run_plan_sampler_exception_does_not_abort_write_step():
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2, sampler=raising_sampler)
+    results = run_plan(plan, operator, REAL_DB, runs=2, sampler=raising_sampler)
 
     write_result = _result(results, OP_WRITE)
     # The write step's verdict is still computed purely from the operator
@@ -2215,7 +2096,7 @@ def test_dispatch_id_not_ok_with_no_id_leaves_chip_id_detected_none():
 
 
 def test_read_step_disagreement_is_divergence_metric_not_marginal():
-    operator = _mock_operator()
+    operator = mock_operator()
     call_results = [b"\x00" * 64, b"\xff" * 64]
     call_count = {"n": 0}
 
@@ -2228,7 +2109,7 @@ def test_read_step_disagreement_is_divergence_metric_not_marginal():
 
     operator.read_eprom.side_effect = _read_side_effect
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_OK  # never a verdict flip
@@ -2245,10 +2126,10 @@ def test_read_step_agreement_records_a_zero_bad_divergence_mapping():
     180's D-06 cited this test as covering the agreeing case; the agreeing
     case is STILL covered here, by the stronger assertion that a real
     zero-bad mapping is recorded rather than nothing."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_OK
@@ -2266,12 +2147,12 @@ def test_agreeing_and_diverging_divergence_mappings_share_the_same_key_set():
     """Both branches of `_dispatch_read`'s divergence construction emit the
     same five keys, or `parse_devtest_issue.py` and the triage skill see a
     ragged shape."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    agreeing = _result(run_plan(plan, operator, _REAL_DB, runs=2), OP_READ)
+    agreeing = _result(run_plan(plan, operator, REAL_DB, runs=2), OP_READ)
 
-    diverging_operator = _mock_operator()
+    diverging_operator = mock_operator()
     call_results = [b"\x00" * 64, b"\xff" * 64]
     call_count = {"n": 0}
 
@@ -2283,7 +2164,7 @@ def test_agreeing_and_diverging_divergence_mappings_share_the_same_key_set():
         return True
 
     diverging_operator.read_eprom.side_effect = _read_side_effect
-    diverging = _result(run_plan(plan, diverging_operator, _REAL_DB, runs=2), OP_READ)
+    diverging = _result(run_plan(plan, diverging_operator, REAL_DB, runs=2), OP_READ)
 
     assert sorted(agreeing.divergence) == sorted(diverging.divergence)
 
@@ -2297,12 +2178,12 @@ def test_a_single_run_and_an_all_empty_read_leave_divergence_none():
     the same seam `test_read_step_disagreement_is_divergence_metric_not_marginal`'s
     siblings above call through `run_plan` for, since a single-run read is
     the one shape `run_plan` itself cannot produce."""
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
     single_run = _dispatch_read("m27c512", {}, operator, runs=1)
     assert single_run.divergence is None
 
-    empty_operator = _mock_operator()
+    empty_operator = mock_operator()
 
     def _empty_side_effect(_name, _eprom_data, output_file=None, **_kwargs):
         if output_file:
@@ -2329,10 +2210,10 @@ def test_the_agreeing_branch_never_calls_the_per_byte_diff_primitive(monkeypatch
 
     monkeypatch.setattr(ct, "diff_summary", _boom)
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\x5a" * 128)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.divergence["bad"] == 0
@@ -2383,10 +2264,10 @@ def test_read_step_last_run_failure_yields_bad():
     last read gives a bad verdict -- it takes the sibling leg to show WHICH
     run's result the verdict actually reads.
     """
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = _alternating_read_side_effect(True, False)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_BAD
@@ -2402,10 +2283,10 @@ def test_read_step_first_run_failure_with_passing_last_run_yields_ok():
     proves the read step's verdict is the last full read's return value
     and nothing else.
     """
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = _alternating_read_side_effect(False, True)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_OK
@@ -2413,7 +2294,7 @@ def test_read_step_first_run_failure_with_passing_last_run_yields_ok():
 
 
 def test_write_step_attaches_fingerprint_with_region_start_addr_base():
-    operator = _mock_operator()
+    operator = mock_operator()
     # Read-back matches the expected address-derived pattern exactly for
     # region [0, 256) -- perfect verify -> classify_fingerprint should NOT
     # be "address-line"/"transport" (no mismatches at all).
@@ -2424,7 +2305,7 @@ def test_write_step_attaches_fingerprint_with_region_start_addr_base():
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.fingerprint is not None
@@ -2432,7 +2313,7 @@ def test_write_step_attaches_fingerprint_with_region_start_addr_base():
 
 
 def test_write_step_fingerprint_addr_base_matches_region_start():
-    operator = _mock_operator()
+    operator = mock_operator()
     # Corrupt the read-back at every address where bit A8 is set -- proves
     # the classifier clustered on addr_base + offset (Pitfall 3), matching
     # the write region start (0 in this engine's default region).
@@ -2449,7 +2330,7 @@ def test_write_step_fingerprint_addr_base_matches_region_start():
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
     write_result = _result(results, OP_WRITE)
     assert write_result.fingerprint is not None
 
@@ -2467,7 +2348,7 @@ def test_write_region_for_reads_step_carried_region():
     # UNCHANGED regardless of eprom_data -- this is the UV top-anchored
     # window derive_plan would compute for AM2716 (memory-size 2048).
     step = Step(op=OP_WRITE, supported=True, reason="", write_region=(1792, 256))
-    non_uv_eprom_data = _REAL_DB.get_eprom("M8720")
+    non_uv_eprom_data = REAL_DB.get_eprom("M8720")
     start, length = _write_region_for(step, non_uv_eprom_data)
     assert (start, length) == (1792, 256)
     assert length == _UV_WRITE_REGION_LENGTH
@@ -2488,7 +2369,7 @@ def test_write_region_for_step_none_returns_engine_default():
     # step=None (e.g. a defensive call site) is equivalent to "no carried
     # region" -- the engine default, never a guess, even against a real UV
     # chip's full DB dict.
-    full = _REAL_DB.get_eprom("AM2716")
+    full = REAL_DB.get_eprom("AM2716")
     assert full["electrical-type"] == "UV-EPROM"
     start, length = _write_region_for(None, full)
     assert (start, length) == (0, 256)
@@ -2528,7 +2409,7 @@ def test_dispatch_multi_run_uses_selector_for_uv_chip():
 
     start, length = 1792, 256  # AM2716's UV window, as derive_plan would set it
     expected_bytes = _gen(start, length)
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(expected_bytes)
     plan = _plan_with_steps(
         Step(
@@ -2539,9 +2420,7 @@ def test_dispatch_multi_run_uses_selector_for_uv_chip():
             write_region=(start, length),
         )
     )
-    results = run_plan(
-        Plan(name="AM2716", steps=plan.steps), operator, _REAL_DB, runs=2
-    )
+    results = run_plan(Plan(name="AM2716", steps=plan.steps), operator, REAL_DB, runs=2)
     write_result = _result(results, OP_WRITE)
     # A perfect read-back against the UV-window-anchored expected pattern
     # must classify as zero mismatches -- proving the SAME start fed both
@@ -2595,18 +2474,18 @@ def _capturing_write(captured: dict):
 def test_write_region_via_run_plan_uses_the_plan_carried_window():
     name = "M27C512"
     expected_id = _real_expected_chip_id(name)
-    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    plan = derive_plan(name, REAL_DB, write_scope="partial")
     write_step = _step(plan, OP_WRITE_PARTIAL)
     assert write_step.write_region == (65280, 256)
     assert write_step.full_device_permitted is False
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id)
     captured: dict = {}
     operator.write_eprom.side_effect = _capturing_write(captured)
     operator.read_eprom.side_effect = _writes_fill_at_requested_region(0xFF)
 
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     operator.write_eprom.assert_called()
     write_result = _result(results, OP_WRITE_PARTIAL)
@@ -2625,11 +2504,11 @@ def test_write_region_via_run_plan_uv_part_full_scope_uses_the_top_slot():
     #   D-C era   : captured["bytes"] == generate_pattern(0, 65536)     <- gone
     name = "M27C512"
     expected_id = _real_expected_chip_id(name)
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     write_step = _step(plan, OP_WRITE)
     assert write_step.write_region == (65280, 256)
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id)
     # Blank -- the state that used to trigger the full-device branch. It no
     # longer changes the region at all, which is the point of this test.
@@ -2639,7 +2518,7 @@ def test_write_region_via_run_plan_uv_part_full_scope_uses_the_top_slot():
     operator.write_eprom.side_effect = _capturing_write(captured)
     operator.read_eprom.side_effect = _writes_fill_at_requested_region(0xFF)
 
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     operator.write_eprom.assert_called()
     write_result = _result(results, OP_WRITE)
@@ -2663,12 +2542,12 @@ def test_partial_write_gated_on_id_mismatch():
     # `write_eprom.assert_not_called()`; the SKIPPED verdict alone is not
     # sufficient proof (a verdict can be produced after the fact).
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    plan = derive_plan(name, REAL_DB, write_scope="partial")
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (False, 0x9999)
 
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     write_result = _result(results, OP_WRITE_PARTIAL)
     assert write_result.verdict == VERDICT_SKIPPED
@@ -2677,7 +2556,7 @@ def test_partial_write_gated_on_id_mismatch():
 
 
 def test_verify_region_matches_the_preceding_partial_write_region():
-    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    plan = derive_plan("M27C512", REAL_DB, write_scope="partial")
     write_step = _step(plan, OP_WRITE_PARTIAL)
     verify_step = _step(plan, OP_VERIFY)
 
@@ -2687,10 +2566,10 @@ def test_verify_region_matches_the_preceding_partial_write_region():
 
 def test_count_applicable_bad_counts_as_ran():
     # A BAD read still counts toward N (ran); NA (id) does not.
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.read_eprom.return_value = False
-    plan = derive_plan("AM2716", _REAL_DB, write_scope="partial")
-    results = run_plan(plan, operator, _REAL_DB)
+    plan = derive_plan("AM2716", REAL_DB, write_scope="partial")
+    results = run_plan(plan, operator, REAL_DB)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_BAD
@@ -2706,10 +2585,10 @@ def test_count_applicable_skipped_does_not_count_as_ran():
     expected_id = _real_expected_chip_id(name)
     assert expected_id
 
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_id.return_value = (False, 0x9999)
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
-    results = run_plan(plan, operator, _REAL_DB)
+    plan = derive_plan(name, REAL_DB, write_scope="full")
+    results = run_plan(plan, operator, REAL_DB)
 
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_SKIPPED
@@ -2726,9 +2605,9 @@ def test_count_applicable_skipped_does_not_count_as_ran():
 def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
     import firestarter.chip_test as chip_test_mod
 
-    plan = derive_plan("AM2716", _REAL_DB, write_scope="partial")
-    operator = _mock_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    plan = derive_plan("AM2716", REAL_DB, write_scope="partial")
+    operator = mock_operator()
+    results = run_plan(plan, operator, REAL_DB)
 
     spy = Mock(side_effect=AssertionError("count_applicable must not re-derive"))
     monkeypatch.setattr(chip_test_mod, "derive_plan", spy)
@@ -2742,9 +2621,9 @@ def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
 def test_count_applicable_n_equals_m_when_destructive():
     # Same chip (M8720), write_scope="full": every applicable step actually
     # executes -- N == M (banner would not trigger).
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
-    operator = _mock_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
+    operator = mock_operator()
+    results = run_plan(plan, operator, REAL_DB)
 
     counts = count_applicable(plan, results)
 
@@ -2766,15 +2645,15 @@ def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
     spy = Mock(side_effect=real_resolve)
     monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
 
-    operator = _mock_operator()
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
+    operator = mock_operator()
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
     # M8720's id step is NA (chip-id sentinel 0) -- every OTHER step here is
     # supported, so all of them must resolve through the spy.
     executed_steps = [s for s in plan.steps if s.supported]
     assert len(executed_steps) >= 4
 
     runs = 2
-    run_plan(plan, operator, _REAL_DB, runs=runs)
+    run_plan(plan, operator, REAL_DB, runs=runs)
 
     # resolve_chip is called once per executed (supported) step PER CYCLE --
     # never reused from derive_plan's guard-bypassing dict. The expected count
@@ -2795,7 +2674,7 @@ def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
     )
     for call in spy.call_args_list:
         assert call.args == ("M8720",)
-        assert call.kwargs == {"db": _REAL_DB}
+        assert call.kwargs == {"db": REAL_DB}
 
 
 def test_safe02_vpp_guard_refusal_is_a_finding_not_a_retry_single_run():
@@ -2803,12 +2682,12 @@ def test_safe02_vpp_guard_refusal_is_a_finding_not_a_retry_single_run():
     # (blank-check) becomes a captured BAD finding with error_code -- and
     # the operator method is invoked EXACTLY ONCE (no silent retry-around
     # the refusal).
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.check_eprom_blank.side_effect = EpromOperationError(
         "VPP guard refused: voltage out of range", error_code=0xA9
     )
     plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     result = _result(results, OP_BLANK_CHECK)
     assert result.verdict == VERDICT_BAD
@@ -2821,14 +2700,14 @@ def test_safe02_vpp_guard_refusal_is_a_finding_not_a_retry_multi_run():
     # invocation must not be retried-around -- run_plan's try/except wraps
     # the whole step body, so the exception propagates out of the runs-loop
     # immediately (exactly 1 call, not `runs` calls, and no bypass call).
-    operator = _mock_operator()
+    operator = mock_operator()
     operator.write_eprom.side_effect = EpromOperationError(
         "VPP guard refused: voltage out of range", error_code=0xA9
     )
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True)
     )
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, REAL_DB, runs=2)
 
     result = _result(results, OP_WRITE)
     assert result.verdict == VERDICT_BAD
@@ -2846,13 +2725,13 @@ def test_safe02_only_known_operator_methods_no_attribute_error():
     # run through every op must complete without ever tripping that guard,
     # proving run_plan never reaches for a method outside the six existing
     # EpromOperator public methods.
-    operator = _mock_operator()
+    operator = mock_operator()
 
     with pytest.raises(AttributeError):
         operator.set_vpp  # out-of-spec attribute access -- sanity check
 
-    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
-    results = run_plan(plan, operator, _REAL_DB)  # must not raise AttributeError
+    plan = derive_plan("M8720", REAL_DB, write_scope="full")
+    results = run_plan(plan, operator, REAL_DB)  # must not raise AttributeError
 
     assert len(results) == len(plan.steps)
 
@@ -2897,22 +2776,22 @@ def test_devtest01_0x0d_sweep_erase_is_supported_and_erase_eprom_is_called():
     SDP-capable per infoic.xml INFOIC2PLUS flags bit 15), so `derive_plan`'s
     write_scope="full" plan carries the six real SDP-leg steps after
     "erase" (LEG-01). Uses the read-back-capable
-    `_sdp_leg_readback_operator` double (not `_mock_operator()`) so the
+    `sdp_aware_operator` double (not `mock_operator()`) so the
     leg's read-back-equality oracle sees a real image rather than an
     empty one, mirroring the sibling test below -- both AT28C256 sweeps
     share one correctly-behaving double rather than two different levels
     of realism for the same chip."""
     name = "AT28C256"
-    full = _REAL_DB.get_eprom(name)
+    full = REAL_DB.get_eprom(name)
     assert full["protocol-id"] == 13  # 0x0D
 
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     erase_step = _step(plan, "erase")
     assert erase_step.supported is True
     assert erase_step.destructive is True
 
-    operator = _sdp_leg_readback_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    operator = sdp_aware_operator()
+    results = run_plan(plan, operator, REAL_DB)
 
     erase_result = _result(results, OP_ERASE)
     assert erase_result.verdict == VERDICT_OK
@@ -2930,13 +2809,13 @@ def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
     v1.30 Phase 134 (plan 134-03) REPAIR, recorded rather than silently
     patched: AT28C256 is a measured ALLOW chip, so this plan's
     write_scope="full" run now ALSO executes the six real SDP-leg steps
-    (LEG-01) after "erase". `_mock_operator()`'s `read_eprom` returns
+    (LEG-01) after "erase". `mock_operator()`'s `read_eprom` returns
     `True` while writing NO file, so the SDP leg's oracle would see
     `actual = b""`, the length gate (D-04) would fire, and every leg step
     would report BAD -- turning this test's own `VERDICT_BAD not in
     verdicts` assertion RED for a reason that has nothing to do with what
     the test is meant to prove. Repaired, not weakened: swapped in
-    `_sdp_leg_readback_operator`, a stateful SDP-lock-aware double (mirrors
+    `sdp_aware_operator`, a stateful SDP-lock-aware double (mirrors
     `tests/test_chip_test_sdp_leg.py::_readback_operator`'s shape, extended
     with real lock/unlock state so a write genuinely blocked while locked
     reports OK on write-inhibited) -- so a genuinely-all-OK sweep across
@@ -2969,14 +2848,14 @@ def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
     from firestarter.diagnostic_report import build_db_diff
 
     name = "AT28C256"
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
-    operator = _sdp_leg_readback_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    plan = derive_plan(name, REAL_DB, write_scope="full")
+    operator = sdp_aware_operator()
+    results = run_plan(plan, operator, REAL_DB)
 
     verdicts = {r.verdict for r in results}
     assert VERDICT_BAD not in verdicts
 
-    db_diff = build_db_diff(name, _REAL_DB, results)
+    db_diff = build_db_diff(name, REAL_DB, results)
     assert db_diff.ladder_state != "community-fail"
     assert db_diff.ladder_state == "community-reported"
 
@@ -2991,12 +2870,12 @@ def test_r6_laundering_allow_plans_never_derive_an_empty_steps_list():
     called -- trivially true, since `run_plan` never dispatched a single
     step -- proven directly against an empty `Plan` below."""
     offenders = []
-    for full in _REAL_DB.get_eproms():
+    for full in REAL_DB.get_eproms():
         name = full["name"]
         allowed, _reason = sdp_capability_for_entry(full, name)
         if not allowed:
             continue
-        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        plan = derive_plan(name, REAL_DB, write_scope="full")
         if not plan.steps:
             offenders.append(name)
     assert not offenders, (
@@ -3007,8 +2886,8 @@ def test_r6_laundering_allow_plans_never_derive_an_empty_steps_list():
     )
 
     empty_plan = Plan(name="__empty_plan_for_r6__", steps=[])
-    operator = _mock_operator()
-    empty_results = run_plan(empty_plan, operator, _REAL_DB)
+    operator = mock_operator()
+    empty_results = run_plan(empty_plan, operator, REAL_DB)
     assert empty_results == []
     operator.sdp_lock.assert_not_called()
 
@@ -3077,7 +2956,7 @@ def _gated_allow_operator():
     baseline gate (D-08) after both baseline directions have genuinely run."""
     region = _DEFAULT_REGION
     a = generate_pattern(*region)
-    operator = Mock(spec=_OPERATOR_METHODS)
+    operator = Mock(spec=OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, None)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     operator.check_eprom_blank.return_value = 0
@@ -3145,9 +3024,9 @@ def test_count_applicable_sdp_gated_allow_chip_ratio_drops():
     `chip_test.py` and `_gated_allow_operator` fixture (unchanged by this
     plan), not transcribed from plan text.
     """
-    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    plan = derive_plan("AT28C256", REAL_DB, write_scope="full")
     operator = _gated_allow_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
 
     counts = count_applicable(plan, results)
     assert counts.m_applicable == 10, counts  # erase joined M (9 -> 10)
@@ -3171,12 +3050,12 @@ def test_count_applicable_refuse_chip_n_equals_m_is_out_of_leg13_scope():
     above breaks. This is NOT silently extended to also claim the REFUSE
     case's ratio drops -- it does not, and this test proves that."""
     name = "M8720"  # measured REFUSE chip (protocol 0x08, not 0x0D)
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
     assert leg_steps and all(not s.supported for s in leg_steps), leg_steps
 
-    operator = _mock_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    operator = mock_operator()
+    results = run_plan(plan, operator, REAL_DB)
     counts = count_applicable(plan, results)
     assert counts.n_ran == counts.m_applicable, counts  # REFUSE: N == M, no drop
 
@@ -3205,9 +3084,9 @@ def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
         TransportHealth,
     )
 
-    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    plan = derive_plan("AT28C256", REAL_DB, write_scope="full")
     operator = _gated_allow_operator()
-    results = run_plan(plan, operator, _REAL_DB)
+    results = run_plan(plan, operator, REAL_DB)
     banner = count_applicable(plan, results)
     # (third generation): n_ran/m_applicable rose 5/9 -> 6/10 --
     # erase is now a real supported step that runs for this
@@ -3248,9 +3127,9 @@ def test_full_device_write_non_uv_covers_whole_device():
     # step's resolved target spans the WHOLE device, address_str is None
     # (region start 0), and the verify step's target is the SAME object.
     name = "AT28C256"
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     chip = FakeChip.non_uv(32768)
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write")
     verify_result = _result(results, "verify")
@@ -3268,9 +3147,9 @@ def test_full_device_write_flash4_carves_out_boot_blocks():
     # the first/last 16 KiB boot blocks, and `write_eprom` receives an
     # `address_str` naming 0x4000 with a file of `memory-size - 32768` bytes.
     name = "W29C040"
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     chip = FakeChip.non_uv(524288)
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write")
     assert write_result.verdict == VERDICT_OK, write_result
@@ -3287,9 +3166,9 @@ def test_uv_virgin_full_scope_gets_the_top_slot_not_the_whole_device():
     # blank is an operator-actionable finding) -- it simply no longer decides
     # how much of the part gets consumed.
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     chip = FakeChip.virgin_uv(65536)
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write")
     assert write_result.verdict == VERDICT_OK, write_result
@@ -3312,8 +3191,8 @@ def test_uv_full_and_partial_scope_now_resolve_to_the_same_slot():
     name = "M27C512"
     targets = []
     for scope, op in (("full", "write"), ("partial", "write-partial")):
-        plan = derive_plan(name, _REAL_DB, write_scope=scope)
-        result = _result(run_plan(plan, FakeChip.virgin_uv(65536), _REAL_DB), op)
+        plan = derive_plan(name, REAL_DB, write_scope=scope)
+        result = _result(run_plan(plan, FakeChip.virgin_uv(65536), REAL_DB), op)
         assert result.verdict == VERDICT_OK, result
         assert result.write_target is not None
         targets.append(result.write_target)
@@ -3327,9 +3206,9 @@ def test_uv_virgin_partial_scope_writes_single_top_slot_not_whole_device():
     # False, so the scope literal is honoured -- a single top slot, never
     # the whole device.
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    plan = derive_plan(name, REAL_DB, write_scope="partial")
     chip = FakeChip.virgin_uv(65536)
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write-partial")
     assert write_result.verdict == VERDICT_OK, write_result
@@ -3346,13 +3225,13 @@ def test_uv_used_chip_write_is_genuinely_masked_and_verify_reads_the_region():
     # generate_pattern(slot_start, slot_length))`, and the verify step's
     # own read-back is the REGION slice, not a device-prefix read.
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    plan = derive_plan(name, REAL_DB, write_scope="partial")
     slot_content = b"\xf0" * 256
     chip = FakeChip.uv_with_content(65536, slot_content, start=65280)
     expected_pattern = generate_pattern(65280, 256)
     expected_masked = mask_write_pattern(slot_content, expected_pattern)
 
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write-partial")
     assert write_result.verdict == VERDICT_OK, write_result
@@ -3370,9 +3249,9 @@ def test_slot_advance_skips_a_saturated_top_slot():
     # under D-B (bits_cleared == 0). The selector must advance to the next
     # slot down (65024, 256), and `address_str` must name THAT slot.
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    plan = derive_plan(name, REAL_DB, write_scope="partial")
     chip = FakeChip.uv_with_content(65536, generate_pattern(65280, 256), start=65280)
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write-partial")
     assert write_result.verdict == VERDICT_OK, write_result
@@ -3388,9 +3267,9 @@ def test_zeroed_slot_is_never_targeted():
     # case. It must never be targeted; the selector advances past it to the
     # next (virgin) slot.
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    plan = derive_plan(name, REAL_DB, write_scope="partial")
     chip = FakeChip.uv_with_slot_zeroed(65536, 65280, 256)
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write-partial")
     assert write_result.verdict == VERDICT_OK, write_result
@@ -3406,12 +3285,12 @@ def test_every_slot_saturated_write_is_skipped_never_ok():
     # is SKIPPED too, `write_eprom` is NEVER called, and no step reports OK
     # for the write.
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    plan = derive_plan(name, REAL_DB, write_scope="full")
     chip = FakeChip.uv_all_saturated(65536, 256)
     # 202-05 D-10: FakeChip.check_eprom_blank now returns an int (0 == blank).
     assert chip.check_eprom_blank(name, {}) == 1  # sanity: not the D-C path
 
-    results = run_plan(plan, chip, _REAL_DB)
+    results = run_plan(plan, chip, REAL_DB)
 
     write_result = _result(results, "write")
     verify_result = _result(results, "verify")
@@ -3424,13 +3303,12 @@ def test_every_slot_saturated_write_is_skipped_never_ok():
     assert all(r.verdict != VERDICT_OK for r in (write_result, verify_result))
 
 
-def test_probe_never_persists_a_slot_cursor_to_disk(tmp_path, monkeypatch):
+def test_probe_never_persists_a_slot_cursor_to_disk(tmp_path):
     # Slot selection is stateless: the chip's own content is the state.
-    # Patch the config dir to a throwaway directory and assert nothing new
+    # conftest points the config dir inside `tmp_path`; assert nothing new
     # appears there after a UV partial-scope run that must probe.
-    monkeypatch.setenv("FIRESTARTER_CONFIG_DIR", str(tmp_path))
     name = "M27C512"
-    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    plan = derive_plan(name, REAL_DB, write_scope="partial")
     chip = FakeChip.virgin_uv(65536)
-    run_plan(plan, chip, _REAL_DB)
+    run_plan(plan, chip, REAL_DB)
     assert list(tmp_path.iterdir()) == [], "a slot cursor was persisted to disk"

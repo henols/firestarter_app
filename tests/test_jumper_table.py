@@ -32,13 +32,15 @@ from firestarter.jumper_table import (
     derive_vpp_landing,
 )
 
+from .plan_corpus import REAL_DB
+
 ROW_COUNT = 749
 PIN_MAP_COUNT = 20
 
 
 @pytest.fixture(scope="module")
 def db() -> EpromDatabase:
-    return EpromDatabase(skip_local_override=True)
+    return REAL_DB
 
 
 @pytest.fixture(scope="module")

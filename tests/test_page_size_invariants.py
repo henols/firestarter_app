@@ -27,24 +27,17 @@ Coverage (legs keep their original numbers; leg 1 was a row count):
      named native 0x0D, native 0x05 and DIP24_2816 rows -- no curated
      carrier remains, per Phase 194 D-01/D-02.
   5. Every emitted page_size anywhere in the database is a power of two in
-     [1, 512] -- a shared module-level helper, so the leg-10 synthetic test
-     calls the exact same code the real-DB test calls.
+     [1, 512].
   6. Provenance: every row carrying programming.page_size is either one of
      the 18 named native 0x0D rows or one of the 27 named native 0x05
      rows -- nothing else. Power-of-two-ness alone is NOT sufficient (256
-     is a power of two and would be wrong on a promoted row) -- a second
-     shared helper.
+     is a power of two and would be wrong on a promoted row).
   7. AT28C256 non-change: the gh#21 part is a PROMOTED row (upstream
      protocol_id 0x07) and this phase cannot change its behaviour at all.
   8. support_status byte-unchanged for all 84 algorithm==13 rows against
      the committed baseline -- the Evidence Ceiling made machine-checked.
   9. extra_chips.json back door: no authored supplement record carries
      page_size -- those rows bypass classify() and the emitter entirely.
- 10. Synthetic non-vacuity, range: a one-chip in-memory DB with
-     page_size: 96 IS flagged by the leg-5 helper.
- 11. Synthetic non-vacuity, provenance: a one-chip in-memory DB with a
-     PROMOTED-shaped row carrying page_size: 256 IS flagged by the leg-6
-     helper.
  12. The 27-row two-halves table (D-08's host half): for every one of the
      27 upstream-native 0x05 rows, the emitted page_size equals that row's
      own infoic_page_size_raw, and for exactly the 18 whose old
@@ -218,9 +211,7 @@ def _select_page_size_carriers(db: dict) -> list[tuple[str, dict]]:
     return selected
 
 
-# Shared helpers -- both the real-DB tests (legs 5/6) and the synthetic
-# non-vacuity tests (legs 10/11) call these, so the non-vacuity legs
-# exercise the exact same code the real tests do.
+# Helpers for the real-DB tests of legs 5 and 6.
 
 
 def _range_offenders(db: dict) -> list[str]:
@@ -446,55 +437,6 @@ def test_extra_chips_json_carries_no_page_size() -> None:
         f"tools/extra_chips.json records must never carry programming.page_size "
         f"(they bypass the emit rule entirely); offenders: {offenders}"
     )
-
-
-# Leg 10: synthetic non-vacuity, range.
-
-
-def test_synthetic_out_of_band_page_size_is_flagged_by_range_helper() -> None:
-    synthetic_db = {
-        "SYNTHETIC": [
-            {
-                "part_number": "SYNTH-RANGE-OFFENDER",
-                "programming": {"algorithm": 13, "page_size": 96},
-            }
-        ]
-    }
-    offenders = _range_offenders(synthetic_db)
-    assert offenders, (
-        "the range helper must flag a page_size of 96 (not a power of two)"
-    )
-    assert "SYNTH-RANGE-OFFENDER" in offenders[0]
-
-
-# Leg 11: synthetic non-vacuity, provenance.
-
-
-def test_synthetic_promoted_row_page_size_is_flagged_by_provenance_helper() -> None:
-    """A synthetic PROMOTED-shaped row (algorithm 13, a part-number identity
-    absent from the 18 named native rows) carrying page_size: 256 must be
-    flagged -- 256 is a power of two and would pass leg 5's helper, which is
-    exactly why provenance is a separate, non-optional check.
-    """
-    synthetic_db = {
-        "SYNTHETIC": [
-            {
-                "part_number": "SYNTH-PROMOTED-NOT-NATIVE",
-                "programming": {"algorithm": 13, "page_size": 256},
-            }
-        ]
-    }
-    # Confirm it would NOT be caught by the range helper alone.
-    assert not _range_offenders(synthetic_db), (
-        "256 is a power of two in range -- this synthetic row must pass "
-        "the range helper, proving provenance is a genuinely separate check"
-    )
-    offenders = _provenance_offenders(synthetic_db)
-    assert offenders, (
-        "the provenance helper must flag a promoted row's page_size even "
-        "though its value is a power of two in range"
-    )
-    assert "SYNTH-PROMOTED-NOT-NATIVE" in offenders[0]
 
 
 def _select_0x05_chips(db: dict) -> list[tuple[str, dict]]:

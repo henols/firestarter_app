@@ -76,12 +76,11 @@ internals.
 from __future__ import annotations
 
 import struct
-from unittest.mock import patch
 
 from firestarter.chip_resolver import resolve_chip
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
-from firestarter.eprom_operations import ClassProgressHandler, EpromOperator
+from firestarter.eprom_operations import EpromOperator
 from firestarter.messages import (
     MSG_DATA_PROGRESS,
     MSG_END_DONE,
@@ -89,16 +88,14 @@ from firestarter.messages import (
     MSG_MAIN_DONE,
     MSG_OK_REQ_DATA,
 )
-from firestarter.serial_comm import SerialCommunicator
 
-from .conftest import _FakeSerial, build_frame
+from .conftest import build_frame, connect_via, fresh_serial_and_comm
 
 # Real 27C part used throughout this module -- see the module docstring.
 _REAL_27C_CHIP = "w27c512"
 _CHIP_MEM_SIZE = 65536
 # _calculate_buffer_size() returns this Uno-floor default whenever
-# firmware_max_chunk is None -- which make_comm() (and this module's own
-# _fresh_serial_and_comm()) always set. Every driver call in this module
+# firmware_max_chunk is None -- which a fresh communicator always has. Every driver call in this module
 # relies on this to compute how many chunks a given file_size needs.
 _BUFFER_SIZE = 512
 
@@ -113,40 +110,6 @@ def _progress_frame(current: int, total: int) -> bytes:
     ``Response.message == f"{current}/{total}"``.
     """
     return build_frame(MSG_DATA_PROGRESS, struct.pack(">II", current, total))
-
-
-def _fresh_serial_and_comm():
-    """Build an independent (fake_serial, make_comm) pair.
-
-    Needed whenever a single test drives write_eprom() more than once (Test
-    2's zero-frames contrast run; Test 5's negative sibling below drives
-    once but Test 2 needs two independent drives in the SAME test): a
-    successful drive closes its fake serial port (``_FakeSerial.close()``
-    sets ``is_open = False``), so a second drive cannot reuse the
-    fixture-injected ``fake_serial``. Mirrors
-    ``tests/test_write_response_budget.py``'s own ``_fresh_serial_and_comm``
-    (Phase 143 Plan 04) and ``tests/test_write_skip_sdp_unlock.py``'s --
-    same reasoning, same shape; this repo's established precedent is local
-    duplication over a shared fixture for this specific need.
-    """
-    serial = _FakeSerial()
-
-    def _factory():
-        instance = SerialCommunicator.__new__(SerialCommunicator)
-        instance.connection = serial
-        instance.port_name = "/dev/null"
-        instance.baud_rate = 250000
-        instance.timeout = 0.1
-        instance.programmer_info = None
-        instance._fault_inject_outgoing = None
-        instance.firmware_buffer_size = None
-        instance.firmware_max_chunk = None
-        instance.firmware_identity = None
-        instance.hw_revision = None
-        instance.seen_message_ids = set()
-        return instance
-
-    return serial, _factory
 
 
 def _drive_write_with_progress_frames(
@@ -167,31 +130,21 @@ def _drive_write_with_progress_frames(
     ``file_size`` needs against the Uno-floor 512-byte buffer -- asserted
     below as a check on this test module's OWN authoring, not a behaviour
     under test. After the last chunk's frames, MSG_MAIN_DONE is fed
-    directly: the fake serial buffer is pre-loaded, so (mirroring
-    ``_drive_write_eprom_for_ack_check`` and
-    ``test_write_response_budget.py``'s own drivers) the firmware's real
+    directly: the fake serial buffer is pre-loaded, so the firmware's real
     request-a-chunk-or-signal-done choice does not need to be modelled --
     only the response TYPES ``_main_phase_send_data`` branches on matter
     here.
 
-    Returns ``(ok, positions, start_calls, ack_count)``:
-      ok          -- write_eprom()'s return value.
-      positions   -- every ``(current, total)`` the progress_callback
-                     received, in call order (from
-                     ``ClassProgressHandler.start()``, ``.update()``, and --
-                     once Task 2 lands -- the new ``_apply_write_progress()``).
-      start_calls -- every value ``ClassProgressHandler.start()`` was
-                     invoked with, in call order -- recorded independently
-                     of ``positions`` (via a delegating ``patch.object``
-                     wrapper, never a stub) so a test can assert an
-                     INVOCATION COUNT without conflating it with position
-                     values.
-      ack_count   -- how many times ``SerialCommunicator.send_ack()`` was
-                     called during the drive (also a delegating wrapper --
-                     a stub would break MAIN-phase flow control, since
-                     ``_run_state_machine`` and ``_execute_phase`` both call
-                     ``send_ack()`` for their own phase-transition
-                     bookkeeping).
+    Returns ``(ok, positions, ack_count)``:
+      ok        -- write_eprom()'s return value.
+      positions -- every ``(current, total)`` the progress_callback
+                   received, in call order (from
+                   ``ClassProgressHandler.start()``, ``.update()`` and
+                   ``_apply_write_progress()``).
+      ack_count -- how many ``OK`` acks the host wrote to the port during
+                   the drive (``SerialCommunicator.send_ack()`` writes the
+                   two bytes ``b"OK"`` in one write; command frames and the
+                   data chunks never equal them).
     """
     expected_chunks = -(-file_size // _BUFFER_SIZE)  # ceiling division
     assert len(chunk_progress_frames) == expected_chunks, (
@@ -211,47 +164,16 @@ def _drive_write_with_progress_frames(
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        return make_comm()
-
     positions: list[tuple[int, int]] = []
-    start_calls: list[int] = []
-    ack_calls = {"count": 0}
 
     def _record_progress(current, total):
         positions.append((current, total))
-
-    real_start = ClassProgressHandler.start
-
-    def _recording_start(self, *args, **kwargs):
-        start_calls.append(args[0] if args else kwargs.get("total_steps"))
-        return real_start(self, *args, **kwargs)
-
-    real_send_ack = SerialCommunicator.send_ack
-
-    def _recording_send_ack(self, *args, **kwargs):
-        ack_calls["count"] += 1
-        return real_send_ack(self, *args, **kwargs)
 
     db = EpromDatabase(skip_local_override=True)
     programmer_dict = resolve_chip(_REAL_27C_CHIP, db=db)
 
     operator = EpromOperator(ConfigManager(), progress_callback=_record_progress)
-    with (
-        patch(
-            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-            side_effect=_fake_find_and_connect,
-        ),
-        patch.object(
-            ClassProgressHandler, "start", autospec=True, side_effect=_recording_start
-        ),
-        patch.object(
-            SerialCommunicator,
-            "send_ack",
-            autospec=True,
-            side_effect=_recording_send_ack,
-        ),
-    ):
+    with connect_via(make_comm):
         ok = operator.write_eprom(
             _REAL_27C_CHIP,
             programmer_dict,
@@ -259,7 +181,7 @@ def _drive_write_with_progress_frames(
             address_str=address_str,
         )
 
-    return ok, positions, start_calls, ack_calls["count"]
+    return ok, positions, fake_serial.written.count(b"OK")
 
 
 def _positions_only(positions: list[tuple[int, int]]) -> list[int]:
@@ -284,7 +206,7 @@ def test_data_frame_in_main_phase_is_rendered(tmp_path, make_comm, fake_serial) 
     branch this plan adds must sit *before* that raise so a mid-block frame
     is applied (D-04) and the write completes successfully instead.
     """
-    ok, positions, _start_calls, _ack_count = _drive_write_with_progress_frames(
+    ok, positions, _ack_count = _drive_write_with_progress_frames(
         tmp_path,
         make_comm,
         fake_serial,
@@ -319,8 +241,8 @@ def test_progress_frame_is_not_acked(tmp_path, make_comm, fake_serial) -> None:
     ``_handle_progress_response``, whose ``ack_data`` defaults to True).
 
     Proof shape: drive the SAME write twice -- once with zero mid-block
-    frames, once with three -- and assert ``send_ack()``'s call count is
-    IDENTICAL. Pre-Task-2 this is genuinely RED: three frames abort the
+    frames, once with three -- and assert the count of ``OK`` acks the host
+    wrote is IDENTICAL. Pre-Task-2 this is genuinely RED: three frames abort the
     write on the first one (only the INIT-phase-start and MAIN-phase-start
     acks fire: 2 total), while zero frames lets the write run to
     completion (all four phase-transition acks fire: INIT-start,
@@ -328,35 +250,37 @@ def test_progress_frame_is_not_acked(tmp_path, make_comm, fake_serial) -> None:
     drives complete, and neither a DATA frame's presence nor its absence
     adds or removes an ack, so the counts match.
     """
-    ok_zero, _positions_zero, _start_zero, ack_count_zero = (
-        _drive_write_with_progress_frames(
-            tmp_path,
-            make_comm,
-            fake_serial,
-            file_size=4,
-            chunk_progress_frames=[[]],
-        )
+    ok_zero, _positions_zero, ack_count_zero = _drive_write_with_progress_frames(
+        tmp_path,
+        make_comm,
+        fake_serial,
+        file_size=4,
+        chunk_progress_frames=[[]],
     )
     assert ok_zero is True, (
         "HOST-02: the zero-progress-frame control drive must itself "
         f"succeed (sanity check on the driver, not on D-05); got ok={ok_zero}"
     )
+    # Floor: the acks are counted by their bytes on the wire, so a change to
+    # what an ack looks like must fail here, not compare 0 with 0 below.
+    assert ack_count_zero == 4, (
+        "a completed write acks INIT-start, MAIN-start, END-start and the "
+        f"final frame; counted {ack_count_zero} OK acks on the wire"
+    )
 
-    serial2, comm2 = _fresh_serial_and_comm()
-    ok_frames, _positions_frames, _start_frames, ack_count_frames = (
-        _drive_write_with_progress_frames(
-            tmp_path,
-            comm2,
-            serial2,
-            file_size=4,
-            chunk_progress_frames=[
-                [(10, _CHIP_MEM_SIZE), (20, _CHIP_MEM_SIZE), (30, _CHIP_MEM_SIZE)]
-            ],
-        )
+    serial2, comm2 = fresh_serial_and_comm()
+    ok_frames, _positions_frames, ack_count_frames = _drive_write_with_progress_frames(
+        tmp_path,
+        comm2,
+        serial2,
+        file_size=4,
+        chunk_progress_frames=[
+            [(10, _CHIP_MEM_SIZE), (20, _CHIP_MEM_SIZE), (30, _CHIP_MEM_SIZE)]
+        ],
     )
 
     assert ack_count_frames == ack_count_zero, (
-        "HOST-02/D-05: send_ack()'s call count with three mid-block "
+        "HOST-02/D-05: the count of OK acks written with three mid-block "
         "progress frames present must equal the count with zero frames -- "
         f"a progress frame must never be acked; got {ack_count_frames} "
         f"(with frames, ok={ok_frames}) vs {ack_count_zero} (zero frames)"
@@ -388,7 +312,7 @@ def test_offset_write_bar_starts_at_zero(tmp_path, make_comm, fake_serial) -> No
     positions (this drive's single chunk means exactly one handoff
     precedes the frames) is what actually exercises the offset arithmetic.
     """
-    ok, positions, _start_calls, _ack_count = _drive_write_with_progress_frames(
+    ok, positions, _ack_count = _drive_write_with_progress_frames(
         tmp_path,
         make_comm,
         fake_serial,
@@ -429,18 +353,19 @@ def test_differing_total_does_not_rebuild_the_bar(
     from each other AND from ``file_size``, and asserts ``start()`` is
     invoked exactly ONCE for the whole write -- the initial
     ``progress.start(file_size)`` -- never once per frame and never once
-    per distinct total.
+    per distinct total. ``start()`` reports ``(0, total)`` through the
+    progress_callback, so the recorded positions show each invocation: one
+    ``(0, 8)`` record, and no total other than ``file_size``.
 
     ``ok is True`` is asserted IN THE SAME compound check as the start()
     count, and is the genuine pre-Task-2 RED signal: today, the write
     aborts on the very first frame (before any progress-handling code ever
     runs for it), so ``start()`` is trivially called exactly once EITHER
-    WAY on the pre-Task-2 code -- a bare ``len(start_calls) == 1``
-    assertion would pass vacuously, for the wrong reason (early abort, not
+    WAY on the pre-Task-2 code -- a bare "one start record" assertion would pass vacuously, for the wrong reason (early abort, not
     correct routing). Tying it to ``ok is True`` (which IS false
     pre-Task-2) makes the failure genuine.
     """
-    ok, _positions, start_calls, _ack_count = _drive_write_with_progress_frames(
+    ok, positions, _ack_count = _drive_write_with_progress_frames(
         tmp_path,
         make_comm,
         fake_serial,
@@ -454,12 +379,15 @@ def test_differing_total_does_not_rebuild_the_bar(
         ],
     )
 
-    assert ok is True and start_calls == [8], (
+    start_records = [p for p in positions if p[0] == 0]
+    totals = {total for _, total in positions}
+    assert ok is True and start_records == [(0, 8)] and totals == {8}, (
         "HOST-02/D-04 (Pitfall 2): expected the write to succeed with "
         "ClassProgressHandler.start() invoked exactly once (the initial "
-        "progress.start(8) call) despite three progress frames whose "
-        "totals (65536, 70000, 60000) all differ from file_size (8) and "
-        f"from each other; got ok={ok}, start_calls={start_calls}"
+        "progress.start(8) call, recorded as (0, 8)) and every recorded "
+        "total equal to file_size (8), despite three progress frames whose "
+        "totals (65536, 70000, 60000) all differ from file_size and from "
+        f"each other; got ok={ok}, positions={positions}"
     )
 
 
@@ -490,7 +418,7 @@ def test_bar_does_not_rewind_when_firmware_drives_it(
     survive that abort -- see Test 4's docstring for the identical
     reasoning.
     """
-    ok, positions, _start_calls, _ack_count = _drive_write_with_progress_frames(
+    ok, positions, _ack_count = _drive_write_with_progress_frames(
         tmp_path,
         make_comm,
         fake_serial,
@@ -539,7 +467,7 @@ def test_bar_still_advances_with_zero_progress_frames(
     above, but with zero progress frames for either chunk: the bar must
     still advance via handoff alone, in two visible steps.
     """
-    ok, positions, _start_calls, _ack_count = _drive_write_with_progress_frames(
+    ok, positions, _ack_count = _drive_write_with_progress_frames(
         tmp_path,
         make_comm,
         fake_serial,

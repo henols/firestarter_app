@@ -230,13 +230,6 @@ def _manager_that_cannot_identify(monkeypatch):
 
 
 class TestBlindInstallRequiresExplicitBoard:
-    @pytest.fixture(autouse=True)
-    def _prerelease_cli(self, monkeypatch):
-        """A pre-release CLI: a stable CLI refuses the pre-release tags below."""
-        import firestarter as _pkg
-
-        monkeypatch.setattr(_pkg, "__version__", "3.0.0b19")
-
     @pytest.mark.parametrize(
         ("install_flag", "flags", "label"),
         [(True, 0, "--install"), (False, FLAG_FORCE, "--force")],
@@ -357,14 +350,11 @@ class TestBlindInstallRequiresExplicitBoard:
 
 
 @pytest.fixture
-def tmp_config_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("FIRESTARTER_CONFIG_DIR", str(tmp_path))
-    monkeypatch.setattr("firestarter.config.HOME_PATH", str(tmp_path))
-    ConfigManager._instances.clear()
-    ConfigManager._initialized_configs.clear()
-    yield str(tmp_path)
-    ConfigManager._instances.clear()
-    ConfigManager._initialized_configs.clear()
+def tmp_config_dir():
+    """The per-test config directory that conftest sets up."""
+    from firestarter import config
+
+    return config.HOME_PATH
 
 
 class TestTransientValuesNeverPersist:
