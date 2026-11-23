@@ -460,6 +460,7 @@ def test_sample_vpp_mv_sends_done_before_disconnect(
     [
         ("3.3.0:uno", 5600, 1),  # implausible: warned once, not per sample
         ("3.3.0:uno", 4999, 0),  # in the band
+        ("3.3.1:micropetal_uno", 5263, 0),
         ("3.3.0:py32f071", 3300, 0),  # a 3.3 V board has no 5 V band
     ],
 )
@@ -611,3 +612,23 @@ def test_read_calibration_returns_none_for_another_ack(
     fake_serial.feed(build_frame(MSG_OK_READY, struct.pack(">H", 512)))
     with connect_via(make_comm):
         assert HardwareManager(hw_config).read_calibration() is None
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
+def test_voltage_monitor_timeout_sends_done_before_close(
+    hw_config, make_comm, fake_serial, rail
+) -> None:
+    """A bounded monitor must stop the active rail, not await a watchdog."""
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(
+        _mv_frame(MSG_DATA_VPP_MV if rail == "vpp" else MSG_DATA_VPE_MV, 12000)
+    )
+    comm = make_comm()
+    manager = Mock()
+    manager.attach_mock(Mock(wraps=comm.send_done), "done")
+    manager.attach_mock(Mock(wraps=comm.disconnect), "close")
+    comm.send_done, comm.disconnect = manager.done, manager.close
+    hw = HardwareManager(hw_config)
+    with connect_via(lambda: comm):
+        assert getattr(hw, f"read_{rail}_voltage")(timeout_seconds=-1)
+    assert [call[0] for call in manager.mock_calls] == ["done", "close"]

@@ -104,8 +104,8 @@ VCC_PLAUSIBLE_MAX_MV = 5250
 
 
 def _vcc_is_checked(firmware_identity: str | None) -> bool:
-    """False for a board whose VCC is not a 5 V USB supply (py32f071)."""
-    return not (firmware_identity or "").endswith(":py32f071")
+    """Apply the AVR supply/calibration band only to non-PY32 boards."""
+    return not (firmware_identity or "").endswith((":py32f071", ":micropetal_uno"))
 
 
 def _warn_if_vcc_implausible(vcc_mv: int) -> bool:
@@ -432,6 +432,7 @@ class HardwareManager:
 
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
                         print()  # Newline after continuous printing
+                        comm.send_done()
                         logger.info(
                             f"{voltage_type_str} reading timed out after {timeout_seconds}s."
                         )
@@ -465,6 +466,8 @@ class HardwareManager:
             logger.error(f"Failed to read {voltage_type_str} voltage: {e}")
             return False
         except KeyboardInterrupt:
+            if comm:
+                comm.send_done()
             print()  # Newline after Ctrl+C
             logger.info(f"\n{voltage_type_str} reading stopped by user.")
             return True
