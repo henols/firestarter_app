@@ -198,7 +198,7 @@ def protection_gate_for_entry(
             "convert_to_programmer(), which carries neither 'protocol-id' "
             "nor 'name' -- pass the full dict returned by db.get_eprom() "
             "instead. A silent default here is exactly how "
-            "check_eprom_blank's _SRAM_PROTO_IDS short-circuit became "
+            "check_eprom_blank's SRAM_PROTOCOL_IDS short-circuit became "
             "vacuous in production; this predicate hard-fails instead of "
             "guessing."
         )

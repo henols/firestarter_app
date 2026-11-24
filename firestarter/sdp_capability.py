@@ -114,7 +114,7 @@ SDP_CAPABLE_TOKENS: frozenset[str] = frozenset(
 
 # Ferroelectric RAM parts. Both carry `electrical.type == "EEPROM"` in the DB
 # (nothing in the DB says FRAM), so the existing `etype in ("SRAM", "FRAM")`
-# idiom (`eprom_operations.py`'s `_SRAM_PROTO_IDS` short-circuit) is blind to
+# idiom (`write_blank_guard.SRAM_PROTOCOL_IDS` short-circuit) is blind to
 # them and no structural rule can find them — this is why the contract says
 # "resolved in code".
 FRAM_TOKENS: frozenset[str] = frozenset({"FM28V020", "MB85R256H"})
@@ -188,7 +188,7 @@ def sdp_capability_for_entry(
             "returned by resolve_chip()/convert_to_programmer(), which carries "
             "neither 'protocol-id' nor 'name' — pass the full dict returned by "
             "db.get_eprom() instead. A silent default here is exactly how "
-            "check_eprom_blank's _SRAM_PROTO_IDS short-circuit became vacuous "
+            "check_eprom_blank's SRAM_PROTOCOL_IDS short-circuit became vacuous "
             "in production (RESEARCH F-06); this predicate hard-fails instead."
         )
 

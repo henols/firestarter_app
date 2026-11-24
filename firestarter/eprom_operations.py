@@ -434,11 +434,9 @@ class ClassProgressHandler:
         else:
             # tqdm loads asyncio: imported here, not at CLI start.
             import tqdm
-            from tqdm.contrib.logging import logging_redirect_tqdm
 
             if self.pbar:
                 self.pbar.close()  # Close old one if any
-            logging_redirect_tqdm()
             self.pbar = tqdm.tqdm(total=total_steps, bar_format=bar_format)
 
     def update(self, completed_steps: int):
@@ -2277,9 +2275,16 @@ class EpromOperator:
         firestarter=False,
         flags: int = 0,
     ) -> bool:
-        msb = parse_address(msb_str)
-        lsb = parse_address(lsb_str)
-        ctrl_reg = parse_address(ctrl_reg_str)
+        try:
+            msb = parse_address(msb_str)
+            lsb = parse_address(lsb_str)
+            ctrl_reg = parse_address(ctrl_reg_str)
+        except ValueError:
+            logger.error(
+                f"Invalid register value: {msb_str} {lsb_str} {ctrl_reg_str} "
+                "(use decimal or 0x-prefixed hex)"
+            )
+            return False
         if msb < 0 or msb > 0xFF:
             logger.error(f"Invalid MSB value: 0x{msb:02x} {msb}")
             return False

@@ -246,8 +246,8 @@ _AUTO_ERASE_ON_WRITE_PROTOCOLS = frozenset({_PROTOCOL_FLASH4, _PROTOCOL_EEPROM_2
 # SRAM/FRAM electrical types and protocol ids: blank-check has no meaningful
 # concept for volatile/byte-rewritable memory. derive_plan owns this NA
 # decision up front (RESEARCH nuance recommendation (a)) rather than relying
-# on check_eprom_blank's own short-circuit (eprom_operations.py:1656-1676),
-# which the plan mirrors here for the SAME protocol-id set.
+# on check_eprom_blank's own short-circuit. Both use the one protocol-id set,
+# write_blank_guard.SRAM_PROTOCOL_IDS.
 _SRAM_FRAM_ETYPES = frozenset({"SRAM", "FRAM"})
 
 # Ordered op vocabulary (id-check FIRST). Seven strings:

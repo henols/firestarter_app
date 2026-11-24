@@ -236,6 +236,23 @@ def test_build_flags_vpe_as_vpp_and_verbose() -> None:
     assert flags & FLAG_VERBOSE
 
 
+@pytest.mark.parametrize(
+    "msb, lsb, ctrl",
+    [("FF", "0x00", "0x00"), ("0x00", "zz", "0x00"), ("0x00", "0x00", "")],
+)
+def test_dev_set_registers_rejects_malformed_value(msb, lsb, ctrl, caplog) -> None:
+    """A malformed register value is a clean error, not a ValueError traceback,
+    and no connection to the board is attempted."""
+    operator = EpromOperator(ConfigManager())
+    with (
+        patch("firestarter.eprom_operations.SerialCommunicator") as comm,
+        caplog.at_level(logging.ERROR),
+    ):
+        assert operator.dev_set_registers(msb, lsb, ctrl) is False
+    comm.find_and_connect.assert_not_called()
+    assert any("Invalid register value" in r.message for r in caplog.records)
+
+
 def test_hexdump_writes_to_log(caplog) -> None:
     """hexdump emits formatted dump lines to the logger."""
     import logging as _logging
