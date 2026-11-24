@@ -1,19 +1,70 @@
 name: Publish to PyPI.org
-# Manual escape hatch only: re-publish an existing release tag to PyPI, for
-# example when the pypi job of release.yml failed and a re-run cannot fix it.
-# The normal path is release.yml, which publishes on a tag push.
+# Manual recovery when the PyPI job in release.yml cannot be rerun. In "Use
+# workflow from", select a release tag that contains this workflow.
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to publish to PyPI (e.g. 3.2.0b1, 3.2.0).'
-        required: true
-        type: string
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  # Trusted publishing in the `pypi` environment, as in release.yml. Run this
-  # workflow from a release tag: in "Use workflow from", pick the tag, not a
-  # branch. The environment refuses a run from a branch.
+  build:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the dispatched release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check the release tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?$ ]]; then
+            echo "::error::Select a release tag (X.Y.Z, X.Y.ZbN or X.Y.ZrcN)."
+            exit 1
+          fi
+          # Use the real annotated tags for setuptools-scm, as in release.yml.
+          git fetch --force --tags origin
+          if [[ "$(git rev-parse "refs/tags/$TAG^{commit}")" != "$GITHUB_SHA" ]]; then
+            echo "::error::The release tag no longer points at the dispatched commit."
+            exit 1
+          fi
+
+      - name: Build the sdist and the wheel
+        run: python3 -m pip install --upgrade build && python3 -m build
+
+      - name: Check that the build carries the tag's version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -f "dist/firestarter-$TAG.tar.gz"
+          test -f "dist/firestarter-$TAG-py3-none-any.whl"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/*.tar.gz
+            dist/*.whl
+          if-no-files-found: error
+
+  # Keep the trusted publisher identity unchanged. Only this job can mint an
+  # OIDC token; it never checks out source or executes the package build.
   pypi:
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -22,13 +73,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          # fetch-depth: 0 so setuptools-scm can read the tag.
-          fetch-depth: 0
-          ref: ${{ inputs.tag }}
-      - run: python3 -m pip install --upgrade build && python3 -m build
+          name: dist
+          path: dist/
+
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
