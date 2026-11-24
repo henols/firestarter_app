@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 91
+Total messages: 92
 """
 
 from dataclasses import dataclass
@@ -132,6 +132,7 @@ MSG_ERR_CALIBRATION = 0xC1
 MSG_ERR_BAD_COMMAND = 0xC2
 MSG_ERR_FRAME_VERSION = 0xC3
 MSG_ERR_VPP_HIGH_MV = 0xC4
+MSG_ERR_RAM_TEST = 0xC5
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -885,6 +886,20 @@ CATALOG: dict[int, MessageDef] = {
         format="VPP is high: %u mV > %u mV",
         params=(("u16", "dec"), ("u16", "dec")),
         param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0xC5: MessageDef(
+        id=0xC5,
+        name="MSG_ERR_RAM_TEST",
+        severity=SEVERITY_ERROR,
+        format="RAM test failed in March element %u at 0x%06lx: expected 0x%02x, read 0x%02x",
+        params=(
+            ("u8", "dec"),
+            ("u24", "hex_addr"),
+            ("u8", "hex_byte"),
+            ("u8", "hex_byte"),
+        ),
+        param_bytes=6,
         wire_format="id_frame",
     ),
     0xE0: MessageDef(
