@@ -632,3 +632,41 @@ def test_voltage_monitor_timeout_sends_done_before_close(
     with connect_via(lambda: comm):
         assert getattr(hw, f"read_{rail}_voltage")(timeout_seconds=-1)
     assert [call[0] for call in manager.mock_calls] == ["done", "close"]
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
+@pytest.mark.parametrize("failure", [None, "serial", "timeout"])
+def test_voltage_monitor_interrupt_finishes_or_reports_transport_failure(
+    hw_config, make_comm, fake_serial, monkeypatch, rail, failure, caplog
+) -> None:
+    from firestarter.exceptions import SerialError, SerialTimeoutError
+
+    fake_serial.feed(_ok_frame_bytes())
+    comm = make_comm()
+    # Finish the real ready handshake, then interrupt while awaiting a sample.
+    get_response = comm.get_response
+    calls = 0
+
+    def interrupted_response(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return get_response(*args, **kwargs)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(comm, "get_response", interrupted_response)
+    error = {"serial": SerialError, "timeout": SerialTimeoutError}.get(failure)
+    done = Mock(wraps=comm.send_done)
+    if error:
+        done.side_effect = error("USB lost during DONE")
+    manager = Mock()
+    manager.attach_mock(done, "done")
+    manager.attach_mock(Mock(wraps=comm.disconnect), "close")
+    comm.send_done, comm.disconnect = manager.done, manager.close
+    with connect_via(lambda: comm):
+        result = getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
+    assert result is (failure is None)
+    assert calls == 2
+    assert [call[0] for call in manager.mock_calls] == ["done", "close"]
+    if failure:
+        assert f"Failed to stop {rail.upper()} reading" in caplog.text

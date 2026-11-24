@@ -467,7 +467,12 @@ class HardwareManager:
             return False
         except KeyboardInterrupt:
             if comm:
-                comm.send_done()
+                try:
+                    comm.send_done()
+                except (SerialError, SerialTimeoutError) as e:
+                    print()
+                    logger.error(f"Failed to stop {voltage_type_str} reading: {e}")
+                    return False
             print()  # Newline after Ctrl+C
             logger.info(f"\n{voltage_type_str} reading stopped by user.")
             return True
