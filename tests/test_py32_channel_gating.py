@@ -123,7 +123,13 @@ def test_simulated_stable_pre_rejected(argv) -> None:
 
 def test_simulated_prerelease_board_choices() -> None:
     result = run_cli_fresh(_PRERELEASE_VERSION, "fw", "--help")
-    assert result.board_choices == ["uno", "uno328pb", "leonardo", "py32f071", "micropetal_uno"]
+    assert result.board_choices == [
+        "uno",
+        "uno328pb",
+        "leonardo",
+        "py32f071",
+        "micropetal_uno",
+    ]
 
 
 def test_simulated_prerelease_help_includes_py32_surface() -> None:

@@ -655,7 +655,11 @@ def test_voltage_monitor_interrupt_finishes_or_reports_transport_failure(
         raise KeyboardInterrupt
 
     monkeypatch.setattr(comm, "get_response", interrupted_response)
-    error = {"serial": SerialError, "timeout": SerialTimeoutError, "interrupt": KeyboardInterrupt}.get(failure)
+    error = {
+        "serial": SerialError,
+        "timeout": SerialTimeoutError,
+        "interrupt": KeyboardInterrupt,
+    }.get(failure)
     done = Mock(wraps=comm.send_done)
     if error:
         done.side_effect = error("USB lost during DONE")
@@ -692,7 +696,9 @@ def test_voltage_monitor_unexpected_response_stops_firmware(
     comm = make_comm()
     comm.send_done = Mock(wraps=comm.send_done)
     original_get_response = comm.get_response
-    responses = iter((original_get_response(), Response(type="TIMEOUT", message="no frame")))
+    responses = iter(
+        (original_get_response(), Response(type="TIMEOUT", message="no frame"))
+    )
     comm.get_response = Mock(side_effect=lambda *args, **kwargs: next(responses))
     with connect_via(lambda: comm):
         assert not getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
@@ -706,7 +712,9 @@ def test_voltage_monitor_timed_done_error_is_stop_failure(
     from firestarter.exceptions import SerialTimeoutError
 
     fake_serial.feed(_ok_frame_bytes())
-    fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV if rail == "vpp" else MSG_DATA_VPE_MV, 12000))
+    fake_serial.feed(
+        _mv_frame(MSG_DATA_VPP_MV if rail == "vpp" else MSG_DATA_VPE_MV, 12000)
+    )
     comm = make_comm()
     comm.send_done = Mock(side_effect=SerialTimeoutError("DONE timed out"))
     with connect_via(lambda: comm):
