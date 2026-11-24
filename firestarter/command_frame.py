@@ -57,6 +57,7 @@ PAYLOAD_KIND = {
     9: "memory",
     10: "memory",
     16: "memory",
+    18: "memory",
     14: "config",
     11: "none",
     12: "none",

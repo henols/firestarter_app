@@ -21,7 +21,12 @@ from firestarter.config import ConfigManager
 from firestarter.constants import COMMAND_READ_VPE
 from firestarter.frame_parser import Response
 from firestarter.hardware import HardwareManager
-from firestarter.messages import MSG_DATA_VPE_MV, MSG_DATA_VPP_MV, MSG_END_DONE
+from firestarter.messages import (
+    MSG_DATA_VPE_MV,
+    MSG_DATA_VPP_MV,
+    MSG_END_DONE,
+    MSG_ERR_UNKNOWN_CMD,
+)
 
 from .conftest import build_frame, connect_via
 
@@ -535,6 +540,37 @@ def test_read_adc_raw_returns_none_when_nothing_parses(
     # All three frames were consumed, so the None is the parse result, not
     # a timeout on an empty wire.
     assert fake_serial.read(1) == b""
+
+
+def test_read_adc_raw_records_an_unknown_command(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """An image without CMD_DEV_ADC answers MSG_ERR_UNKNOWN_CMD. The method
+    still returns None, and records the id so the CLI can name the cause."""
+    fake_serial.feed(build_frame(MSG_ERR_UNKNOWN_CMD, bytes([17])))
+
+    hw = HardwareManager(hw_config)
+    hw.last_adc_error_code = 0x01  # a previous call's id must not survive
+    with connect_via(make_comm):
+        assert hw.read_adc_raw() is None
+    assert hw.last_adc_error_code == MSG_ERR_UNKNOWN_CMD
+
+
+def test_read_adc_raw_clears_the_error_on_success(
+    hw_config, make_comm, fake_serial
+) -> None:
+    for mode in range(3):
+        fake_serial.feed(
+            build_frame(
+                0xE7, struct.pack(">BHHHHII", mode, 0, 205, 0, 5495, 270000, 44000)
+            )
+        )
+
+    hw = HardwareManager(hw_config)
+    hw.last_adc_error_code = MSG_ERR_UNKNOWN_CMD
+    with connect_via(make_comm):
+        assert hw.read_adc_raw() is not None
+    assert hw.last_adc_error_code is None
 
 
 def _cfg_ack(params: bytes) -> bytes:

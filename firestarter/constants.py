@@ -103,6 +103,11 @@ COMMAND_LOCK_STATUS = 16
 # 17 is the next unused ordinal; 4 and 6 are retired and never reused.
 COMMAND_DEV_ADC = 17
 
+# Firmware sync: firestarter.h CMD_RAM_TEST. A memory command in every build:
+# the March C- test runs through the protocol handler's get/set data pointers.
+# Firmware without it answers MSG_ERR_UNKNOWN_CMD before it touches the bus.
+COMMAND_RAM_TEST = 18
+
 COMMAND_NAMES = {
     COMMAND_READ: "READ",
     COMMAND_WRITE: "WRITE",
@@ -119,6 +124,7 @@ COMMAND_NAMES = {
     COMMAND_HW_VERSION: "HW_VERSION",
     COMMAND_LOCK_STATUS: "LOCK_STATUS",
     COMMAND_DEV_ADC: "DEV_ADC",
+    COMMAND_RAM_TEST: "RAM_TEST",
 }
 
 # Control Flags — Firmware sync: firestarter.h

@@ -76,22 +76,23 @@
     --help           Show this message and exit.
   
   Commands:
-    blank   Checks if an EPROM is blank.
-    cal     Calibrate the voltage readings against a multimeter.
-    config  Handles CONFIGURATION values.
-    dev     Development and diagnostic commands for the RURP shield.
-    erase   Erase an EPROM, if supported.
-    fw      Firmware version.
-    hw      Hardware revision.
-    id      Checks an EPROM, if supported.
-    info    EPROM info.
-    list    List all EPROMs in the database.
-    read    Reads the content from an EPROM.
-    search  Search for EPROMs in the database.
-    verify  Verifies the content of an EPROM.
-    vpe     VPE voltage.
-    vpp     VPP voltage.
-    write   Writes a binary file to an EPROM.
+    blank     Checks if an EPROM is blank.
+    cal       Calibrate the voltage readings against a multimeter.
+    config    Handles CONFIGURATION values.
+    dev       Development and diagnostic commands for the RURP shield.
+    erase     Erase an EPROM, if supported.
+    fw        Firmware version.
+    hw        Hardware revision.
+    id        Checks an EPROM, if supported.
+    info      EPROM info.
+    list      List all EPROMs in the database.
+    ram-test  Tests an SRAM with the March C- algorithm.
+    read      Reads the content from an EPROM.
+    search    Search for EPROMs in the database.
+    verify    Verifies the content of an EPROM.
+    vpe       VPE voltage.
+    vpp       VPP voltage.
+    write     Writes a binary file to an EPROM.
   
   '''
 # ---
