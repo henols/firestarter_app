@@ -2608,8 +2608,8 @@ if _DEV_TOOLS_ENABLED:
             if app.hardware_manager.last_adc_error_code == MSG_ERR_UNKNOWN_CMD:
                 click.echo(
                     "Could not read the ADC. The attached firmware does not "
-                    "have this command: a stable build, or a leonardo "
-                    "pre-release build."
+                    "have this command: it is a stable build. Install a beta "
+                    "build."
                 )
             else:
                 click.echo(
