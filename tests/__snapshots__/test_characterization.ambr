@@ -231,7 +231,7 @@
                                     --list, filters to stable releases only.
     --list                          List available firmware releases for the
                                     configured board.
-    -b, --board [uno|uno328pb|leonardo|py32f071]
+    -b, --board [uno|uno328pb|leonardo|py32f071|micropetal_uno]
                                     Microcontroller board (optional), defaults
                                     to 'uno'.
     --usb-id VID:PID                Restrict USB DFU install to one device, e.g.

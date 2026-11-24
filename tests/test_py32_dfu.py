@@ -638,6 +638,7 @@ class TestBoardRouting:
             ("leonardo", firmware.FLASH_METHOD_AVRDUDE),
             ("LEONARDO", firmware.FLASH_METHOD_AVRDUDE),
             ("py32f071", firmware.FLASH_METHOD_DFU),
+            ("micropetal_uno", firmware.FLASH_METHOD_DFU),
             ("PY32F071", firmware.FLASH_METHOD_DFU),
             ("some-future-avr", firmware.FLASH_METHOD_AVRDUDE),
             (None, firmware.FLASH_METHOD_AVRDUDE),

@@ -34,7 +34,11 @@ logger = logging.getLogger("Channel")
 # Shipping an install path for it on stable would offer users a flash operation
 # nobody has ever completed. It graduates by deletion from this tuple, once the
 # target is bench-validated.
-BETA_ONLY_BOARDS: tuple[str, ...] = ("py32f071",)
+PY32_BOARDS: tuple[str, ...] = ("py32f071", "micropetal_uno")
+BETA_ONLY_BOARDS: tuple[str, ...] = PY32_BOARDS
+# MicroPetal Uno defaults to 5 V VCC; only the generic PY32 target lacks
+# a defined USB-derived 5 V supply for the host VCC plausibility check.
+NON_5V_VCC_BOARDS: tuple[str, ...] = ("py32f071",)
 
 # The seven `dev` subcommands gated by channel on a stable build: 9 total
 # `dev` subcommands, minus `read`/`test`, which stable keeps. Consulted for the

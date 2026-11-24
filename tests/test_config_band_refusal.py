@@ -261,5 +261,5 @@ def test_cal_refusal_names_the_board_without_calibration() -> None:
     app = make_app_context(hardware_manager=hardware)
     result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
     assert result.exit_code == 1, result.output
-    assert "py32f071" in result.output
+    assert "PY32 target" in result.output
     hardware.set_bandgap_mv.assert_not_called()

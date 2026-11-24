@@ -37,6 +37,7 @@ from firestarter import (
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.channel import (
     BETA_ONLY_DEV_COMMANDS,
+    PY32_BOARDS,
     available_boards,
     dev_command_gate_message,
     is_dev_tools_enabled,
@@ -189,7 +190,7 @@ def _complete_eprom(
 # install renders in `fw --help` is decided once and is decided correctly. Tests
 # exercise channel.available_boards() / is_board_available() directly rather than
 # reloading this module.
-_ALL_BOARDS: tuple[str, ...] = ("uno", "uno328pb", "leonardo", "py32f071")
+_ALL_BOARDS: tuple[str, ...] = ("uno", "uno328pb", "leonardo") + PY32_BOARDS
 _BOARD_CHOICES: list[str] = available_boards(_ALL_BOARDS)
 _PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
 # A stable build never offers pre-release firmware: `fw --pre` is refused and
@@ -1722,7 +1723,7 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
             sys.exit(1)
         bandgap_adc = before["bandgap_adc"]
         if bandgap_adc == 0:
-            click.echo("This board has no bandgap calibration (py32f071).")
+            click.echo("This board has no bandgap calibration (PY32 target).")
             sys.exit(1)
         bandgap_mv = bandgap_from_measured_vcc(measured_mv, bandgap_adc)
         if bandgap_mv is None:

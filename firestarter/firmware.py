@@ -24,7 +24,7 @@ from firestarter.avr_tool import (
     AvrdudeConfigNotFoundError,
     AvrdudeNotFoundError,
 )
-from firestarter.channel import beta_only_message, is_board_available
+from firestarter.channel import PY32_BOARDS, beta_only_message, is_board_available
 from firestarter.config import ConfigManager
 from firestarter.constants import (
     COMMAND_FW_VERSION,
@@ -91,7 +91,7 @@ _BOARD_FLASH_METHODS = {
     "uno": FLASH_METHOD_AVRDUDE,
     "uno328pb": FLASH_METHOD_AVRDUDE,
     "leonardo": FLASH_METHOD_AVRDUDE,
-    "py32f071": FLASH_METHOD_DFU,
+    **dict.fromkeys(PY32_BOARDS, FLASH_METHOD_DFU),
 }
 
 # Methods that talk to the chip over USB directly and therefore need no serial
