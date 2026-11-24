@@ -10,8 +10,17 @@ on:
         required: true
         type: string
 jobs:
+  # Trusted publishing in the `pypi` environment, as in release.yml. Run this
+  # workflow from a release tag: in "Use workflow from", pick the tag, not a
+  # branch. The environment refuses a run from a branch.
   pypi:
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/firestarter
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,5 +32,4 @@ jobs:
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
