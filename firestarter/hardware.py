@@ -405,7 +405,7 @@ class HardwareManager:
             assert comm is not None
             try:
                 comm.send_done()
-            except (SerialError, SerialTimeoutError, KeyboardInterrupt) as e:
+            except (SerialError, KeyboardInterrupt) as e:
                 logger.error(f"Failed to stop {voltage_type_str} reading: {e}")
                 return False
             return True
