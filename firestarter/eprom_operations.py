@@ -2275,16 +2275,20 @@ class EpromOperator:
         firestarter=False,
         flags: int = 0,
     ) -> bool:
-        try:
-            msb = parse_address(msb_str)
-            lsb = parse_address(lsb_str)
-            ctrl_reg = parse_address(ctrl_reg_str)
-        except ValueError:
-            logger.error(
-                f"Invalid register value: {msb_str} {lsb_str} {ctrl_reg_str} "
-                "(use decimal or 0x-prefixed hex)"
-            )
-            return False
+        values = []
+        for label, text in (
+            ("MSB", msb_str),
+            ("LSB", lsb_str),
+            ("Control Register", ctrl_reg_str),
+        ):
+            try:
+                values.append(parse_address(text))
+            except ValueError:
+                logger.error(
+                    f"Invalid {label} value: {text!r} (use decimal or 0x-prefixed hex)"
+                )
+                return False
+        msb, lsb, ctrl_reg = values
         if msb < 0 or msb > 0xFF:
             logger.error(f"Invalid MSB value: 0x{msb:02x} {msb}")
             return False
