@@ -3457,7 +3457,7 @@ class EpromOperator:
 
     def ram_test(
         self, eprom_name: str, eprom_data_dict: dict
-    ) -> Tuple[bool, RamTestFailure | None, str | None]:  # noqa: UP006
+    ) -> tuple[bool, RamTestFailure | None, str | None]:
         """Send `CMD_RAM_TEST` and return `(passed, first_failure, reason)`.
 
         `(True, None, None)`: every March C- element ran on every data

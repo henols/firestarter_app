@@ -24,8 +24,9 @@ reads, no serial access.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping  # noqa: UP035
+from typing import Any
 
 RAM_TEST_PROTOCOLS = frozenset({0x27, 0x28, 0x29})
 
