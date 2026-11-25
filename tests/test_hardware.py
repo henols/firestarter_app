@@ -706,6 +706,52 @@ def test_voltage_monitor_unexpected_response_stops_firmware(
 
 
 @pytest.mark.parametrize("rail", ["vpp", "vpe"])
+@pytest.mark.parametrize("failure", ["parse", "transport"])
+def test_voltage_monitor_loop_exception_stops_firmware(
+    hw_config, make_comm, fake_serial, monkeypatch, rail, failure
+) -> None:
+    """henols/firestarter#181: an exception inside the started monitor loop
+    (a HardwareOperationError while a DATA frame is parsed, or a transport
+    error) still sends DONE once, before the port closes, so the firmware
+    turns its rail off without waiting for the watchdog."""
+    from firestarter.exceptions import HardwareOperationError, SerialTimeoutError
+
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(
+        _mv_frame(MSG_DATA_VPP_MV if rail == "vpp" else MSG_DATA_VPE_MV, 12000)
+    )
+    comm = make_comm()
+    events = []
+    comm.send_done = Mock(side_effect=lambda: events.append("done"))
+    original_disconnect = comm.disconnect
+    monkeypatch.setattr(
+        comm, "disconnect", lambda: (events.append("disconnect"), original_disconnect())
+    )
+    manager = HardwareManager(hw_config)
+    if failure == "parse":
+        monkeypatch.setattr(
+            manager,
+            "_parse_voltage_frame",
+            Mock(side_effect=HardwareOperationError("bad voltage frame")),
+        )
+    else:
+        original_get_response = comm.get_response
+        responses = iter((original_get_response,))
+
+        def get_response(*args, **kwargs):
+            # One frame is read normally, then the link times out.
+            for first in responses:
+                return first(*args, **kwargs)
+            raise SerialTimeoutError("link lost")
+
+        comm.get_response = Mock(side_effect=get_response)
+    with connect_via(lambda: comm):
+        assert not getattr(manager, f"read_{rail}_voltage")()
+    comm.send_done.assert_called_once()
+    assert events[-2:] == ["done", "disconnect"]
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
 def test_voltage_monitor_timed_done_error_is_stop_failure(
     hw_config, make_comm, fake_serial, rail, caplog
 ) -> None:
