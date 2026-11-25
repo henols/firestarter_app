@@ -12,6 +12,7 @@ return a communicator wired to ``fake_serial``; feed the wire frames the
 firmware would emit.
 """
 
+import logging
 import struct
 from unittest.mock import Mock
 
@@ -674,18 +675,110 @@ def test_voltage_monitor_interrupt_finishes_or_reports_transport_failure(
     assert [call[0] for call in manager.mock_calls] == ["done", "close"]
     if failure:
         assert f"Failed to stop {rail.upper()} reading" in caplog.text
+    if failure == "interrupt":
+        assert "interrupted while sending DONE" in caplog.text
 
 
 @pytest.mark.parametrize("rail", ["vpp", "vpe"])
-def test_voltage_monitor_early_interrupt_does_not_send_done(
+def test_voltage_monitor_interrupt_before_ready_sends_done(
     hw_config, make_comm, fake_serial, monkeypatch, rail
 ) -> None:
+    """The firmware turns on the rail before READY and accepts DONE before
+    the start ACK, so a Ctrl+C during expect_ack() also sends DONE."""
     comm = make_comm()
     monkeypatch.setattr(comm, "expect_ack", Mock(side_effect=KeyboardInterrupt))
     comm.send_done = Mock()
     with connect_via(lambda: comm):
         assert getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
+    comm.send_done.assert_called_once()
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
+def test_voltage_monitor_ready_error_does_not_send_done(
+    hw_config, make_comm, fake_serial, rail
+) -> None:
+    """An ERROR as the ready ack ends the command: no DONE."""
+    fake_serial.feed(_error_frame_bytes())
+    comm = make_comm()
+    comm.send_done = Mock()
+    with connect_via(lambda: comm):
+        assert not getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
     comm.send_done.assert_not_called()
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
+def test_voltage_monitor_ready_not_implemented_does_not_send_done(
+    hw_config, make_comm, fake_serial, monkeypatch, rail
+) -> None:
+    from firestarter.exceptions import ProtocolNotImplementedError
+
+    comm = make_comm()
+    monkeypatch.setattr(
+        comm, "expect_ack", Mock(side_effect=ProtocolNotImplementedError("no"))
+    )
+    comm.send_done = Mock()
+    with connect_via(lambda: comm):
+        with pytest.raises(ProtocolNotImplementedError):
+            getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
+    comm.send_done.assert_not_called()
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
+def test_voltage_monitor_finished_by_firmware_does_not_send_done(
+    hw_config, make_comm, fake_serial, rail
+) -> None:
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(_ok_frame_bytes())
+    comm = make_comm()
+    comm.send_done = Mock()
+    with connect_via(lambda: comm):
+        assert getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
+    comm.send_done.assert_not_called()
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
+def test_voltage_monitor_interrupt_during_disconnect_gives_no_traceback(
+    hw_config, make_comm, fake_serial, monkeypatch, rail
+) -> None:
+    """A second Ctrl+C during the cleanup must not leave the function."""
+    comm = make_comm()
+    monkeypatch.setattr(comm, "expect_ack", Mock(side_effect=KeyboardInterrupt))
+    comm.send_done = Mock()
+    comm.disconnect = Mock(side_effect=KeyboardInterrupt)
+    with connect_via(lambda: comm):
+        assert getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
+    comm.send_done.assert_called_once()
+    comm.disconnect.assert_called_once()
+
+
+@pytest.mark.parametrize("rail", ["vpp", "vpe"])
+def test_voltage_monitor_transport_error_logs_one_error(
+    hw_config, make_comm, fake_serial, rail, caplog
+) -> None:
+    """After a transport error, a DONE failure in cleanup is debug only."""
+    from firestarter.exceptions import SerialError
+
+    fake_serial.feed(_ok_frame_bytes())
+    comm = make_comm()
+    original_get_response = comm.get_response
+    responses = iter((original_get_response,))
+
+    def get_response(*args, **kwargs):
+        for first in responses:
+            return first(*args, **kwargs)
+        raise SerialError("USB lost")
+
+    comm.get_response = Mock(side_effect=get_response)
+    comm.send_done = Mock(side_effect=SerialError("USB lost"))
+    with caplog.at_level(logging.DEBUG):
+        with connect_via(lambda: comm):
+            assert not getattr(HardwareManager(hw_config), f"read_{rail}_voltage")()
+    comm.send_done.assert_called_once()
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert [r.getMessage() for r in errors] == [
+        f"Failed to read {rail.upper()} voltage: USB lost"
+    ]
+    assert f"Failed to stop {rail.upper()} reading" in caplog.text
 
 
 @pytest.mark.parametrize("rail", ["vpp", "vpe"])

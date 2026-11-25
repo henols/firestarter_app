@@ -10,7 +10,6 @@ import logging
 import time
 from typing import NamedTuple, TypedDict
 
-from firestarter.channel import NON_5V_VCC_BOARDS
 from firestarter.codec import volts
 from firestarter.config import ConfigManager
 from firestarter.constants import (
@@ -29,6 +28,7 @@ from firestarter.constants import (
 )
 from firestarter.exceptions import (
     HardwareOperationError,
+    ProtocolNotImplementedError,
     SerialError,
 )
 from firestarter.frame_parser import Response
@@ -103,6 +103,8 @@ def _config_value_refusal(
 # specified 5 V USB supply and gets no such check.
 VCC_PLAUSIBLE_MIN_MV = 4400
 VCC_PLAUSIBLE_MAX_MV = 5250
+# Boards with no defined 5 V VCC supply. They get no VCC plausibility check.
+NON_5V_VCC_BOARDS: tuple[str, ...] = ("py32f071",)
 
 
 def _vcc_is_checked(firmware_identity: str | None) -> bool:
@@ -394,29 +396,46 @@ class HardwareManager:
 
         command_for_connect = _command(state_to_set, flags)
         comm = None
-        loop_started = False
-        firmware_finished = False
-        stop_attempted = False
+        # True while the firmware runs the monitor and has not got DONE.
+        # The firmware turns on the rail before READY and accepts DONE
+        # before the start ACK, so this flag is set when the command is sent.
+        monitor_active = False
 
-        def stop_monitor() -> bool:
-            """Best-effort DONE; keep its failure separate from read failures."""
-            nonlocal stop_attempted
-            stop_attempted = True
+        def stop_monitor(fail_level: int = logging.ERROR) -> bool:
+            """Send DONE one time. Keep its failure apart from read failures."""
+            nonlocal monitor_active
+            monitor_active = False
             assert comm is not None
             try:
                 comm.send_done()
-            except (SerialError, KeyboardInterrupt) as e:
-                logger.error(f"Failed to stop {voltage_type_str} reading: {e}")
+            except SerialError as e:
+                logger.log(
+                    fail_level, f"Failed to stop {voltage_type_str} reading: {e}"
+                )
+                return False
+            except KeyboardInterrupt:
+                logger.log(
+                    fail_level,
+                    f"Failed to stop {voltage_type_str} reading: "
+                    "interrupted while sending DONE",
+                )
                 return False
             return True
 
         try:
             comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
+            monitor_active = True
 
             # Wait for the firmware to signal it's ready before we start the reading loop.
             # This establishes a handshake and prevents a race condition.
-            is_ok, msg = comm.expect_ack()
+            try:
+                is_ok, msg = comm.expect_ack()
+            except ProtocolNotImplementedError:
+                monitor_active = False  # an ERROR frame: send no DONE
+                raise
             if not is_ok:
+                # An ERROR ends the command on the firmware: send no DONE.
+                monitor_active = False
                 logger.error(
                     f"Firmware did not signal ready for voltage reading: {msg}"
                 )
@@ -425,7 +444,6 @@ class HardwareManager:
 
             # After receiving ready, send an ACK to start the reading loop on the firmware.
             comm.send_ack()
-            loop_started = True
 
             # The VCC warning is printed once per command, not once per
             # reading: the condition cannot change between samples.
@@ -458,7 +476,7 @@ class HardwareManager:
 
                     comm.send_ack()  # Acknowledge data and request next reading
                 elif response_type == "OK":
-                    firmware_finished = True
+                    monitor_active = False
                     print()
                     logger.info(
                         f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"
@@ -471,7 +489,7 @@ class HardwareManager:
                     # already surfaces every WARN frame at logging.WARNING.
                     print()
                 elif response_type == "ERROR":
-                    firmware_finished = True
+                    monitor_active = False
                     print()
                     logger.error(f"Error reading {voltage_type_str}: {message}")
                     return False
@@ -487,17 +505,23 @@ class HardwareManager:
             return False
         except KeyboardInterrupt:
             print()  # Newline after Ctrl+C
-            if loop_started and not stop_monitor():
+            if monitor_active and not stop_monitor():
                 return False
             logger.info(f"\n{voltage_type_str} reading stopped by user.")
             return True
         finally:
-            # Unexpected frames, parsing/transport errors and a failed read
-            # still need to release the firmware's active monitor rail.
+            # Unexpected frames, parse errors and transport errors must also
+            # release the monitor rail. The first error is already logged,
+            # so a DONE failure here is logged at debug level only.
             if comm:
-                if loop_started and not firmware_finished and not stop_attempted:
-                    stop_monitor()
-                comm.disconnect()
+                try:
+                    if monitor_active:
+                        stop_monitor(logging.DEBUG)
+                    comm.disconnect()
+                except KeyboardInterrupt:
+                    logger.debug(
+                        f"Cleanup after {voltage_type_str} reading interrupted."
+                    )
 
     def read_vpp_voltage(
         self, timeout_seconds: int | None = None, flags: int = 0

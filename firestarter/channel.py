@@ -28,17 +28,15 @@ import os
 
 logger = logging.getLogger("Channel")
 
-# Boards whose firmware-install path is beta-only. PY32F071 is here because the
-# port has never run on real silicon: no PCB exists, its pin map is a documented
-# placeholder, and the USB DFU dialect its bootloader speaks is unconfirmed.
-# Shipping an install path for it on stable would offer users a flash operation
-# nobody has ever completed. It graduates by deletion from this tuple, once the
-# target is bench-validated.
+# The PY32 boards. The board list and the --usb-id/--dfu-probe gate use this
+# tuple.
 PY32_BOARDS: tuple[str, ...] = ("py32f071", "micropetal_uno")
-BETA_ONLY_BOARDS: tuple[str, ...] = PY32_BOARDS
-# MicroPetal Uno defaults to 5 V VCC; only the generic PY32 target lacks
-# a defined USB-derived 5 V supply for the host VCC plausibility check.
-NON_5V_VCC_BOARDS: tuple[str, ...] = ("py32f071",)
+
+# Boards that only a pre-release build shows. The PY32 boards are here because
+# no PY32 port has run on real silicon yet: the pin maps are not measured, and
+# no firmware install was done on a real board. A board graduates to stable
+# when you delete it from this tuple, after a bench validation of that board.
+BETA_ONLY_BOARDS: tuple[str, ...] = ("py32f071", "micropetal_uno")
 
 # The seven `dev` subcommands gated by channel on a stable build: 9 total
 # `dev` subcommands, minus `read`/`test`, which stable keeps. Consulted for the
