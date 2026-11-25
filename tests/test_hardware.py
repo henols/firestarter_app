@@ -461,7 +461,6 @@ def test_sample_vpp_mv_sends_done_before_disconnect(
     [
         ("3.3.0:uno", 5600, 1),  # implausible: warned once, not per sample
         ("3.3.0:uno", 4999, 0),  # in the band
-        ("3.3.1:micropetal_uno", 5263, 1),  # default VCC jumper is 5 V
         ("3.3.0:py32f071", 3300, 0),  # a 3.3 V board has no 5 V band
     ],
 )
@@ -484,6 +483,38 @@ def test_the_host_warns_about_an_implausible_vcc_once(
 
     text = CATALOG[MSG_WARN_VCC_IMPLAUSIBLE].format % vcc_mv
     assert [r.getMessage() for r in caplog.records].count(text) == warnings
+
+
+@pytest.mark.parametrize(
+    ("vcc_mv", "warnings"),
+    [
+        (5263, 1),  # default VCC jumper is 5 V: the check stays on
+        (4999, 0),  # in the band
+    ],
+)
+def test_micropetal_vcc_warning_does_not_point_at_calibration(
+    hw_config, make_comm, fake_serial, caplog, vcc_mv, warnings
+) -> None:
+    """MicroPetal reads VCC against a fixed VREFINT and has no calibration.
+    Its warning says what to check and does not name the bandgap or cal."""
+    fake_serial.feed(_ok_frame_bytes())
+    for _ in range(3):
+        fake_serial.feed(_mv_frame(MSG_DATA_VPP_MV, 13000, vcc_mv))
+    comm = make_comm()
+    comm.firmware_identity = "3.3.1:micropetal_uno"
+
+    with connect_via(lambda: comm):
+        assert HardwareManager(hw_config).sample_vpp_mv() == 13000
+
+    texts = [r.getMessage() for r in caplog.records if "Internal VCC" in r.getMessage()]
+    assert len(texts) == warnings
+    for text in texts:
+        assert f"{vcc_mv} mV" in text
+        assert "fixed internal reference (1200 mV)" in text
+        assert "VCC jumper" in text
+        assert "cal" not in text.replace("calibration", "")
+        assert "bandgap" not in text.lower()
+        assert "not trustworthy" not in text
 
 
 def test_read_adc_raw_parses_three_frames(hw_config, make_comm, fake_serial) -> None:

@@ -10,6 +10,7 @@ import logging
 import time
 from typing import NamedTuple, TypedDict
 
+from firestarter.channel import PY32_BOARDS
 from firestarter.codec import volts
 from firestarter.config import ConfigManager
 from firestarter.constants import (
@@ -25,6 +26,7 @@ from firestarter.constants import (
     CONFIG_R1_MIN,
     CONFIG_R2_MAX,
     CONFIG_R2_MIN,
+    FIXED_VREFINT_MV,
 )
 from firestarter.exceptions import (
     HardwareOperationError,
@@ -107,16 +109,35 @@ VCC_PLAUSIBLE_MAX_MV = 5250
 NON_5V_VCC_BOARDS: tuple[str, ...] = ("py32f071",)
 
 
+def _identity_board(firmware_identity: str | None) -> str:
+    """The board name from a "<version>:<board>" firmware identity."""
+    return (firmware_identity or "").rsplit(":", 1)[-1]
+
+
 def _vcc_is_checked(firmware_identity: str | None) -> bool:
     """Check boards with a defined 5 V VCC supply, including MicroPetal."""
-    return (firmware_identity or "").rsplit(":", 1)[-1] not in NON_5V_VCC_BOARDS
+    return _identity_board(firmware_identity) not in NON_5V_VCC_BOARDS
 
 
-def _warn_if_vcc_implausible(vcc_mv: int) -> bool:
-    """Log MSG_WARN_VCC_IMPLAUSIBLE's text when `vcc_mv` is outside the
-    band. Returns True when it warned, so the caller warns once a command."""
+def _warn_if_vcc_implausible(vcc_mv: int, firmware_identity: str | None = None) -> bool:
+    """Log a warning when `vcc_mv` is outside the band. Returns True when it
+    warned, so the caller warns once a command.
+
+    A PY32 board has no bandgap calibration: it reads VCC against VREFINT at
+    a fixed value, and `firestarter cal` refuses it. Its text tells the
+    operator what to check, and does not point at a calibration.
+    """
     if VCC_PLAUSIBLE_MIN_MV <= vcc_mv <= VCC_PLAUSIBLE_MAX_MV:
         return False
+    if _identity_board(firmware_identity) in PY32_BOARDS:
+        logger.warning(
+            f"Internal VCC reads {vcc_mv} mV, outside "
+            f"{VCC_PLAUSIBLE_MIN_MV}-{VCC_PLAUSIBLE_MAX_MV} mV. This board "
+            f"reads VCC against its fixed internal reference "
+            f"({FIXED_VREFINT_MV} mV), which has a tolerance. Check the 5 V "
+            "supply and the VCC jumper. This board has no calibration."
+        )
+        return True
     logger.warning(CATALOG[MSG_WARN_VCC_IMPLAUSIBLE].format % vcc_mv)
     return True
 
@@ -458,7 +479,9 @@ class HardwareManager:
                     reading = self._parse_voltage_frame(response)
                     if reading is not None:
                         rail_mv, vcc_mv = reading
-                        if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
+                        if not vcc_warned and _warn_if_vcc_implausible(
+                            vcc_mv, comm.firmware_identity
+                        ):
                             vcc_warned = True
                         message = (
                             f"{voltage_type_str}: {volts(rail_mv)}, "
@@ -596,7 +619,9 @@ class HardwareManager:
                 if reading is not None:
                     rail_mv, vcc_mv = reading
                     samples.append(rail_mv)
-                    if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
+                    if not vcc_warned and _warn_if_vcc_implausible(
+                        vcc_mv, comm.firmware_identity
+                    ):
                         vcc_warned = True
                 comm.send_ack()  # acknowledge data and request next reading
 
