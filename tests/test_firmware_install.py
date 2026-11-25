@@ -277,7 +277,7 @@ class TestFirmwareInstallPreRelease:
     (mirrors pip install --pre semantics).
 
     Decisions pinned: D-03 (pre-release selection algorithm),
-                      D-04 (pagination cap: 5 pages),
+                      D-04 (pagination cap: 2 pages of 75),
                       D-05 (silent fallback to stable when no pre-release exists),
                       D-06 (beta app always gets some firmware).
     """
@@ -435,9 +435,9 @@ class TestFirmwareInstallPreRelease:
         assert "uno_b2.hex" in url
 
     def test_pre_pagination_cap(self, monkeypatch, caplog):
-        """INST-02 / D-04 — pagination is capped at 5 pages.
+        """INST-02 / D-04 — pagination is capped at 2 pages of 75.
 
-        When 6+ pages are available via Link rel=next headers, only 5 pages
+        When 3+ pages are available via Link rel=next headers, only 2 pages
         should be fetched. A cap-hit INFO log must be emitted.
 
         RED today: FirmwareManager has no fetch_release_info — AttributeError.
@@ -464,21 +464,22 @@ class TestFirmwareInstallPreRelease:
             )
             for i in range(1, 7)  # 6 pages, last has a next_url too
         ]
-        # Page 6 should NOT be fetched (cap is 5)
+        # Page 3 should NOT be fetched (cap is 2)
         page_iter = iter(pages)
         call_count = [0]
+        urls = []
 
         def counting_get(url, **kw):
             call_count[0] += 1
+            urls.append(url)
             return next(page_iter)
 
         monkeypatch.setattr(firmware.requests, "get", counting_get)
         fm = FirmwareManager(config_manager=MagicMock())
         with caplog.at_level(logging.INFO):
             fm.fetch_release_info(channel="pre", board="uno")
-        assert call_count[0] <= 5, (
-            f"Expected at most 5 pages fetched; got {call_count[0]}"
-        )
+        assert call_count[0] == 2, f"Expected 2 pages fetched; got {call_count[0]}"
+        assert urls[0] == f"{FIRESTARTER_RELEASES_URL}?per_page=75"
         lower_records = [r.message.lower() for r in caplog.records]
         assert any("cap" in m or "page" in m or "150" in m for m in lower_records), (
             f"Expected a pagination cap INFO log; got: {[r.message for r in caplog.records]}"  # noqa: E501
@@ -1246,6 +1247,29 @@ class TestFetchAllReleasesJsonParsing:
             result = fm._fetch_all_releases(max_pages=2)
         assert len(result) == 2  # 2 pages × 1 release each
         assert any("capped" in r.message.lower() for r in caplog.records)
+
+    def test_fetch_all_releases_default_cap_is_150_releases(self, monkeypatch, caplog):
+        """The defaults ask for 75 per page and stop after 2 pages (150).
+
+        Dropping ?per_page= would quietly fall back to GitHub's 30 per page,
+        so the first URL and the logged cap are pinned here.
+        """
+        urls = []
+
+        def mock_get(url, **_kwargs):
+            urls.append(url)
+            return mock_releases_factory(
+                [{"tag_name": "v1.0.0", "prerelease": False, "draft": False}],
+                next_url="https://api.example.com/next",
+            )
+
+        monkeypatch.setattr(firmware.requests, "get", mock_get)
+        fm = FirmwareManager(config_manager=MagicMock())
+        with caplog.at_level(logging.INFO, logger=firmware.logger.name):
+            fm._fetch_all_releases()
+        assert urls[0] == f"{FIRESTARTER_RELEASES_URL}?per_page=75"
+        assert len(urls) == 2
+        assert any("150 releases" in r.message for r in caplog.records)
 
 
 class TestCompareVersionsAdditionalBranches:

@@ -9,7 +9,7 @@ hardware-specific bus configuration.
 
 `EpromDatabase` is a singleton -- it initialises once and later instantiations
 return the same instance.
-"""  # noqa: E501
+"""
 
 import json
 import logging
@@ -22,19 +22,6 @@ from firestarter.config import get_local_database, get_local_pin_maps
 from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.erase_support import erase_accepted
 
-PROTOCOL_MAP = {
-    0x05: "FLASH_AMD_STD",
-    0x06: "FLASH_AMD_ALT",
-    0x07: "EPROM_STD",
-    0x08: "EPROM_QUICK",
-    0x0B: "EPROM_LEGACY",
-    0x0D: "EEPROM_POLL",
-    0x10: "FLASH_INTEL",
-    0x28: "SRAM_STD",
-}
-
-# Module-level constants
-types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 0x100
 ROM_OE = 0x101
 # pin_conversions: RURP board-wiring layer.
@@ -146,7 +133,7 @@ def _read_config_file(filename: str) -> dict:
         return {}
 
 
-def _strip_mode(name: str) -> str:
+def strip_mode(name: str) -> str:
     """'DS1245AB(RW)' -> 'ds1245ab': the name without its mode annotation."""
     return re.sub(r"\([^)]*\)", "", name).strip().lower()
 
@@ -256,7 +243,7 @@ class EpromDatabase:
         """
         Merges two pin map configuration dictionaries. `manual_pin_map` takes precedence.
         Modifies and returns the `pin_maps_base` dictionary.
-        """  # noqa: E501
+        """
         for key, sub_map in manual_pin_map.items():
             if key not in pin_maps_base:
                 # Add new top-level key entirely if it doesn't exist
@@ -301,7 +288,7 @@ class EpromDatabase:
                     bus.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."  # noqa: E501
+                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."
                     )
             map_config["bus"] = bus
         else:
@@ -325,11 +312,11 @@ class EpromDatabase:
                 if pin_to_check in pin_conversions.get(pins, {}):
                     resolved = pin_conversions[pins][pin_to_check]
                     if pin_func == "vpp-pin" and resolved in (ROM_CE, ROM_OE):
-                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)  # noqa: E501
+                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)
                     map_config[pin_func] = resolved
                 else:
                     logger.warning(
-                        f"Pin function '{source}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
+                        f"Pin function '{source}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."
                     )
 
         if "static-high-pins" in pin_map_data and pins in pin_conversions:
@@ -339,7 +326,7 @@ class EpromDatabase:
                     static_high.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
+                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."
                     )
             if static_high:
                 map_config["static-high"] = static_high
@@ -351,7 +338,7 @@ class EpromDatabase:
         Returns [(pin_number, signal_name), ...] for every physical DIP pin 1..pin_count.
         Derived directly from pinouts.json. Returns [] if the pinout key is unknown.
         Used to display adapter wiring via `firestarter info --adapter`.
-        """  # noqa: E501
+        """
         pin_map_data = self.get_pin_map(pin_count, pinout_key)
         if not pin_map_data:
             return []
@@ -507,7 +494,7 @@ class EpromDatabase:
         if at and manufacturer_wanted is None:
             return []
         query = name.strip().lower()
-        query_stripped = _strip_mode(name)
+        query_stripped = strip_mode(name)
         exact: list[tuple[dict, str]] = []
         stripped: list[tuple[dict, str]] = []
         for manufacturer, ics in self.proms.items():
@@ -521,7 +508,7 @@ class EpromDatabase:
                 ):
                     exact.append((ic_config, manufacturer))
                 elif query_stripped and query_stripped in (
-                    _strip_mode(a) for a in aliases
+                    strip_mode(a) for a in aliases
                 ):
                     stripped.append((ic_config, manufacturer))
         return exact or stripped
@@ -566,7 +553,7 @@ class EpromDatabase:
         alias = next(
             (a for a in aliases if a.lower() == name.lower()),
             next(
-                (a for a in aliases if _strip_mode(a) == _strip_mode(name)),
+                (a for a in aliases if strip_mode(a) == strip_mode(name)),
                 aliases[0],
             ),
         )
@@ -762,71 +749,6 @@ class EpromDatabase:
                             selected_proms.append(ic_copy)
                     except ValueError:
                         logger.warning(
-                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"  # noqa: E501
+                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"
                         )
         return selected_proms
-
-
-def main():  # Test function
-    """
-    Main function for standalone testing or demonstration of the database module.
-    """
-    logging.basicConfig(
-        level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
-    )
-    db = EpromDatabase()  # Initializes the database
-
-    chip_name = "W27C512"
-    print(f"\n--- Getting EPROM config for: {chip_name} ---")
-    config, manufacturer = db.get_eprom_config(chip_name)
-    if config is None:
-        print(f"Prom {chip_name} not found")
-    else:
-        print(f"Found {config.get('name')} from {manufacturer}")
-        print(json.dumps(config, indent=2))
-
-    print(f"\n--- Getting full EPROM data for: {chip_name} ---")
-    full_data = db.get_eprom(chip_name)
-    if full_data:
-        print(json.dumps(full_data, indent=2))
-    else:
-        print(f"EPROM {chip_name} not found.")
-
-    print(f"\n--- Getting concise EPROM data for: {chip_name} ---")
-    full_data_for_conversion = db.get_eprom(chip_name)
-    concise_data = None
-    if full_data_for_conversion:
-        concise_data = db.convert_to_programmer(full_data_for_conversion)
-    if concise_data:
-        print(json.dumps(concise_data, indent=2))
-    else:
-        print(f"EPROM {chip_name} not found.")
-
-    # print("\n--- Listing all EPROMs (first 5) ---")
-    # all_eproms = db.get_eproms()
-    # for eprom_data in all_eproms[:5]:
-    #     print(f"  - {eprom_data['name']} by {eprom_data['manufacturer']}")
-
-    # print("\n--- Searching for '27C256' ---")
-    # search_results = db.search_eprom("27C256")
-    # for res in search_results:
-    #     print(f"  - {res['name']} by {res['manufacturer']}")
-
-    # Example: Test get_pin_map and get_bus_config if config was found
-    if config:
-        variant = None
-        pin_count = config.get("pin-count")
-        variant = config.get("pin-map", config.get("variant"))
-        if pin_count and not variant is None:  # noqa: E714
-            print("\n--- Pin Map ---")
-            pin_map_details = db.get_pin_map(pin_count, variant)
-            print(json.dumps(pin_map_details, indent=2))
-            print("\n--- Bus Config ---")
-            bus_config_details = db.get_bus_config(
-                pin_count, variant, chip_address_width(config.get("memory-size", 0))
-            )
-            print(json.dumps(bus_config_details, indent=2))
-
-
-if __name__ == "__main__":
-    main()

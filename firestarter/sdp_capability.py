@@ -15,13 +15,12 @@ Bit 15 is NOT a page-write proxy: it disagrees with `page_size > 1` on
 
 from __future__ import annotations
 
-# Import purity: the module's top-level import set is a subset of
-# {"__future__", "typing"} — no click, no serial, no firestarter.* imports.
-# `Mapping` is imported from `typing` (not `collections.abc`) to keep that
-# invariant literal; ruff's UP035 (prefer collections.abc) is suppressed
-# below since this file has no runtime dependency on the deprecated alias
-# beyond a lazily-evaluated annotation (`from __future__ import annotations`).
-from typing import Any, Mapping  # noqa: UP035
+from collections.abc import Mapping
+
+# Import purity: the module's top-level imports are standard library only
+# ({"__future__", "collections.abc", "typing"}) — no click, no serial, no
+# firestarter.* imports.
+from typing import Any
 
 # The DB's `protocol-id` value (mirrored from `programming.algorithm` by
 # `database.py:_map_data`) that identifies the `0x0D` / EEPROM_PARALLEL
@@ -115,7 +114,7 @@ SDP_CAPABLE_TOKENS: frozenset[str] = frozenset(
 
 # Ferroelectric RAM parts. Both carry `electrical.type == "EEPROM"` in the DB
 # (nothing in the DB says FRAM), so the existing `etype in ("SRAM", "FRAM")`
-# idiom (`eprom_operations.py`'s `_SRAM_PROTO_IDS` short-circuit) is blind to
+# idiom (`write_blank_guard.SRAM_PROTOCOL_IDS` short-circuit) is blind to
 # them and no structural rule can find them — this is why the contract says
 # "resolved in code".
 FRAM_TOKENS: frozenset[str] = frozenset({"FM28V020", "MB85R256H"})
@@ -189,7 +188,7 @@ def sdp_capability_for_entry(
             "returned by resolve_chip()/convert_to_programmer(), which carries "
             "neither 'protocol-id' nor 'name' — pass the full dict returned by "
             "db.get_eprom() instead. A silent default here is exactly how "
-            "check_eprom_blank's _SRAM_PROTO_IDS short-circuit became vacuous "
+            "check_eprom_blank's SRAM_PROTOCOL_IDS short-circuit became vacuous "
             "in production (RESEARCH F-06); this predicate hard-fails instead."
         )
 

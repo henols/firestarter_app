@@ -52,6 +52,7 @@ from firestarter.chip_test import (
     resolve_error_name,
 )
 from firestarter.diagnostic_report import is_submittable
+from firestarter.utils import print_to as _print
 
 # ---------------------------------------------------------------------------
 # Module constants
@@ -674,13 +675,6 @@ def comment_via_gh(
 # ---------------------------------------------------------------------------
 # Browser tier + oversize escalation
 # ---------------------------------------------------------------------------
-
-
-def _print(msg: str, *, console: Any = None) -> None:
-    if console is not None:
-        console.print(msg)
-    else:
-        print(msg)
 
 
 def submit_via_browser(

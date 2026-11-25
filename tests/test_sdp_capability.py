@@ -58,7 +58,7 @@ would pass no matter what SDP_CAPABLE_TOKENS contained.
       lacks protocol-id/name/electrical-type; sdp_capability is proven
       name-keyed against it, and sdp_capability_for_entry raises rather than
       silently defaulting when handed that dict -- the failure mode that
-      made check_eprom_blank's _SRAM_PROTO_IDS short-circuit vacuous in
+      made check_eprom_blank's SRAM_PROTOCOL_IDS short-circuit vacuous in
       production.
   12. Runtime local-override refusal: a synthetic algorithm==13 entry
       reaching the live DB only through the ~/.firestarter/database.json
@@ -560,14 +560,15 @@ def test_allow_set_contains_no_adapter_required_and_no_dip24_2816_part() -> None
 def test_predicate_is_name_keyed_and_a_programmer_dict_is_rejected() -> None:
     """Pins the real measured shape of resolve_chip()'s output: neither
     protocol-id, name nor electrical-type survive convert_to_programmer.
-    check_eprom_blank's _SRAM_PROTO_IDS short-circuit reads exactly those
+    check_eprom_blank's SRAM_PROTOCOL_IDS short-circuit reads exactly those
     absent keys and was measured returning False for a real SRAM part --
     vacuous in production (RESEARCH F-06). A dict-keyed sdp_capability would
     reproduce that identical silent vacuity; this predicate is name-keyed
     instead and raises rather than defaulting when handed the wrong shape.
     PROJECT.md SIXTH CORRECTION item 6's KEEP disposition for
-    _SRAM_PROTO_IDS stands -- only its stated reason is corrected here; this
-    plan changes no production code in eprom_operations.py."""
+    _SRAM_PROTO_IDS (now write_blank_guard.SRAM_PROTOCOL_IDS) stands -- only
+    its stated reason is corrected here; this plan changes no production
+    code in eprom_operations.py."""
     real_db = EpromDatabase(skip_local_override=True)
     programmer_dict = resolve_chip("at28c256", db=real_db)
 

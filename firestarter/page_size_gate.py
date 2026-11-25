@@ -44,7 +44,8 @@ gates.
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping  # noqa: UP035
+from collections.abc import Mapping
+from typing import Any
 
 from firestarter import command_frame as cf
 from firestarter.address_parser import parse_address

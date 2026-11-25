@@ -31,6 +31,7 @@ from rich.prompt import Confirm
 
 from firestarter.database import pin_conversions
 from firestarter.exceptions import Pin1HazardRefusedError
+from firestarter.utils import print_to as _print
 
 SOCKET_PIN_1_BUS_LINE = pin_conversions[32][1]
 
@@ -105,13 +106,6 @@ def require_acknowledged(
     bit = socket_pin1_address_bit(bus_config)
     if bit is not None and bit >= GATED_ADDRESS_BIT and not acknowledged:
         raise Pin1HazardRefusedError(hazard_text(chip_name, operation, bit))
-
-
-def _print(msg: str, *, console: Any = None) -> None:
-    if console is not None:
-        console.print(msg)
-    else:
-        print(msg)
 
 
 def confirm_or_refuse(

@@ -10,7 +10,7 @@ response types. Stdlib + typing only — no package-internal imports.
 
 import struct
 from collections import namedtuple
-from typing import Any, Tuple  # noqa: UP035
+from typing import Any
 
 # Define a structured object for responses to improve clarity over tuples.
 # `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
@@ -107,6 +107,15 @@ def cobs_encode(payload: bytes) -> bytes:
     return bytes(out)
 
 
+def encode_crc_frame(payload: bytes) -> bytes:
+    """``COBS(payload + CRC8) + 0x00``: the CRC is over the raw payload.
+
+    The order is load-bearing: CRC first, then COBS over payload and CRC
+    together. The firmware verifies the CRC after it decodes the COBS.
+    """
+    return cobs_encode(payload + bytes([_crc8_ccitt(payload)])) + b"\x00"
+
+
 def cobs_decode(encoded: bytes) -> bytes:
     """Decode a COBS body (NO trailing ``0x00`` delimiter).
 
@@ -135,7 +144,7 @@ def cobs_decode(encoded: bytes) -> bytes:
     return bytes(out)
 
 
-def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:  # noqa: UP006
+def _decode_param(ptype: str, buf: bytes, cursor: int) -> tuple[Any, int]:
     """Decode one MSB-first parameter starting at `buf[cursor]`.
 
     Returns `(value, new_cursor)`. Raises ValueError on unknown ptype or
