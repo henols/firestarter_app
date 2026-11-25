@@ -74,6 +74,7 @@ from firestarter.constants import (
     CONFIG_R2_MAX,
     CONFIG_R2_MIN,
     FIRESTARTER_RELEASES_URL,
+    FIXED_VREFINT_MV,
     FLAG_CHIP_ENABLE,
     FLAG_OUTPUT_ENABLE,
 )
@@ -1660,6 +1661,11 @@ def hw(app: AppContext) -> None:
 
 
 _BANDGAP_NOMINAL_MV = 1100
+# A board with bandgap count 0 (the PY32 boards) has no calibration.
+_NO_BANDGAP_CAL_TEXT = (
+    "This board has no bandgap calibration. It reads the voltages against "
+    f"its fixed internal reference ({FIXED_VREFINT_MV} mV)."
+)
 # A plausibility bound for a 5 V supply pin, not a wire limit: the host sends
 # the bandgap, not the reading. A reading above it is a typo, refused before
 # any port opens.
@@ -1706,6 +1712,9 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
 
     if reset:
         before = app.hardware_manager.read_calibration()
+        if before is not None and before["bandgap_adc"] == 0:
+            click.echo(_NO_BANDGAP_CAL_TEXT)
+            sys.exit(1)
         if before is not None:
             click.echo(f"Reference now: {before['bandgap_mv']} mV")
         click.echo(f"Restoring the nominal {_BANDGAP_NOMINAL_MV} mV.")
@@ -1723,7 +1732,7 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
             sys.exit(1)
         bandgap_adc = before["bandgap_adc"]
         if bandgap_adc == 0:
-            click.echo("This board has no bandgap calibration (PY32 target).")
+            click.echo(_NO_BANDGAP_CAL_TEXT)
             sys.exit(1)
         bandgap_mv = bandgap_from_measured_vcc(measured_mv, bandgap_adc)
         if bandgap_mv is None:
@@ -1760,6 +1769,12 @@ def cal(app: AppContext, vcc: float | None, reset: bool) -> None:
             "Could not read the calibration. The firmware may be older than this CLI."
         )
         sys.exit(1)
+    if current["bandgap_adc"] == 0:
+        # The board ignores the stored bandgap_mv: show the reference it uses.
+        click.echo(f"Reference: fixed internal {FIXED_VREFINT_MV} mV")
+        click.echo(f"Divider: R1 {current['r1']}, R2 {current['r2']}")
+        click.echo(_NO_BANDGAP_CAL_TEXT)
+        sys.exit(0)
     click.echo(f"Reference: {current['bandgap_mv']} mV")
     click.echo(f"Divider: R1 {current['r1']}, R2 {current['r2']}")
     _echo_calibration_effect(current["bandgap_mv"])

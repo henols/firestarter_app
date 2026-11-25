@@ -261,5 +261,44 @@ def test_cal_refusal_names_the_board_without_calibration() -> None:
     app = make_app_context(hardware_manager=hardware)
     result = CliRunner().invoke(cli, ["cal", "--vcc", "5.0"], obj=app)
     assert result.exit_code == 1, result.output
-    assert "PY32 target" in result.output
+    assert "no bandgap calibration" in result.output
+    assert "fixed internal reference (1200 mV)" in result.output
+    hardware.set_bandgap_mv.assert_not_called()
+
+
+def test_cal_shows_the_fixed_reference_without_bandgap_calibration() -> None:
+    """bandgap_adc 0: the board ignores the stored 1100 mV. Show the 1200 mV
+    reference it uses and no 'percent low/high' text."""
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = _calibration(0)
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal"], obj=app)
+    assert result.exit_code == 0, result.output
+    assert "Reference: fixed internal 1200 mV" in result.output
+    assert "1100" not in result.output
+    assert "Before calibration" not in result.output
+    assert "nominal reference" not in result.output
+
+
+@pytest.mark.parametrize(("stored", "text"), [(1100, "nominal"), (1024, "percent")])
+def test_cal_shows_the_stored_reference_with_bandgap_calibration(
+    stored: int, text: str
+) -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = _stored(stored)
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal"], obj=app)
+    assert result.exit_code == 0, result.output
+    assert f"Reference: {stored} mV" in result.output
+    assert text in result.output
+
+
+def test_cal_reset_refuses_without_bandgap_calibration() -> None:
+    hardware = Mock(spec=HardwareManager)
+    hardware.read_calibration.return_value = _calibration(0)
+    app = make_app_context(hardware_manager=hardware)
+    result = CliRunner().invoke(cli, ["cal", "--reset"], obj=app)
+    assert result.exit_code == 1, result.output
+    assert "no bandgap calibration" in result.output
+    assert "1100" not in result.output
     hardware.set_bandgap_mv.assert_not_called()

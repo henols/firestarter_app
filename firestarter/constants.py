@@ -211,3 +211,7 @@ CONFIG_BANDGAP_MAX_MV = 1200
 # The AVR ADC is 10-bit. The bandgap count in MSG_OK_CFG is against this full
 # scale (rurp_voltage_math.h RURP_ADC_FULL_SCALE).
 BANDGAP_ADC_FULL_SCALE = 1024
+# A board with no bandgap calibration (bandgap count 0 in MSG_OK_CFG, the PY32
+# boards) reads its rails against VREFINT at this fixed value. It ignores the
+# stored bandgap_mv.
+FIXED_VREFINT_MV = 1200
