@@ -192,7 +192,7 @@ def _complete_eprom(
 # reloading this module.
 _ALL_BOARDS: tuple[str, ...] = ("uno", "uno328pb", "leonardo") + PY32_BOARDS
 _BOARD_CHOICES: list[str] = available_boards(_ALL_BOARDS)
-_PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
+_PY32_ENABLED: bool = any(b in _BOARD_CHOICES for b in PY32_BOARDS)
 # A stable build never offers pre-release firmware: `fw --pre` is refused and
 # `fw --list` shows stable releases only. fw_release_gate refuses the install.
 _PRE_CHANNEL_ENABLED: bool = is_prerelease_build()
@@ -1908,14 +1908,14 @@ def _maybe_auto_route_to_pre_click(
     default=None,
     metavar="VID:PID",
     hidden=not _PY32_ENABLED,
-    help="Restrict USB DFU install to one device, e.g. 1a86:8012 (py32f071 only).",
+    help="Restrict USB DFU install to one device, e.g. 1a86:8012 (board py32f071 only).",
 )
 @click.option(
     "--dfu-probe",
     "dfu_probe",
     is_flag=True,
     hidden=not _PY32_ENABLED,
-    help="List attached USB DFU devices and exit (py32f071 bootloader discovery).",
+    help="List attached USB DFU devices and exit (board py32f071 only).",
 )
 @click.option(
     "--avrdude-path",
