@@ -1614,19 +1614,18 @@ class TestMeasureCommandNakLatency:
 # and after the fix.
 
 # Minimal eprom_data_dict for an FM1608-class chip (SRAM, proto 0x28).
-# ``protocol-id`` mirrors the field name written by database._map_data.
+# ``algorithm`` is the key the programmer wire dict carries.
 _FM1608_LIKE_EPROM_DATA: dict = {
     "memory-size": 8192,
     "flags": 0,
-    "electrical-type": "SRAM",
-    "protocol-id": 0x28,
+    "algorithm": 0x28,
 }
 
 # Minimal eprom_data_dict for a W27C512 (EEPROM, proto 0x07) — non-SRAM.
 _W27C512_LIKE_EPROM_DATA: dict = {
     "memory-size": 65536,
     "flags": 0,
-    "electrical-type": "EEPROM",
+    "algorithm": 0x07,
     "protocol-id": 0x07,
 }
 
@@ -1662,6 +1661,19 @@ class TestSramBlankCheckShortCircuit:
         )
         # 202-05 D-12: the result must be 2, an honest refusal -- not a
         # "not blank" verdict, and not the old bare False.
+        assert result == 2
+
+    def test_real_resolved_sram_dict_short_circuits(self) -> None:
+        """The wire dict from the real `resolve_chip` carries `algorithm`
+        only; the short-circuit must fire on it (it was inert before)."""
+        from firestarter.chip_resolver import resolve_chip
+        from firestarter.database import EpromDatabase
+
+        data = resolve_chip("fm1608", db=EpromDatabase(skip_local_override=True))
+        op = EpromOperator(ConfigManager())
+        with connect_via(_refuse(SerialError("no board attached"))) as connects:
+            result = op.check_eprom_blank("FM1608", data)
+        assert connects == []
         assert result == 2
 
     def test_eeprom_blank_check_still_reaches_setup(self) -> None:

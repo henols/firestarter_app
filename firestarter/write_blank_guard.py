@@ -261,12 +261,8 @@ def requires_blank_check(
 
 
 # The module reads ONLY the `algorithm` and `flags` keys of the wire dict --
-# never `electrical-type`, never `protocol-id`. The programmer wire dict
-# `convert_to_programmer` produces carries neither of those two keys, which
-# is exactly why `check_eprom_blank`'s SRAM short-circuit (keyed on
-# `electrical-type`/`protocol-id`) is inert in production today -- the dict
-# it is handed never carries the keys it reads. This predicate must never
-# join that failure class.
+# never `electrical-type`, never `protocol-id`: the programmer wire dict
+# `convert_to_programmer` produces carries neither of those two keys.
 
 
 def refusal_text(chip_name: str, address: int, value: int) -> str:
