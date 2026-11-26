@@ -10,6 +10,7 @@ import logging
 import time
 from typing import NamedTuple, TypedDict
 
+from firestarter.channel import PY32_BOARDS
 from firestarter.codec import volts
 from firestarter.config import ConfigManager
 from firestarter.constants import (
@@ -25,9 +26,11 @@ from firestarter.constants import (
     CONFIG_R1_MIN,
     CONFIG_R2_MAX,
     CONFIG_R2_MIN,
+    FIXED_VREFINT_MV,
 )
 from firestarter.exceptions import (
     HardwareOperationError,
+    ProtocolNotImplementedError,
     SerialError,
 )
 from firestarter.frame_parser import Response
@@ -54,7 +57,7 @@ class Calibration(TypedDict):
     r1: int
     r2: int
     bandgap_mv: int
-    # 0 on a board without calibration (py32f071).
+    # 0 on PY32 boards without AVR-style bandgap calibration.
     bandgap_adc: int
 
 
@@ -96,23 +99,45 @@ def _config_value_refusal(
 # Plausible internal-VCC band, in millivolts. USB VBUS is specified
 # 4.75-5.25 V (USB 2.0 section 7.2.2) and the board derives VCC from it
 # through a series switch, so a reading outside this band is the stored
-# bandgap being wrong, not the supply -- and that error scales every VPP/VPE
-# reading. The band is for a 5 V board: a py32f071 board runs from 3.3 V and
-# gets no such check.
+# bandgap or supply needing investigation. A bad reference scales every VPP/VPE
+# reading. The band applies to 5 V Uno boards, including MicroPetal Uno
+# with its default 5 V VCC jumper. The generic py32f071 target has no
+# specified 5 V USB supply and gets no such check.
 VCC_PLAUSIBLE_MIN_MV = 4400
 VCC_PLAUSIBLE_MAX_MV = 5250
+# Boards with no defined 5 V VCC supply. They get no VCC plausibility check.
+NON_5V_VCC_BOARDS: tuple[str, ...] = ("py32f071",)
+
+
+def _identity_board(firmware_identity: str | None) -> str:
+    """The board name from a "<version>:<board>" firmware identity."""
+    return (firmware_identity or "").rsplit(":", 1)[-1]
 
 
 def _vcc_is_checked(firmware_identity: str | None) -> bool:
-    """False for a board whose VCC is not a 5 V USB supply (py32f071)."""
-    return not (firmware_identity or "").endswith(":py32f071")
+    """Check boards with a defined 5 V VCC supply, including MicroPetal."""
+    return _identity_board(firmware_identity) not in NON_5V_VCC_BOARDS
 
 
-def _warn_if_vcc_implausible(vcc_mv: int) -> bool:
-    """Log MSG_WARN_VCC_IMPLAUSIBLE's text when `vcc_mv` is outside the
-    band. Returns True when it warned, so the caller warns once a command."""
+def _warn_if_vcc_implausible(vcc_mv: int, firmware_identity: str | None = None) -> bool:
+    """Log a warning when `vcc_mv` is outside the band. Returns True when it
+    warned, so the caller warns once a command.
+
+    A PY32 board has no bandgap calibration: it reads VCC against VREFINT at
+    a fixed value, and `firestarter cal` refuses it. Its text tells the
+    operator what to check, and does not point at a calibration.
+    """
     if VCC_PLAUSIBLE_MIN_MV <= vcc_mv <= VCC_PLAUSIBLE_MAX_MV:
         return False
+    if _identity_board(firmware_identity) in PY32_BOARDS:
+        logger.warning(
+            f"Internal VCC reads {vcc_mv} mV, outside "
+            f"{VCC_PLAUSIBLE_MIN_MV}-{VCC_PLAUSIBLE_MAX_MV} mV. This board "
+            f"reads VCC against its fixed internal reference "
+            f"({FIXED_VREFINT_MV} mV), which has a tolerance. Check the 5 V "
+            "supply and the VCC jumper. This board has no calibration."
+        )
+        return True
     logger.warning(CATALOG[MSG_WARN_VCC_IMPLAUSIBLE].format % vcc_mv)
     return True
 
@@ -392,14 +417,46 @@ class HardwareManager:
 
         command_for_connect = _command(state_to_set, flags)
         comm = None
+        # True while the firmware runs the monitor and has not got DONE.
+        # The firmware turns on the rail before READY and accepts DONE
+        # before the start ACK, so this flag is set when the command is sent.
+        monitor_active = False
+
+        def stop_monitor(fail_level: int = logging.ERROR) -> bool:
+            """Send DONE one time. Keep its failure apart from read failures."""
+            nonlocal monitor_active
+            monitor_active = False
+            assert comm is not None
+            try:
+                comm.send_done()
+            except SerialError as e:
+                logger.log(
+                    fail_level, f"Failed to stop {voltage_type_str} reading: {e}"
+                )
+                return False
+            except KeyboardInterrupt:
+                logger.log(
+                    fail_level,
+                    f"Failed to stop {voltage_type_str} reading: "
+                    "interrupted while sending DONE",
+                )
+                return False
+            return True
 
         try:
             comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
+            monitor_active = True
 
             # Wait for the firmware to signal it's ready before we start the reading loop.
             # This establishes a handshake and prevents a race condition.
-            is_ok, msg = comm.expect_ack()
+            try:
+                is_ok, msg = comm.expect_ack()
+            except ProtocolNotImplementedError:
+                monitor_active = False  # an ERROR frame: send no DONE
+                raise
             if not is_ok:
+                # An ERROR ends the command on the firmware: send no DONE.
+                monitor_active = False
                 logger.error(
                     f"Firmware did not signal ready for voltage reading: {msg}"
                 )
@@ -422,7 +479,9 @@ class HardwareManager:
                     reading = self._parse_voltage_frame(response)
                     if reading is not None:
                         rail_mv, vcc_mv = reading
-                        if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
+                        if not vcc_warned and _warn_if_vcc_implausible(
+                            vcc_mv, comm.firmware_identity
+                        ):
                             vcc_warned = True
                         message = (
                             f"{voltage_type_str}: {volts(rail_mv)}, "
@@ -432,13 +491,15 @@ class HardwareManager:
 
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
                         print()  # Newline after continuous printing
+                        stopped = stop_monitor()
                         logger.info(
                             f"{voltage_type_str} reading timed out after {timeout_seconds}s."
                         )
-                        return True
+                        return stopped
 
                     comm.send_ack()  # Acknowledge data and request next reading
                 elif response_type == "OK":
+                    monitor_active = False
                     print()
                     logger.info(
                         f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"
@@ -451,6 +512,7 @@ class HardwareManager:
                     # already surfaces every WARN frame at logging.WARNING.
                     print()
                 elif response_type == "ERROR":
+                    monitor_active = False
                     print()
                     logger.error(f"Error reading {voltage_type_str}: {message}")
                     return False
@@ -466,11 +528,23 @@ class HardwareManager:
             return False
         except KeyboardInterrupt:
             print()  # Newline after Ctrl+C
+            if monitor_active and not stop_monitor():
+                return False
             logger.info(f"\n{voltage_type_str} reading stopped by user.")
             return True
         finally:
+            # Unexpected frames, parse errors and transport errors must also
+            # release the monitor rail. The first error is already logged,
+            # so a DONE failure here is logged at debug level only.
             if comm:
-                comm.disconnect()
+                try:
+                    if monitor_active:
+                        stop_monitor(logging.DEBUG)
+                    comm.disconnect()
+                except KeyboardInterrupt:
+                    logger.debug(
+                        f"Cleanup after {voltage_type_str} reading interrupted."
+                    )
 
     def read_vpp_voltage(
         self, timeout_seconds: int | None = None, flags: int = 0
@@ -545,7 +619,9 @@ class HardwareManager:
                 if reading is not None:
                     rail_mv, vcc_mv = reading
                     samples.append(rail_mv)
-                    if not vcc_warned and _warn_if_vcc_implausible(vcc_mv):
+                    if not vcc_warned and _warn_if_vcc_implausible(
+                        vcc_mv, comm.firmware_identity
+                    ):
                         vcc_warned = True
                 comm.send_ack()  # acknowledge data and request next reading
 

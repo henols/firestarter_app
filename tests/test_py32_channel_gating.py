@@ -123,7 +123,13 @@ def test_simulated_stable_pre_rejected(argv) -> None:
 
 def test_simulated_prerelease_board_choices() -> None:
     result = run_cli_fresh(_PRERELEASE_VERSION, "fw", "--help")
-    assert result.board_choices == ["uno", "uno328pb", "leonardo", "py32f071"]
+    assert result.board_choices == [
+        "uno",
+        "uno328pb",
+        "leonardo",
+        "py32f071",
+        "micropetal_uno",
+    ]
 
 
 def test_simulated_prerelease_help_includes_py32_surface() -> None:
@@ -183,7 +189,7 @@ def test_board_choices_are_computed_at_import_not_cached_across_a_version_change
     assert stable.board_choices != prerelease.board_choices
     assert len(stable.board_choices) == 3
     assert "py32f071" not in stable.board_choices
-    assert len(prerelease.board_choices) == 4
+    assert len(prerelease.board_choices) == 5
     assert "py32f071" in prerelease.board_choices
 
 

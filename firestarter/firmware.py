@@ -82,16 +82,24 @@ HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 # no AVR bootloader and no avrdude support: it is flashed over USB DFU by
 # firestarter/py32_dfu.py, which needs no external binary. Unknown boards
 # default to avrdude so adding another AVR variant needs no change here.
+#
+# MicroPetal Uno does not use DFU. It uses the factory USB-HID ISP procedure
+# in the MicroPetal wiki page. The CLI cannot install on it and refuses with
+# a pointer to that page.
 # ---------------------------------------------------------------------------
 
 FLASH_METHOD_AVRDUDE = "avrdude"
 FLASH_METHOD_DFU = "dfu"
+FLASH_METHOD_MANUAL = "manual"
+
+MICROPETAL_WIKI_URL = "https://github.com/henols/firestarter/wiki/MicroPetal-Uno"
 
 _BOARD_FLASH_METHODS = {
     "uno": FLASH_METHOD_AVRDUDE,
     "uno328pb": FLASH_METHOD_AVRDUDE,
     "leonardo": FLASH_METHOD_AVRDUDE,
     "py32f071": FLASH_METHOD_DFU,
+    "micropetal_uno": FLASH_METHOD_MANUAL,
 }
 
 # Methods that talk to the chip over USB directly and therefore need no serial
@@ -116,6 +124,14 @@ _PORTLESS_FLASH_METHODS = frozenset({FLASH_METHOD_DFU})
 def flash_method(board: str | None) -> str:
     """Return the install method for a board name (case-insensitive)."""
     return _BOARD_FLASH_METHODS.get((board or "").lower(), FLASH_METHOD_AVRDUDE)
+
+
+def manual_install_message(board: str) -> str:
+    """The refusal text for a board that the CLI cannot install on."""
+    return (
+        f"The CLI cannot install firmware on board {board!r}. Use the "
+        f"USB-HID ISP procedure on the wiki page: {MICROPETAL_WIKI_URL}"
+    )
 
 
 def asset_candidates(board: str) -> list[str]:
@@ -765,17 +781,17 @@ class FirmwareManager:
     def _hint_dfu_board() -> None:
         """If a USB DFU device is on the bus, say so — never raise.
 
-        A PY32F071 in bootloader mode presents no serial port, so the generic
-        "cannot determine port" error is misleading if the operator forgot
-        `--board py32f071`.
+        A py32f071 board in DFU bootloader mode presents no serial port, so
+        the generic "cannot determine port" error is misleading if the
+        operator forgot `--board py32f071`. MicroPetal Uno does not use DFU.
         """
         try:
             from firestarter.py32_dfu import dfu_device_present
 
             if dfu_device_present():
                 logger.info(
-                    "A USB DFU device is attached. If this is a PY32F071 board in "
-                    "bootloader mode, install with: firestarter fw --install "
+                    "A USB DFU device is attached. If this is a py32f071 board in "
+                    "DFU bootloader mode, install with: firestarter fw --install "
                     "--board py32f071"
                 )
         except Exception:  # a hint must never break the flow
@@ -818,6 +834,8 @@ class FirmwareManager:
         The AVR path is unchanged and still owns its own port/profile handling;
         only the choice of flasher moved out of `manage_firmware_update`.
         """
+        if flash_method(board) == FLASH_METHOD_MANUAL:
+            raise FirmwareOperationError(manual_install_message(board))
         if flash_method(board) == FLASH_METHOD_DFU:
             return self._install_with_dfu(hex_file_path, board, usb_id=usb_id)
         return self._install_with_avrdude(
@@ -882,6 +900,14 @@ class FirmwareManager:
             )
             return False
 
+        # The CLI has no install path for a manual board. Refuse before the
+        # release lookup and the download.
+        method = flash_method(board_to_use)
+        force_install = flags & FLAG_FORCE
+        if method == FLASH_METHOD_MANUAL and (install_flag or force_install):
+            logger.error(manual_install_message(board_to_use or ""))
+            return False
+
         # Flash the port the identity CAME FROM; fall back to the override only
         # when nothing was identified (the blind-install path below).
         #
@@ -900,7 +926,6 @@ class FirmwareManager:
         # are the same port by construction. When there is no identity there is
         # nothing to mismatch, and the operator's named port is used.
         port_to_use = connected_port or port_override
-        method = flash_method(board_to_use)
         if not port_to_use and method not in _PORTLESS_FLASH_METHODS:
             logger.error(
                 "Cannot determine port for programmer. Please specify with --port."
@@ -945,7 +970,6 @@ class FirmwareManager:
             allow_newer=allow_newer_firmware,
         )
 
-        force_install = flags & FLAG_FORCE
         if not current_version and not install_flag and not force_install:
             logger.error(
                 "Could not determine current firmware version. Use --install or --force to proceed with installation."
@@ -1027,6 +1051,13 @@ class FirmwareManager:
         elif (
             not is_up_to_date and current_version and latest_version
         ):  # No flags, but update available
+            if method == FLASH_METHOD_MANUAL:
+                logger.info(
+                    f"New firmware {latest_version} available for {board_to_use} "
+                    f"(current: {current_version}). "
+                    f"{manual_install_message(board_to_use or '')}"
+                )
+                return True
             prompt = (
                 f"Install firmware {latest_version} for {board_to_use} (current: {current_version})?"
                 if mismatched

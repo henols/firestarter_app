@@ -638,6 +638,8 @@ class TestBoardRouting:
             ("leonardo", firmware.FLASH_METHOD_AVRDUDE),
             ("LEONARDO", firmware.FLASH_METHOD_AVRDUDE),
             ("py32f071", firmware.FLASH_METHOD_DFU),
+            ("micropetal_uno", firmware.FLASH_METHOD_MANUAL),
+            ("MICROPETAL_UNO", firmware.FLASH_METHOD_MANUAL),
             ("PY32F071", firmware.FLASH_METHOD_DFU),
             ("some-future-avr", firmware.FLASH_METHOD_AVRDUDE),
             (None, firmware.FLASH_METHOD_AVRDUDE),
@@ -941,3 +943,87 @@ class TestPortlessInstall:
             is True
         )
         assert called["avrdude"]["board"] == "leonardo"
+
+
+class TestMicroPetalManualInstall:
+    """MicroPetal Uno uses the USB-HID ISP procedure on the wiki, not DFU."""
+
+    @pytest.fixture(autouse=True)
+    def _prerelease_cli(self, monkeypatch):
+        monkeypatch.setattr("firestarter.__version__", "3.3.0b20")
+
+    def _manager(self, monkeypatch, identity):
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(fm, "check_current_firmware", lambda *a, **kw: identity)
+        monkeypatch.setattr(
+            fm, "fetch_release_info", lambda **kw: ("3.3.0b12", "http://x/fw.hex")
+        )
+        monkeypatch.setattr(
+            fm, "_download_firmware_file", lambda url: pytest.fail("downloaded")
+        )
+        monkeypatch.setattr(
+            fm, "_install_with_dfu", lambda *a, **kw: pytest.fail("DFU attempted")
+        )
+        monkeypatch.setattr(
+            fm, "_install_with_avrdude", lambda **kw: pytest.fail("avrdude attempted")
+        )
+        return fm
+
+    @pytest.mark.parametrize(
+        "identity",
+        [
+            (None, None, None),
+            ("/dev/ttyACM0", "3.3.0b11", "micropetal_uno"),
+            ("/dev/ttyACM0", "3.3.0b12", "micropetal_uno"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("install_flag", "flags"), [(True, 0), (False, firmware.FLAG_FORCE)]
+    )
+    def test_install_is_refused_with_wiki_pointer(
+        self, monkeypatch, caplog, identity, install_flag, flags
+    ):
+        fm = self._manager(monkeypatch, identity)
+        with caplog.at_level("ERROR"):
+            ok = fm.manage_firmware_update(
+                install_flag=install_flag,
+                flags=flags,
+                board_override="micropetal_uno",
+                board_explicit=True,
+            )
+        assert ok is False
+        assert firmware.MICROPETAL_WIKI_URL in caplog.text
+
+    def test_version_check_reports_up_to_date(self, monkeypatch, caplog):
+        fm = self._manager(monkeypatch, ("/dev/ttyACM0", "3.3.0b12", "micropetal_uno"))
+        with caplog.at_level("INFO"):
+            assert fm.manage_firmware_update() is True
+        assert "already up to date" in caplog.text
+
+    def test_version_check_points_to_wiki_and_does_not_prompt(
+        self, monkeypatch, caplog
+    ):
+        fm = self._manager(monkeypatch, ("/dev/ttyACM0", "3.3.0b11", "micropetal_uno"))
+        monkeypatch.setattr(
+            firmware.Confirm, "ask", lambda *a, **kw: pytest.fail("prompted")
+        )
+        with caplog.at_level("INFO"):
+            assert fm.manage_firmware_update() is True
+        assert "3.3.0b12" in caplog.text
+        assert firmware.MICROPETAL_WIKI_URL in caplog.text
+
+    def test_library_install_call_is_refused(self, monkeypatch):
+        fm = self._manager(monkeypatch, (None, None, None))
+        with pytest.raises(FirmwareOperationError, match="MicroPetal-Uno"):
+            fm._install_firmware(
+                hex_file_path="/tmp/fw.hex",
+                board="micropetal_uno",
+                avrdude_path_override=None,
+                avrdude_config_override=None,
+                target_port="/dev/ttyACM0",
+            )
+
+    def test_micropetal_accepts_only_the_hex_asset(self):
+        assert firmware.asset_candidates("micropetal_uno") == [
+            "firestarter_micropetal_uno.hex"
+        ]

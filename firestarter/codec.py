@@ -15,6 +15,7 @@ from typing import Any
 from firestarter.command_frame import REFUSALS
 from firestarter.constants import (
     COMMAND_NAMES,
+    FIXED_VREFINT_MV,
     REVISION_0,
     REVISION_1,
     REVISION_2_0,
@@ -119,6 +120,8 @@ def format_message(msg_id: int, params: list[Any], entry: MessageDef) -> str | N
       override==0xFF → "R1: {r1}, R2: {r2}, Bandgap: {n} mV, Bandgap count: {c}"
       override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str},
                         Bandgap: {n} mV, Bandgap count: {c}"
+      count==0 (no bandgap calibration) → the Bandgap clauses become
+                        "Reference: fixed internal 1200 mV"
       Override clause now routes through
       _REVISION_SILKSCREEN so the same byte that surfaces as "Rev 2.0-class"
       via MSG_OK_REV no longer surfaces as "Rev2" on the adjacent ack line.
@@ -151,6 +154,9 @@ def format_message(msg_id: int, params: list[Any], entry: MessageDef) -> str | N
             # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
             override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
             head += f", Override HW: {override_str}"
+        if params[4] == 0:
+            # No bandgap calibration: the board ignores the stored bandgap.
+            return f"{head}, Reference: fixed internal {FIXED_VREFINT_MV} mV"
         return f"{head}, Bandgap: {params[3]} mV, Bandgap count: {params[4]}"
 
     # Silkscreen-aware rendering for the two

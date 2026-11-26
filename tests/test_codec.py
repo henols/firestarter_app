@@ -49,6 +49,12 @@ class TestFormatMessageRevision:
         result = format_message(MSG_OK_CFG, [10000, 20000, 0xFF, 1100, 206], entry)
         assert result == "R1: 10000, R2: 20000, Bandgap: 1100 mV, Bandgap count: 206"
 
+    def test_msg_ok_cfg_without_bandgap_calibration(self):
+        """MSG_OK_CFG: count==0 → the fixed reference, not the stored bandgap."""
+        entry = CATALOG[MSG_OK_CFG]
+        result = format_message(MSG_OK_CFG, [10000, 20000, 0xFF, 1100, 0], entry)
+        assert result == "R1: 10000, R2: 20000, Reference: fixed internal 1200 mV"
+
     def test_msg_ok_cfg_with_override(self):
         """MSG_OK_CFG: override!=0xFF → adds ', Override HW: {silkscreen_str}'."""
         entry = CATALOG[MSG_OK_CFG]

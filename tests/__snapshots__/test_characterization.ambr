@@ -231,13 +231,13 @@
                                     --list, filters to stable releases only.
     --list                          List available firmware releases for the
                                     configured board.
-    -b, --board [uno|uno328pb|leonardo|py32f071]
+    -b, --board [uno|uno328pb|leonardo|py32f071|micropetal_uno]
                                     Microcontroller board (optional), defaults
                                     to 'uno'.
     --usb-id VID:PID                Restrict USB DFU install to one device, e.g.
-                                    1a86:8012 (py32f071 only).
+                                    1a86:8012 (board py32f071 only).
     --dfu-probe                     List attached USB DFU devices and exit
-                                    (py32f071 bootloader discovery).
+                                    (board py32f071 only).
     --avrdude-path TEXT             Full path to avrdude (optional), set if
                                     avrdude is not found.
     -c, --avrdude-config-path TEXT  Full path to avrdude config (optional), set
