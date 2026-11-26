@@ -3271,12 +3271,11 @@ class EpromOperator:
         # SRAM/FRAM are volatile or byte-rewritable; "blank" has no meaningful
         # concept for them.  Short-circuit with a clear message; do NOT touch the
         # wire protocol or firmware.
-        etype = eprom_data_dict.get("electrical-type", "")
-        proto = eprom_data_dict.get("protocol-id", 0)
-        if etype in ("SRAM", "FRAM") or proto in SRAM_PROTOCOL_IDS:
+        proto = eprom_data_dict.get("algorithm", 0)
+        if proto in SRAM_PROTOCOL_IDS:
             logger.warning(
                 f"Blank check is not applicable to {eprom_name.upper()} "
-                f"(electrical type: {etype or 'unknown'}, protocol: 0x{proto:02X}). "
+                f"(protocol: 0x{proto:02X}). "
                 "SRAM/FRAM are volatile or byte-rewritable — they have no "
                 "factory-blank state and the firmware has no blank-check op for them."
             )

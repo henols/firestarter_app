@@ -3477,6 +3477,7 @@ def _dispatch_multi_run(
                     eprom_data,
                     tmp_source_path,
                     address_str=_address_arg(region_start),
+                    preferred_port=getattr(operator, "last_write_port", None),
                     on_result=_capture_compare_result_verify,
                 )
                 verify_verdicts.append(verify_verdict)

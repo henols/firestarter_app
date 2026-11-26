@@ -150,6 +150,7 @@ class FakeChip:
         address_str: str | None = None,
         full: bool = False,
         *,
+        preferred_port: str | None = None,
         on_result: Any = None,
     ) -> int:
         # 202-01 D-10: int, 0 == match, 1 == mismatch (matches the real

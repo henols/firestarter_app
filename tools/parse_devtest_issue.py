@@ -197,9 +197,7 @@ NOT_REPORTED = "not reported"
 # `schema_version` by presence only, and a live fixture carries
 # `schema_version: "9.9-future"` that any ordering comparison would have to
 # survive). Pre-checked against `check_diagnostic_report_claims.py`'s
-# 14-entry `FORBIDDEN_PATTERNS` table and clean -- proven, not assumed, by
-# `test_parser_marker_strings_trip_no_forbidden_claim_pattern`. No claim
-# gate scans this file today (P-5); that test is the only enforcement.
+# 14-entry `FORBIDDEN_PATTERNS` table and clean.
 _NOT_ATTRIBUTABLE = (
     "NOT attributable to a firmware version -- ask the reporter for a "
     "fresh dev test run on a current host build"

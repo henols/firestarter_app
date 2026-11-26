@@ -384,6 +384,12 @@ def test_predicate_fails_open_on_absent_null_zero_and_non_integer_vdd() -> None:
     assert programming_vcc_over_rail_mv(None) is None
 
 
+def test_predicate_fails_open_on_a_non_dict_electrical() -> None:
+    """A merged local override can carry any JSON type for `electrical`."""
+    for bad in ("5V", 5000, ["vdd_mv", 9000]):
+        assert programming_vcc_over_rail_mv({"electrical": bad}) is None
+
+
 def test_injecting_a_synthetic_row_adds_one_to_the_total() -> None:
     """Non-vacuity, defect class closed: a census helper that silently
     matched anything -- an empty row list, a swallowed exception, a filter

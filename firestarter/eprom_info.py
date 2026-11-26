@@ -67,8 +67,11 @@ def programming_vcc_over_rail_mv(raw_config_data: dict | None) -> int | None:
     """
     if not raw_config_data:
         return None
+    electrical = raw_config_data.get("electrical")
+    if not isinstance(electrical, dict):
+        return None
     try:
-        vdd_mv = int((raw_config_data.get("electrical") or {}).get("vdd_mv", 0) or 0)
+        vdd_mv = int(electrical.get("vdd_mv", 0) or 0)
     except (TypeError, ValueError):
         return None
     if vdd_mv > _SHIELD_FIXED_VCC_MV:
