@@ -844,3 +844,54 @@ Three limits apply:
   with the `628256` row reads `false`.
 
 A new upstream row is not checked until someone checks it.
+
+## 13. Other `infoic.xml` fields and flag bits: what each one means, and what we use
+
+Counts are for the 938 rows that pass the filter in `build_db.py` (24 to 32 pins, no SMD), in
+`INFOIC2PLUS` at the pinned minipro commit. The meanings come from minipro `database.c` and
+`minipro.h`.
+
+### 13.1 `flags`
+
+| Bit | minipro name | Rows | Meaning | We use it |
+|---|---|---|---|---|
+| `0x10` | `MP_ERASE_MASK` | 492 | The part can be erased electrically | Yes (see §1 and the 28C discriminator) |
+| `0x20` | `MP_ID_MASK` | 566 | The part has a chip ID | No. The ID comes from `chip_id` |
+| `0x2000` | `MP_DATA_BUS_WIDTH` | 93 | 16-bit word size | No. Only AVR MCUs (type 2) set it in this set |
+| `0x4000` | `MP_OFF_PROTECT_BEFORE` | 149 | Disable software data protection before a write | Yes (`protect_off_before`) |
+| `0x8000` | `MP_PROTECT_AFTER` | 71 | Enable software data protection after a write | Yes (`protect_on_after`) |
+| `0x40000` | `MP_LOCK_BIT_WRITE_ONLY` | 14 | Lock bits can be written but not read | No (MCU only) |
+| `0x80000` | `MP_CALIBRATION` | 17 | The part has a calibration byte | No (MCU only) |
+| `0x100000` | `prog_support` = 1 | 118 | minipro programming-support level | No. Only MCU protocols `0x18`, `0x19`, `0x1a`, `0x1d` set it |
+
+Bits `0x8`, `0x40`, `0x100`, `0x200`, `0x400`, `0x400000`, `0x1000000` and `0x2000000` are set on
+some rows. minipro gives them no name, so they have no meaning for us. Do not use them.
+`0x1000` (`MP_DATA_MEMORY_ADDRESS`) is set on no row in this set.
+
+### 13.2 Size fields
+
+- `page_size` is the real write page, in bytes. `0x0001` means a byte-by-byte write.
+  `page_size` is the field that matters for #157 and #158.
+- `write_buffer_size` and `read_buffer_size` are the size of the USB transfer block that
+  minipro uses. They are not a chip property. Never use them as a page size. For example, the
+  AT28C64B row has `page_size=0x40` and `write_buffer_size=0x80`.
+- `pages_per_block` is not used by any memory protocol we support.
+- `data_memory_size` and `data_memory2_size` are the EEPROM and fuse areas of MCUs. They are zero
+  for 849 of the 938 rows.
+
+### 13.3 `blank_value`
+
+Only 25 rows set it. The rows that we looked at are bipolar fuse PROMs (74S474, 82S140 and
+similar), with `0x00`. The default is `0xFF`. None of these PROMs are in `chip_database.json`, so
+nothing uses `blank_value` today. If a bipolar PROM is added, the blank check must read this
+field.
+
+### 13.4 `chip_info`
+
+`0x0006` and `0x0007` mean that the programmer can adjust VCC (`0x0006`) or VPP (`0x0007`). The
+other values are not documented and we do not use them.
+
+### 13.5 `protocol_id` bit `0x80000000`
+
+This bit marks a custom protocol that minipro handles in its own code (12 rows). It is not a
+programming algorithm that Firestarter supports.
