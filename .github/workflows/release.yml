@@ -142,9 +142,19 @@ jobs:
           generate_release_notes: true
 
   # Uploads the same files that the GitHub release carries.
+  # Trusted publishing: PyPI accepts an OIDC token from this workflow in the
+  # `pypi` environment, so the repository holds no PyPI secret. The environment
+  # admits only refs that match `*.*.*`, and only the owner can create those
+  # tags, so a branch push or a write collaborator cannot publish.
   pypi:
     needs: build
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/firestarter
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -154,6 +164,5 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           # A re-run of a failed job must not fail on files already uploaded.
           skip-existing: true
