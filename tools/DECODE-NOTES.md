@@ -853,20 +853,30 @@ Counts are for the 938 rows that pass the filter in `build_db.py` (24 to 32 pins
 
 ### 13.1 `flags`
 
-| Bit | minipro name | Rows | Meaning | We use it |
-|---|---|---|---|---|
-| `0x10` | `MP_ERASE_MASK` | 492 | The part can be erased electrically | Yes (see §1 and the 28C discriminator) |
-| `0x20` | `MP_ID_MASK` | 566 | The part has a chip ID | No. The ID comes from `chip_id` |
-| `0x2000` | `MP_DATA_BUS_WIDTH` | 93 | 16-bit word size | No. Only AVR MCUs (type 2) set it in this set |
-| `0x4000` | `MP_OFF_PROTECT_BEFORE` | 149 | Disable software data protection before a write | Yes (`protect_off_before`) |
-| `0x8000` | `MP_PROTECT_AFTER` | 71 | Enable software data protection after a write | Yes (`protect_on_after`) |
-| `0x40000` | `MP_LOCK_BIT_WRITE_ONLY` | 14 | Lock bits can be written but not read | No (MCU only) |
-| `0x80000` | `MP_CALIBRATION` | 17 | The part has a calibration byte | No (MCU only) |
-| `0x100000` | `prog_support` = 1 | 118 | minipro programming-support level | No. Only MCU protocols `0x18`, `0x19`, `0x1a`, `0x1d` set it |
+Confidence: **P** = proven by a datasheet pair, **C** = proven only as a census correlation,
+**U** = unknown (the vendor firmware is closed and no datasheet pair separates the rows).
+Datasheets are in `datasheets/`.
 
-Bits `0x8`, `0x40`, `0x100`, `0x200`, `0x400`, `0x400000`, `0x1000000` and `0x2000000` are set on
-some rows. minipro gives them no name, so they have no meaning for us. Do not use them.
-`0x1000` (`MP_DATA_MEMORY_ADDRESS`) is set on no row in this set.
+| Bit | minipro name | Rows | Meaning | Conf. | We use it |
+|---|---|---|---|---|---|
+| `0x8` and `0x40` | none | 674 / 673 | Same row set (differs on about 4 rows). Set on UV-EPROM style parts (27xx, AM2716, M27C1001) and on `0x08`/`0x0D`/`0x10` rows. Clear on every SRAM, NVRAM and 28C64/28C16 row. Marks the EPROM-style timing class | C | No |
+| `0x10` | `MP_ERASE_MASK` | 492 | The part has an electrical chip-erase mode. AT28C64B has the 12 V Chip Erase mode and the bit. CAT28C64B has no chip-erase mode and no bit | P | Wrongly used as a "28C part" marker in `classify()` (see §1). Many 28C parts lack it (CAT28C64A/B, CAT28C256) |
+| `0x20` | `MP_ID_MASK` | 566 | The vendor programmer reads and checks the ID. It is not "the chip has an ID": EN29F002A documents an ID read (manufacturer `7F 1C`) and the bit is clear. AM29F002B has it set | P | No. The ID comes from `chip_id` |
+| `0x2000` | `MP_DATA_BUS_WIDTH` | 93 | 16-bit word size. Only AVR MCUs set it in this set | C | No |
+| `0x4000` | `MP_OFF_PROTECT_BEFORE` | 149 | Sector or software protection can block a write, so the programmer sends "protect off" first. On `0x0D` and `0x07` rows the datasheets show SDP (AT28C64B, CAT28C64B, both flagged). On `0x06` flash it is set on every row with `chip_info` `0xE3` or `0xE4` and never on the others (421 of 421) | P (28C), C (flash) | Yes (`protect_off_before`) |
+| `0x8000` | `MP_PROTECT_AFTER` | 71 | The programmer can enable protection after a write (SDP enable). Set on the `0x05` and `0x0D` rows | C | Yes (`protect_on_after`) |
+| `0x200` | none | 324 | On `0x06` rows it equals `0x4000` and `chip_info` `0xE3`/`0xE4` on every row (421 of 421). It is the same family marker, not an independent capability. AM29F002B, EN29F002A and HY29F040A set it. AM29F040B and A29040 do not, although the AM29F040B datasheet also describes sector protect and unprotect, so the datasheet text does not separate the two groups | C, reason U | No |
+| `0x400000` | none | 101 + 50 | Set on 100% of `0x05` rows and on `0x34` rows only. A protocol-family constant, no per-chip information | C | No |
+| `0x1000000` | none | 75 | In the parallel set it appears only on `0x34` rows (x16 parts such as AT29C1024, MX23C3211). Elsewhere on x16 serial EEPROMs. A 16-bit organisation marker | C | No (we refuse `0x34`) |
+| `0x100`, `0x400`, `0x800`, `0x10000`, `0x2000000` | none | | Never set on a parallel row. MCU, eMMC and PLD markers | C | No |
+| `0x1000` | `MP_DATA_MEMORY_ADDRESS` | 0 | Not set in this set | | No |
+| `0x40000` | `MP_LOCK_BIT_WRITE_ONLY` | 14 | Lock bits can be written but not read | | No (MCU only) |
+| `0x80000` | `MP_CALIBRATION` | 17 | The part has a calibration byte | | No (MCU only) |
+| `0x100000` | `prog_support` = 1 | 118 | minipro support level. Only MCU protocols `0x18`, `0x19`, `0x1a`, `0x1d` | | No |
+
+Not resolved: why the vendor sets `0x20` on AM29F002B and clears it on EN29F002A, and what `0x8`
+and `0x40` each do alone. No datasheet pair separates them, because the two bits are identical
+on every parallel row.
 
 ### 13.2 Size fields
 
@@ -888,8 +898,13 @@ field.
 
 ### 13.4 `chip_info`
 
-`0x0006` and `0x0007` mean that the programmer can adjust VCC (`0x0006`) or VPP (`0x0007`). The
-other values are not documented and we do not use them.
+`0x0006` and `0x0007` mean that the programmer can adjust VCC (`0x0006`) or VPP (`0x0007`).
+minipro reads only these two. On the parallel rows `0x0006` is set on the 27C rows only.
+`0x00E3` (169 rows) and `0x00E4` (155 rows) appear only on `0x06` flash that also has `0x4000` and
+`0x200`. They split by vendor, not by size or variant: `0x00E3` is Hynix, ST (M29F040B), Mosel
+and Winbond-style parts, `0x00E4` is AMD/Spansion, Eon and Macronix parts. We read them as a
+vendor algorithm sub-variant of the protect/unprotect sequence (conf. U). `0x0098` (52 rows) is on
+`0x34` only. We do not use `chip_info`.
 
 ### 13.5 `protocol_id` bit `0x80000000`
 
