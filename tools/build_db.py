@@ -1056,24 +1056,9 @@ def main():
                         "protect_off_before": True if (flags & 0x4000) else False,
                         "protect_on_after": True if (flags & 0x8000) else False,
                         "infoic_page_size_raw": raw_page_size,
-                        # page_size is keyed on PROVENANCE, not on the part: an
-                        # upstream record filed under 0x07/0x0B says nothing about
-                        # a 28C page buffer. Reads _upstream_proto_id, captured
-                        # before classify() reassigns it — so rows promoted into
-                        # 0x0D from another protocol never match, and keep the
-                        # firmware's AT28C floor.
-                        #
-                        # The one exception is DIP24_2816. Its upstream records
-                        # carry the real write granularity (1 = byte write, 16 on
-                        # X2816B/C and XLE28C16B), and without it the 0x0D
-                        # handler's 64-byte floor loads bytes during the write
-                        # cycle of a byte-write part, so every write fails.
-                        **(
-                            {"page_size": raw_page_size}
-                            if _upstream_proto_id in (0x0D, 0x05)
-                            or pinout_key == "DIP24_2816"
-                            else {}
-                        ),
+                        # page_size is the infoic write page for every row,
+                        # with no per-part exception (DECODE-NOTES.md §13.2).
+                        **({"page_size": raw_page_size} if raw_page_size else {}),
                     },
                     "pinout": pinout_key,
                 }

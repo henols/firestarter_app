@@ -882,6 +882,8 @@ on every parallel row.
 
 - `page_size` is the real write page, in bytes. `0x0001` means a byte-by-byte write.
   `page_size` is the field that matters for #157 and #158.
+  The generator emits it for every row exactly as infoic gives it, and omits it only when infoic
+  gives 0. No per-part exception and no override exists for it.
 - `write_buffer_size` and `read_buffer_size` are the size of the USB transfer block that
   minipro uses. They are not a chip property. Never use them as a page size. For example, the
   AT28C64B row has `page_size=0x40` and `write_buffer_size=0x80`.
