@@ -16,7 +16,7 @@ This repository holds `firestarter`, the command-line tool of the Firestarter EP
 - [DEVELOPMENT.md](https://github.com/henols/firestarter_app/blob/main/DEVELOPMENT.md): set up a
   development install, run the checks, and build the chip database.
 - [tools/DECODE-NOTES.md](https://github.com/henols/firestarter_app/blob/main/tools/DECODE-NOTES.md):
-  how the database generator decodes the minipro `infoic.xml` fields.
+  how the database generator decodes the downloaded `infoic.xml` fields.
 
 ## Project
 

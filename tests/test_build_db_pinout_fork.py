@@ -111,7 +111,7 @@ def _zif_mask(spec):
     return frozenset(pins)
 
 
-# Masks copied from infoic.xml <maps> (pinned minipro a8efaedc).
+# Masks copied from infoic.xml <maps> (pinned revision a8efaedc).
 _MAP_9 = _zif_mask("2-15,25-37,39-40")  # 28C512/28C010, 29F010, 28F010
 _MAP_10 = _zif_mask("1-15,25-37,39-40")  # 27C010
 _MAP_18 = _zif_mask("3-13,27-34,36-37,39-40")  # 28C16/28C17

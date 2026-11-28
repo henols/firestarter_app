@@ -11,7 +11,7 @@ import requests
 # deterministic and the baseline re-pin is reproducible. Was /-/raw/master/ —
 # switched to the pinned commit at DECODE-NOTES.md §3 discretion. Short form:
 # a8efaedc.
-MINIPRO_XML_URL = (
+CHIP_CATALOG_URL = (
     "https://gitlab.com/DavidGriffith/minipro/-/raw/"
     "a8efaedc236c1d9718bd28299dfbb99536b010ff/infoic.xml"
 )
@@ -31,7 +31,7 @@ DATASHEET_OVERRIDES_FILE = os.path.join(
 
 # This map translates the numeric protocol ID from upstream's XML
 # into a human-readable string that Firestarter's database uses.
-# [VERIFIED: minipro database.h#L24-L77 @ a8efaedc — IC2_ALG_* constants]
+# [VERIFIED: upstream database.h#L24-L77 @ a8efaedc — IC2_ALG_* constants]
 PROTOCOL_MAP = {
     0x05: "FLASH_AMD_STD",  # IC2_ALG_F29EE
     0x06: "FLASH_AMD_ALT",  # IC2_ALG_W29F32P
@@ -51,7 +51,7 @@ PROTOCOL_MAP = {
     # 0x2E: IC2_ALG_PIC32X_2 — PIC32 MCU (type=2); no DIP memory chips
     # 0x35: IC2_ALG_ITE  — ITE EC MCU TQFP128 (type=2); no DIP memory chips
     # 0x39: NO IC2_ALG CONSTANT — phantom; INFOIC2PLUS-unreachable
-    # 0x3C: NOT IN MINIPRO SOURCE — invented; remove entirely
+    # 0x3C: NOT IN UPSTREAM SOURCE — invented; remove entirely
 }
 
 VPP_MV = {
@@ -326,7 +326,7 @@ def decode_vpp_mv(voltages):
 def vpp_byte_vcc_mv(voltages):
     """The VCC that the low nibble of the VPP byte selects, or None.
 
-    minipro sends that nibble to the T48/T56 as its own byte, except when the
+    the upstream implementation sends that nibble to the T48/T56 as its own byte, except when the
     VPP byte is 0xF0-0xFF, where the whole byte is the VPP index. Its values
     are VCC_VOLTAGES indices: 0x1 (3.3V) on the LV/BV/VF parts, 0x8 (3.0V) on
     SST39VF040. See DECODE-NOTES.md §9.6.
@@ -369,7 +369,7 @@ def resolve_pinout_key(
 ):
     """Resolve the firestarter pinout key for a chip.
 
-    A pure function of decoded minipro fields (pin_count, pm_idx, variant_lo,
+    A pure function of decoded catalog fields (pin_count, pm_idx, variant_lo,
     type_int, mem_size, proto_id, pin_map_raw) — no per-IC names, no per-family
     tables. pm_idx is the low byte of infoic.xml's pin_map attribute and
     identifies the layout cluster; variant_lo (variant & 0xFF) sub-discriminates
@@ -494,10 +494,10 @@ def resolve_pinout_key(
 def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
     """The sole chip-classification path.
 
-    Keyed on the fields minipro itself classifies by: `type` (MP_MEMORY=0x01 /
+    Keyed on the fields the upstream implementation classifies by: `type` (MP_MEMORY=0x01 /
     MP_SRAM=0x04), `protocol_id` (the algorithm/dispatch axis), `pm_idx`
     (layout cluster, also used by resolve_pinout_key) and `flags` (bit 0x10 =
-    electrically erasable). The variant HIGH byte is minipro's T56/T76
+    electrically erasable). The variant HIGH byte is the upstream implementation’s T56/T76
     `algo_number` and is deliberately NOT an input — see DECODE-NOTES.md §2.
 
     Returns (etype, algorithm, pinout_key) where:
@@ -521,7 +521,7 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
           non-dispatchable. See DECODE-NOTES.md §4.
       5. default → UV-EPROM, algorithm proto_id.
 
-    [minipro minipro.h MP_SRAM=0x04; database.c variant>>8 = algo_number]
+    [upstream constants header MP_SRAM=0x04; database.c variant>>8 = algo_number]
     """
     # 1. SRAM / FRAM / NVRAM class (was Rule 3). type=4 (MP_SRAM) is authoritative.
     if type_int == 4 or proto_id in {0x0E, 0x27, 0x28, 0x29}:
@@ -574,7 +574,7 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
 
 
 def interpret_timing(raw_hex, protocol_id):
-    # [VERIFIED: minipro database.c#L866 @ a8efaedc]
+    # [VERIFIED: upstream database.c#L866 @ a8efaedc]
     # Raw pulse_delay is microseconds for ALL protocols — no multiplier.
     # Contract: returns an int, always microseconds.
     # `0` means "algorithm-controlled" (protocols that do not consume
@@ -758,13 +758,22 @@ def apply_datasheet_override(
 
 
 def main():
-    print(f"Fetching database from: {MINIPRO_XML_URL}")
+    print("Downloading pinned chip catalog (infoic.xml)...")
     try:
-        r = requests.get(MINIPRO_XML_URL, timeout=30)
+        r = requests.get(CHIP_CATALOG_URL, timeout=30)
         r.raise_for_status()
+    except requests.RequestException as exc:
+        response = exc.response
+        detail = (
+            f"HTTP {response.status_code}" if response is not None else type(exc).__name__
+        )
+        print(f"Error downloading chip catalog: {detail}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
         root = ET.fromstring(r.content)
-    except Exception as e:
-        print(f"Error: {e}")
+    except ET.ParseError as exc:
+        print(f"Error parsing chip catalog XML: {exc}", file=sys.stderr)
         sys.exit(1)
 
     complete_db = {}
@@ -813,7 +822,7 @@ def main():
                 voltages = int(ic.get("voltages"), 16)
                 mem_size = int(ic.get("code_memory_size"), 16)
                 # pm_idx: low byte of upstream pin_map field — clusters chips by
-                # physical layout family (per minipro infoic.xml schema). Used by
+                # physical layout family (per the catalog schema). Used by
                 # resolve_pinout_key as the primary chip-family selector.
                 pin_map_raw = int(ic.get("pin_map", "0"), 16)
                 pm_idx = pin_map_raw & 0xFF
@@ -1049,7 +1058,7 @@ def main():
                         "chip_id_check": True if (flags & 0x20) else False,
                         "chip_id_value": ic.get("chip_id"),
                         # flags bit 14 = MP_OFF_PROTECT_BEFORE, bit 15 =
-                        # MP_PROTECT_AFTER [minipro src/database.c]. Decoded from
+                        # MP_PROTECT_AFTER [upstream src/database.c]. Decoded from
                         # this <ic>'s own attributes, and emitted for EVERY entry
                         # rather than just the 0x0D bucket — a flat attribute
                         # decode, gated on nothing.
@@ -1101,7 +1110,7 @@ def main():
                 if _unsupported_reason:
                     chip_entry["unsupported_reason"] = _unsupported_reason
 
-                # Static-memory parts have ONE supply rail, so minipro's
+                # Static-memory parts have ONE supply rail, so the upstream implementation’s
                 # vcc (read) vs vdd (program) split is meaningless for them and
                 # upstream's lower test-rail vcc misreports the real supply. The
                 # shield feeds SRAM-class parts a fixed 5V, which is vdd.

@@ -428,9 +428,8 @@
     -a, --address TEXT        Write start address in dec/hex
     --vpe-as-vpp              Use VPE as VPP voltage
     --pulse-us INTEGER RANGE  Override the database program-pulse width for this
-                              run (microseconds, 1-65535). This bound is minipro
-                              parity (-o pulse=N is a uint16), NOT a wire-type
-                              or hardware limit -- see write()'s docstring.
+                              run (microseconds, 1-65535). This is a CLI
+                              compatibility range, not a wire or hardware limit.
                               [1<=x<=65535]
     --skip-sdp-unlock         Decline the automatic SDP unlock firmware performs
                               at the start of every protocol-0x0D write.
@@ -1536,9 +1535,8 @@
     -a, --address TEXT        Write start address in dec/hex
     --vpe-as-vpp              Use VPE as VPP voltage
     --pulse-us INTEGER RANGE  Override the database program-pulse width for this
-                              run (microseconds, 1-65535). This bound is minipro
-                              parity (-o pulse=N is a uint16), NOT a wire-type
-                              or hardware limit -- see write()'s docstring.
+                              run (microseconds, 1-65535). This is a CLI
+                              compatibility range, not a wire or hardware limit.
                               [1<=x<=65535]
     --skip-sdp-unlock         Decline the automatic SDP unlock firmware performs
                               at the start of every protocol-0x0D write.

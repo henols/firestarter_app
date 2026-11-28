@@ -129,8 +129,8 @@ that value. If the ack has no size, the host uses 512.
 
 ### Database Pipeline
 
-`tools/build_db.py` **downloads** `infoic.xml`, the minipro chip database XML. `MINIPRO_XML_URL`
-pins the download to minipro commit `a8efaedc`, so the build is reproducible. This repository has
+`tools/build_db.py` downloads the chip catalog, `infoic.xml`. `CHIP_CATALOG_URL` pins the
+revision to `a8efaedc` so the build is reproducible. This repository has
 no copy of the XML. The script writes `firestarter/data/chip_database.json`.
 
 Two files add to the generated data. Do not change a generated row in any other place:

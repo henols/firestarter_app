@@ -73,7 +73,7 @@ class TestVariantDecodeClassification:
                   closes this gap. The RED expectation is recorded in 86-01-SUMMARY.
 
     Source grounding: tools/DECODE-NOTES.md §4 (X88C64) + §5 (FM1608);
-    minipro minipro.h#L70 MP_SRAM=0x04; database.c#L1918 (high byte = algo_number,
+    upstream constants header#L70 MP_SRAM=0x04; database.c#L1918 (high byte = algo_number,
     NOT a classifier). Locked taxonomy strings are unchanged.
     """
 

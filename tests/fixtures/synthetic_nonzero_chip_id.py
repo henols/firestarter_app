@@ -55,7 +55,7 @@ SYNTHETIC_CHIP_NAME = "AT28C256"
 
 # Any nonzero value -- the real entry's own `chip-id` is 0 (the sentinel
 # `derive_plan` reads as "no chip-id in DB entry"). Deliberately NOT a real
-# minipro chip-id value scraped from some other chip's entry: this constant
+# catalog chip-id value scraped from some other chip's entry: this constant
 # must read, in-source, as synthetic, never as a second real chip's
 # identity smuggled in under AT28C256's name.
 SYNTHETIC_CHIP_ID = 0xBEEF

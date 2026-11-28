@@ -14,8 +14,7 @@ GATE-02 Per-chip Diff Report
       to route through configure_eeprom28c (5V-only, no VPP assertion).
       [CITED: .planning/v1.0-MILESTONE-AUDIT.md §WARNING-5]
     Rule 3: fm1608 FRAM chips corrected to algo=0x29 (SRAM_512K_1M).
-      [VERIFIED: minipro database.c @ a8efaedc —
-       https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c]
+      [VERIFIED: upstream database.c @ a8efaedc]
   Affected part_numbers (4):
     2732,2732A,M2732,M2732A
     M2716,M2716M
@@ -26,8 +25,7 @@ GATE-02 Per-chip Diff Report
   BUG-3 vcc/vdd label swap only — inverted field labels corrected.
     bits 11-8 = vcc (VCC supply voltage), bits 15-12 = vdd (VDD programming voltage).
     Previously the decode had these reversed.
-    [VERIFIED: minipro database.c#L921-L923 @ a8efaedc —
-     https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L921]
+    [VERIFIED: upstream database.c#L921-L923 @ a8efaedc]
   Affected part_numbers (1):
     FM1608
 
@@ -35,7 +33,7 @@ GATE-02 Per-chip Diff Report
   Variant-decode consolidation (Phase 86 VAR-02) — Rule 1/2/3 replaced by a
     single principled classify(type,proto,pm_idx,flags,pinout).
     The override stack is gone; electrical.type/algorithm/pinout are now derived
-    once from the fields minipro itself uses to classify a device. Two effects
+    once from the fields the upstream implementation uses to classify a device. Two effects
     land here as electrical.type-only deltas:
       (a) 68 5V-EEPROM-pinout chips (proto 0x0D, configure_eeprom28c, no VPP)
           decode Flash/EEPROM -> EEPROM. The old two-pass mapped proto 0x0D to
@@ -46,13 +44,11 @@ GATE-02 Per-chip Diff Report
           classify() arm 4b. Display-only: the chip stays
           support_status=protocol-not-implemented and non-dispatchable; algorithm
           (0x34) and pinout unchanged.
-    The variant HIGH byte is minipro's T56/T76 algo-file selector, NOT a
+    The variant HIGH byte is the upstream implementation’s T56/T76 algo-file selector, NOT a
     classification axis — classify() keys on type/proto/pm_idx/flags.
-    [VERIFIED: minipro database.c#L1918 @ a8efaedc —
-     uint8_t algo_number = (uint8_t)(device->variant >> 8) —
-     https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L1918]
-    [VERIFIED: minipro minipro.h#L70 MP_SRAM=0x04 —
-     https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/minipro.h#L70]
+    [VERIFIED: upstream database.c#L1918 @ a8efaedc —
+     uint8_t algo_number = (uint8_t)(device->variant >> 8)]
+    [VERIFIED: upstream constants header#L70 MP_SRAM=0x04]
     [CITED: tools/DECODE-NOTES.md §2 (high byte) / §4 (X88C64) / §5 (FM1608)]
   Affected part_numbers (67):
     AM28C16A
@@ -149,7 +145,7 @@ GATE-02 Per-chip Diff Report
 
   Non-upstream chip supplement (Phase 86 VAR-05 / D-10) — 2516 + 2532.
     These are physically-real 24-pin UV-EPROM oddballs that are ABSENT from
-    minipro's infoic.xml entirely (no upstream record at all). They ship
+    upstream `infoic.xml` entirely (no upstream record at all). They ship
     first-class in chip_database.json via the curated, provenance-cited
     supplement tools/extra_chips.json, which build_db.py merges AFTER the
     infoic.xml decode loop (NOT routed through classify()/resolve_pinout_key —

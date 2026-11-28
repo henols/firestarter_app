@@ -2,20 +2,19 @@
 
 # DECODE-NOTES.md: how `build_db.py` decodes `infoic.xml`
 
-This document records how `tools/build_db.py` decodes the fields of the minipro `infoic.xml` chip
+This document records how `tools/build_db.py` decodes the fields of the upstream `infoic.xml` chip
 catalog. For each field, it gives the decode rule and the upstream source that supports the rule.
 It covers the `variant` field (low byte and high byte), `pulse_delay`, the `voltages` word, and
 the VPP rails that the RURP shield can supply.
 
-A `[VERIFIED: minipro database.c#Lxxx @ <SHA>]` marker cites one upstream source line at one
+A `[VERIFIED: upstream database.c#Lxxx @ <SHA>]` marker cites one upstream source line at one
 upstream commit. `build_db.py` and `diff_db.py` use the same marker.
 
 ---
 
 ## 0. The pinned upstream commit
 
-`build_db.py` downloads the chip catalog from minipro on GitLab. `MINIPRO_XML_URL` pins the
-download to one minipro commit:
+`build_db.py` downloads the chip catalog. `CHIP_CATALOG_URL` pins the download to this revision:
 
 ```
 a8efaedc236c1d9718bd28299dfbb99536b010ff
@@ -77,15 +76,15 @@ before the `0x07`/`0x08` arm: map 13 gives `DIP32_SST39SF040`, and every other m
 
 ---
 
-## 2. HIGH byte: `variant >> 8` (minipro T56/T76 `algo_number`), NOT a classifier
+## 2. HIGH byte: `variant >> 8` (T56/T76 `algo_number`), NOT a classifier
 
 ### 2.1 The source-grounded truth
 
-The variant **high** byte is minipro's **`algo_number`**. It selects one FPGA algorithm file for
-the **T56/T76** programmers, inside one protocol. Minipro uses it at exactly one place:
+The variant **high** byte is the upstream implementation’s **`algo_number`**. It selects one FPGA algorithm file for
+the **T56/T76** programmers, inside one protocol. The upstream implementation uses it at exactly one place:
 
 ```c
-// minipro src/database.c#L1918 — function get_algorithm()
+// upstream src/database.c#L1918 — function get_algorithm()
 uint8_t algo_number = (uint8_t)(device->variant >> 8);
 ...
 // database.c#L1953-L1981
@@ -94,20 +93,19 @@ char *name = stpcpy(algorithm->name, entry);   // entry = algo_table[protocol_id
 strcat(name, algo_str);                          // e.g. "ROM28P" + "41" => "ROM28P41"
 ```
 
-`[VERIFIED: minipro database.c#L1918-L1985 @ a8efaedc —
-https://gitlab.com/DavidGriffith/minipro/-/raw/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c]`
+`[VERIFIED: upstream database.c#L1918-L1985 @ a8efaedc]`
 
 - `algo_table` (`database.c#L334`) uses **`protocol_id`** as its index, NOT the variant high byte.
   The high byte is a **hex suffix** on the algorithm name of the protocol. The suffix selects one
   algorithm or bitstream file for the T56/T76 programmer firmware.
-- On the TL866II and RURP path, minipro does **not** read the high byte for classification,
+- On the TL866II and RURP path, the upstream implementation does **not** read the high byte for classification,
   electrical type, pinout or VPP. `variant` occurs at exactly two sites in `database.c`: L585
   (parse) and L1918 (the `>>8` above).
 
 **Conclusion:** the high byte selects a programmer algorithm file. It is **not** a memory-class
 code. `build_db.py` does **NOT** derive `electrical.type`, `algorithm` or `pinout` from it.
 Classification uses **`type`**, **`protocol_id`**, **`pm_idx`** and **`flags`**. These are the
-fields that minipro itself uses to classify a device.
+fields that the upstream implementation uses to classify a device.
 
 ### 2.2 Full high-byte census (659 unique DIP-parallel chips, INFOIC2PLUS filter)
 
@@ -171,7 +169,7 @@ as FM1608 and AT28C64 (shared `0x4126`) need a different `electrical.type`. Use
 
 - The pinned SHA `a8efaedc236c1d9718bd28299dfbb99536b010ff` (§0) is the provenance of each
   regeneration.
-- `MINIPRO_XML_URL` in `build_db.py` uses `/-/raw/a8efaedc236c1d9718bd28299dfbb99536b010ff/`, not
+- `CHIP_CATALOG_URL` in `build_db.py` uses `/-/raw/a8efaedc236c1d9718bd28299dfbb99536b010ff/`, not
   `/-/raw/master/`. The download is therefore deterministic.
 
 ---
@@ -208,7 +206,7 @@ FM1608: type=4  protocol_id=0x07  variant=0x4126  flags=0x00000000
         voltages=0x0100  pin_map=0 (pm_idx=0)  size=0x2000
 ```
 
-`type == 4` (`MP_SRAM`, `[VERIFIED: minipro minipro.h#L70 @ a8efaedc]`) is the signal for the
+`type == 4` (`MP_SRAM`, `[VERIFIED: upstream constants header#L70 @ a8efaedc]`) is the signal for the
 FRAM/NVRAM class. The variant is **not** that signal. For type=4 chips, the classifier writes
 `algorithm = 0x28` (decimal 40, `SRAM_STD`) and pinout `DIP28_6264`.
 
@@ -264,10 +262,9 @@ Old notes sometimes say "FM1608 0x40". That mixes decimal 40 and hex 0x28. The t
 
 ## 7. Sources
 
-- minipro `src/database.c` @ a8efaedc: `variant>>8 = algo_number` (L1918), `algo_table` (L334),
+- upstream `src/database.c` @ a8efaedc: `variant>>8 = algo_number` (L1918), `algo_table` (L334),
   variant parse (L585).
-  https://gitlab.com/DavidGriffith/minipro/-/raw/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c
-- minipro `src/minipro.h` @ a8efaedc: `MP_MEMORY=0x01 … MP_SRAM=0x04` (L67-74).
+- upstream constants header @ a8efaedc: `MP_MEMORY=0x01 … MP_SRAM=0x04` (L67-74).
 - `infoic.xml` @ a8efaedc: INFOIC2PLUS survey of 659 unique DIP-parallel chips, and the FM1608 and
   X88C64P ground-truth tuples.
 
@@ -359,7 +356,7 @@ classify()]`. Three lookups read the same 16-bit `voltages` word:
   4.5 V in the low nibble of the VPP byte replaces it (§9.6).
 - `_d_vdd_mv` reads bits 15-12. It looks up `VCC_VOLTAGES`, with default `5000`.
 
-Each table has a `[VERIFIED: minipro <file>#<lines> @ a8efaedc — <array>[]]` marker. The marker
+Each table has a `[VERIFIED: upstream <file>#<lines> @ a8efaedc — <array>[]]` marker. The marker
 names the upstream C array that the table copies.
 
 ### 9.2 The two tables
@@ -384,7 +381,7 @@ decode never uses `tl866a_*`. That is a different encoding. It conflicts on 4 of
 indices and on 8 of 8 shared VPP indices.
 
 **A wrong citation, now removed.** `VCC_VOLTAGES` and the `_VCC_MARGIN_RAIL_MV` block below it
-carried the same marker, `[VERIFIED: minipro database.c#L130-L135 @ a8efaedc —
+carried the same marker, `[VERIFIED: upstream database.c#L130-L135 @ a8efaedc —
 tl866ii_vcc_voltages[]]`. At the pinned SHA, lines 130-135 are `tl866a_vpp_voltages[]` and the
 start of `tl866a_vcc_voltages[]`. `tl866ii_vcc_voltages[]` is at L154-L159, and
 `xg_vcc_voltages[]` is at L182-L190. Both copies named the wrong table and the wrong lines. Both are
@@ -478,14 +475,14 @@ out of the group, so the shipped database has 24 rows with `vdd_mv < vcc_mv`, al
 - **The low nibble of the VPP byte is not a flag field.** An earlier version of this section read
   it as option flags. §9.6 shows that it is a VCC index.
 - Upstream names two powerdown bits: `LAST_JEDEC_BIT_IS_POWERDOWN_ENABLE` and
-  `POWERDOWN_MODE_DISABLE` `[VERIFIED: minipro.h#L84-L85 @ a8efaedc]`. They are at bits 12 and 13,
+  `POWERDOWN_MODE_DISABLE` `[VERIFIED: upstream constants header#L84-L85 @ a8efaedc]`. They are at bits 12 and 13,
   in the **vdd** nibble, not in the VPP byte. Their comment limits them to the ATF20V10C/ATF16V8C
   PLD variants, which the `type in {1, 4}` filter excludes. The same bits mean different things in
   different part families. This is a second example of the result of this section.
 
 Sources: `tools/datasheet_overrides.json` entries `FUJITSU/MBM27128`, `FUJITSU/MBM27C1001`,
 `FUJITSU/MBM27C4001`, `NEC/UPD27128`, `NEC/UPD27256` and the twelve `0x06` entries.
-`database.c#L125-L126`, `database.c#L161-L170`, `database.c#L182-L190` and `minipro.h#L84-L85`,
+`database.c#L125-L126`, `database.c#L161-L170`, `database.c#L182-L190` and `upstream constants header#L84-L85`,
 all @ a8efaedc.
 
 ### 9.6 The low nibble of the VPP byte is a VCC index
@@ -494,7 +491,7 @@ all @ a8efaedc.
 `xg_vcc_voltages[]`. On a 3 V part it names the operating VCC. The vcc nibble (bits 11-8) does
 not: on most of these rows it is `0x0` (5 V).
 
-**The upstream use.** minipro sends the nibble to the T48/T56 as a byte of its own
+**The upstream use.** the upstream implementation sends the nibble to the T48/T56 as a byte of its own
 `[VERIFIED: t56.c#L202-L207 @ a8efaedc]`:
 
 ```c
@@ -753,7 +750,7 @@ table for each protocol), `firestarter_app/tests/test_vpp_rail_classification.py
 ## 11. Connectivity: `<maps>`, `nc_pins` and the address width
 
 `infoic.xml` has a `<maps>` section of 121 `<map index="N">` records. `pm_idx` (the low byte of
-`pin_map`) is the index into it, as minipro's `get_pin_map()` uses it. Each record has a `<gnd>`
+`pin_map`) is the index into it, as the upstream implementation’s `get_pin_map()` uses it. Each record has a `<gnd>`
 pin and a `<mask>`: the ZIF-40 pins the programmer connects for that map. A part sits top-justified
 in the socket, so ZIF pin `z` in the lower half is chip pin `z - (40 - pin_count)`.
 `bonded_chip_pins()` does this conversion. GND is not in the mask.
@@ -821,8 +818,8 @@ The `protocol_id` splits the `type="4"` rows into two groups. INFOIC2PLUS and IN
   compares the part names without their `@PACKAGE` and `(MODE)` suffixes, so `DS1225(TEST)` matches
   `DS1225(RW)`. A plain SRAM has no read/write row, so it is `false`.
 
-**This is an observed split, not a documented meaning.** minipro's source does not name it: for
-`MP_SRAM` it runs one generic RAM test (`minipro_test_ram_generic`, `src/minipro.c` @ a8efaedc), and
+**This is an observed split, not a documented meaning.** the upstream source does not name it: for
+`MP_SRAM` it runs one generic RAM test (pinned upstream RAM test code), and
 it gives no meaning to the protocol.
 
 The shipped database has 76 SRAM-class rows: 13 `false` and 63 `true`. Each value was checked
@@ -844,3 +841,34 @@ Three limits apply:
   with the `628256` row reads `false`.
 
 A new upstream row is not checked until someone checks it.
+
+## 13. Other `infoic.xml` fields: what Firestarter uses
+
+The generator selects 24–32 pin, non-SMD, non-serial rows of type 1 (memory) or 4 (SRAM)
+from `INFOIC2PLUS`. A matching catalog row is not necessarily supported by Firestarter.
+
+### 13.1 `flags`
+
+| Bit | Firestarter behavior |
+|---|---|
+| `0x10` | Used as an erase-related heuristic in `classify()`, not a reliable EEPROM-family marker. AT28C64B has an electrical chip-erase mode; CAT28C64B does not, but both are EEPROMs. See §1 for pinout-based classification. |
+| `0x20` | Becomes `programming.chip_id_check`. The host uses it to set the corresponding `info-flags` bit and to include entries with a numeric ID in reverse ID lookup. The numeric ID is carried separately from `chip_id`; a clear flag does not prove a chip has no ID. |
+| `0x4000` | Becomes `programming.protect_off_before`. |
+| `0x8000` | Becomes `programming.protect_on_after`. |
+
+Do not use unverified bit correlations as programming rules. Check the manufacturer's datasheet
+for the specific part before changing its behavior.
+
+### 13.2 Size fields
+
+`page_size` describes the device write page in bytes. Transfer-block sizes in
+`write_buffer_size` and `read_buffer_size` are not write-page sizes. For example,
+AT28C64B has a 64-byte page and the catalog row has a 128-byte write buffer.
+Check the datasheet for the exact model; CAT28C64B has a 32-byte page.
+
+### 13.3 Other fields
+
+- `blank_value` is not used to configure Firestarter's blank check. If adding a device with
+  a different erased value, verify the required behavior before enabling blank check.
+- `chip_info` is not used by the generator to select a programming algorithm.
+- A high bit of `0x80000000` in `protocol_id` does not identify a supported Firestarter algorithm.
