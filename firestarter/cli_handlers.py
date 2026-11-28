@@ -699,8 +699,7 @@ _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED = (
     # click.IntRange has ZERO other usages anywhere in this repository; this
     # is a new form, not a followed one.
     help="Override the database program-pulse width for this run (microseconds, "
-    "1-65535). This bound is minipro parity (-o pulse=N is a uint16), NOT a "
-    "wire-type or hardware limit -- see write()'s docstring.",
+    "1-65535). This is a CLI compatibility range, not a wire or hardware limit.",
 )
 # SDP auto-unlock tripwire, edit point 2 of 2: this option's `default=False`
 # is the second place a developer would touch to disable the host's

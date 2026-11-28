@@ -39,7 +39,7 @@ you trust them.
 python tools/build_db.py
 ```
 
-`tools/build_db.py` downloads a pinned version of the minipro `infoic.xml` and writes the
+`tools/build_db.py` downloads the pinned chip catalog (`infoic.xml`) and writes the
 database. To add a chip that `infoic.xml` does not have, edit `tools/extra_chips.json`. To correct
 a generated value, add an entry with a datasheet citation to `tools/datasheet_overrides.json`.
 Commit the regenerated database together with the change.

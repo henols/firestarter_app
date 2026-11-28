@@ -7,7 +7,7 @@ Permission is hereby granted under MIT license.
 Phase 86 Plan 04 — VAR-05 / D-10 / D-11 / SAFE-04 non-upstream supplement gate.
 
 2516 and 2532 are physically-real 24-pin UV-EPROM oddballs that are ABSENT from
-minipro's infoic.xml. Per operator directive D-10 they ship first-class in
+upstream `infoic.xml`. Per operator directive D-10 they ship first-class in
 chip_database.json via the curated, provenance-cited supplement
 tools/extra_chips.json, which build_db.py merges AFTER the infoic.xml decode loop.
 

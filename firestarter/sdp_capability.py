@@ -5,7 +5,7 @@ This module is a static fail-closed allow-list. A 0x0D part a user adds to
 REFUSED by default rather than silently permitted, because it can never appear
 on the list below.
 
-Source: minipro `infoic.xml`, flags bit 15 (MP_PROTECT_AFTER). Nothing reads
+Source: the upstream catalog (`infoic.xml`), flags bit 15 (MP_PROTECT_AFTER). Nothing reads
 that file at runtime or in CI, and it is not committed here: the table below is
 a TRANSCRIPTION, not a computation.
 

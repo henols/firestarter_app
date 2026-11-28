@@ -283,7 +283,7 @@ class EpromSpecBuilder:
             ),
             (
                 # X88C64 (1 DB chip) can surface in `info`. The bullet is a
-                # minimal, non-minipro-heritage placeholder: name-only
+                # minimal placeholder: name-only
                 # scope, with prose reconciliation left to the doc.
                 0x34,
                 "EEPROM - XICOR 8051-bus",
